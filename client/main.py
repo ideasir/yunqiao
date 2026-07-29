@@ -100,11 +100,18 @@ class App:
                  font=("Segoe UI", 12, "bold"), width=2).pack(side=tk.LEFT, padx=8, pady=4)
         tk.Label(title, text="云桥 MCP", bg=C["panel"], fg=C["text"],
                  font=("Segoe UI", 12, "bold")).pack(side=tk.LEFT, padx=4)
+        # 首次使用提示标签
+        self.first_use_btn = tk.Label(title, text="首次使用请点击这里", bg=C["panel"], fg=C["accent"],
+                                       font=("Segoe UI", 8), cursor="hand2")
+        self.first_use_btn.pack(side=tk.LEFT, padx=(0, 6))
+        self.first_use_btn.bind("<Button-1>", lambda e: self.copy_skills_cmd())
         # 连接/断开按钮
-        self.connect_btn = tk.Button(title, text="连接", bg=C["panel"], fg=C["success"],
-                                     font=("Segoe UI", 11), bd=0, cursor="hand2",
-                                     activebackground=C["panel"], command=self.toggle_connect)
-        self.connect_btn.pack(side=tk.RIGHT, padx=(0, 4))
+        self.connect_btn = tk.Button(title, text="连接", bg=C["int8"], fg=C["success"],
+                                     font=("Segoe UI", 10), bd=1, cursor="hand2",
+                                     relief="solid", padx=6, pady=1,
+                                     activebackground=C["int4"],
+                                     command=self.toggle_connect)
+        self.connect_btn.pack(side=tk.RIGHT, padx=(0, 6))
 
 
         # 内容区
@@ -266,6 +273,15 @@ class App:
             self.copy_btn.configure(text="📋 复制并发送给Agent")
         ))
 
+    def copy_skills_cmd(self):
+        """复制skills命令给Agent安装"""
+        code = state["pairCode"]
+        self.root.clipboard_clear()
+        self.root.clipboard_append(f"> mcp-client {code}")
+        self.first_use_btn.configure(text="✅ 已复制，请发给Agent", fg=C["success"])
+        self.root.after(3000, lambda: self.first_use_btn.configure(
+            text="首次使用请点击这里", fg=C["accent"]))
+
     def refresh_code(self):
         state["pairCode"] = gen_code()
         self.code_label.configure(text=state["pairCode"])
@@ -360,7 +376,7 @@ class App:
 
     def start_connect(self):
         self.set_status("connecting", "连接中...")
-        self.connect_btn.configure(text="断开", fg=C["danger"])
+        self.connect_btn.configure(text="断开", fg=C["danger"], bg=C["int8"])
         t = threading.Thread(target=self._ws_loop, daemon=True)
         t.start()
 
@@ -375,7 +391,7 @@ class App:
             try: ws.close()
             except: pass
             self.set_status("disconnected", "未连接")
-            self.connect_btn.configure(text="连接", fg=C["success"])
+            self.connect_btn.configure(text="连接", fg=C["success"], bg=C["int8"])
             if len(self.node_labels) >= 3:
                 self.node_labels[0].configure(text="等待连接", fg=C["text2"])
                 self.node_labels[1].configure(text="未连接", fg=C["text2"])
@@ -456,7 +472,7 @@ class App:
             finally:
                 state["ws_client"] = None
                 state["connected"] = False
-                self.root.after(0, lambda: self.connect_btn.configure(text="连接", fg=C["success"]))
+                self.root.after(0, lambda: self.connect_btn.configure(text="连接", fg=C["success"], bg=C["int8"]))
             await asyncio.sleep(5)
 
     # ─── UI 更新 ────────────────────────────
