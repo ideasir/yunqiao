@@ -160,16 +160,6 @@ class App:
                                      font=("Segoe UI", 9), padx=6, pady=1)
         self.status_badge.pack(side=tk.RIGHT)
 
-        # 指标
-        metrics = tk.Frame(content, bg=C["bg"])
-        metrics.pack(fill=tk.X, pady=2)
-        mf = tk.Frame(metrics, bg=C["int4"], padx=6, pady=4)
-        mf.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 3))
-        mf.pack_propagate(False)
-        mf.configure(width=180, height=30)
-        tk.Label(mf, text="--", bg=C["int4"], fg=C["text"],
-                 font=("Segoe UI", 12, "bold")).pack(anchor="w")
-
         # Agent 活动
         self.act_card = self.make_card(content, "Agent 活动")
         # 工具网格
