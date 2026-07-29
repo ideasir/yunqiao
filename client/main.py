@@ -1,6 +1,5 @@
 """
-云桥 MCP — 桌面客户端
-基于 pywebview 包装，HTML 前端 + Python 后端
+云桥 MCP — 桌面客户端（tkinter 版）
 """
 import asyncio
 import json
@@ -12,22 +11,15 @@ import threading
 import time
 from pathlib import Path
 
-# 依赖检查
 try:
     import websockets
 except ImportError:
-    print("正在安装 websockets...")
     import subprocess
     subprocess.check_call([sys.executable, "-m", "pip", "install", "websockets", "-q"])
     import websockets
 
-try:
-    import webview
-except ImportError:
-    print("正在安装 pywebview...")
-    import subprocess
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "pywebview", "-q"])
-    import webview
+import tkinter as tk
+from tkinter import ttk, messagebox
 
 # ─── 配置 ────────────────────────────────────
 CONFIG_DIR = Path(os.environ.get("YUNQIAO_CONFIG", str(Path.home() / ".yunqiao")))
@@ -35,318 +27,539 @@ CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 CONFIG_FILE = CONFIG_DIR / "config.json"
 DEFAULT_RELAY = "wss://yunqiao.very.im/device"
 
-# ─── 状态 ────────────────────────────────────
-state = {
-    "connected": False,
-    "latency": 0,
-    "deviceId": "",
-    "deviceName": platform.node(),
-    "pairCode": "",
-    "psk": "",
-    "relayUrl": DEFAULT_RELAY,
-    "logs": [],
-    "activities": [],
+# ─── 配色 ────────────────────────────────────
+C = {
+    "bg": "#F4F4F6", "panel": "#FEFDFC", "card": "#FFFFFF",
+    "primary": "#F3A04C", "accent": "#E58522",
+    "success": "#40B43E", "warning": "#EBA400", "danger": "#E6444E",
+    "text": "#333333", "text2": "#888888", "text3": "#AAAAAA",
+    "border": "#E0E0E0", "int4": "#F5F5F5", "int8": "#EBEBEB",
+    "log_bg": "#1f2329", "log_fg": "#d6d9df",
 }
 
-MAX_LOG = 100
+# ─── 状态 ────────────────────────────────────
+state = {
+    "connected": False, "latency": 0, "deviceId": "", "deviceName": platform.node(),
+    "pairCode": "", "psk": "", "relayUrl": DEFAULT_RELAY,
+    "logs": [], "activities": [], "ws_client": None, "workDir": "",
+}
 
 
 def load_config():
     if CONFIG_FILE.exists():
-        try:
-            return json.loads(CONFIG_FILE.read_text())
-        except:
-            pass
+        try: return json.loads(CONFIG_FILE.read_text())
+        except: pass
     return {}
 
+def save_config():
+    CONFIG_FILE.write_text(json.dumps({
+        "psk": state["psk"], "relayUrl": state["relayUrl"],
+        "deviceName": state["deviceName"], "workDir": state["workDir"],
+    }, indent=2))
 
-def save_config(cfg):
-    CONFIG_FILE.write_text(json.dumps(cfg, indent=2))
-
-
-def generate_code():
+def gen_code():
     return str(random.randint(100000, 999999))
 
 
-# ─── WebSocket 客户端 ─────────────────────────
-class RelayClient:
-    def __init__(self, api):
-        self.api = api
-        self.ws = None
-        self._stop = False
+# ─── 主窗口 ──────────────────────────────────
+class App:
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.title("云桥 MCP")
+        self.root.geometry("400x680")
+        # 主窗口居中（延迟执行确保渲染完成）
+        def center_main():
+            sw = self.root.winfo_screenwidth()
+            sh = self.root.winfo_screenheight()
+            x = max(0, (sw - 400) // 2)
+            y = max(0, (sh - 680) // 2)
+            self.root.geometry(f"400x680+{x}+{y}")
+        self.root.after(50, center_main)
+        self.root.resizable(False, False)
+        self.root.configure(bg=C["bg"])
 
-    def push(self, cmd, data=None):
-        """推送数据到前端"""
-        try:
-            js = f"window.__push({json.dumps(cmd)},{json.dumps(data or {})})"
-            webview.windows[0].evaluate_js(js)
-        except:
-            pass
+        cfg = load_config()
+        state["psk"] = cfg.get("psk", "")
+        state["relayUrl"] = cfg.get("relayUrl", DEFAULT_RELAY)
+        state["deviceName"] = cfg.get("deviceName", platform.node())
+        state["workDir"] = cfg.get("workDir", "")
+        state["pairCode"] = gen_code()
 
-    def add_log(self, level, msg):
-        state["logs"].append({"t": time.strftime("%H:%M:%S"), "l": level, "m": msg})
-        if len(state["logs"]) > MAX_LOG:
-            state["logs"].pop(0)
-        self.push("log", {"logs": state["logs"][-10:]})
+        self.build_ui()
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+        if not state["psk"]:
+            self.root.after(500, self.open_settings)
 
-    def add_activity(self, kind, detail):
-        state["activities"].append({"t": time.strftime("%H:%M:%S"), "k": kind, "d": detail})
-        if len(state["activities"]) > 20:
-            state["activities"].pop(0)
-        self.push("activity", {"activities": state["activities"]})
+    # ─── UI 构建 ────────────────────────────
+    def build_ui(self):
+        # 标题栏
+        title = tk.Frame(self.root, bg=C["panel"], height=32)
+        title.pack(fill=tk.X)
+        title.pack_propagate(False)
+        tk.Label(title, text="Y", bg=C["primary"], fg="white",
+                 font=("Segoe UI", 12, "bold"), width=2).pack(side=tk.LEFT, padx=8, pady=4)
+        tk.Label(title, text="云桥 MCP", bg=C["panel"], fg=C["text"],
+                 font=("Segoe UI", 12, "bold")).pack(side=tk.LEFT, padx=4)
+        # 设置按钮
+        self.setting_btn = tk.Button(title, text="⚙", bg=C["panel"], fg=C["text2"],
+                                     font=("Segoe UI", 13), bd=0, cursor="hand2",
+                                     activebackground=C["panel"], command=self.open_settings)
+        self.setting_btn.pack(side=tk.RIGHT, padx=8)
 
-    async def run(self):
-        psk = state["psk"]
+        # 内容区
+        content = tk.Frame(self.root, bg=C["bg"])
+        content.pack(fill=tk.BOTH, expand=True, padx=6, pady=4)
+
+        # 连接状态
+        head = tk.Frame(content, bg=C["bg"])
+        head.pack(fill=tk.X, pady=(0, 3))
+        tk.Label(head, text="连接状态", bg=C["bg"], fg=C["text"],
+                 font=("Segoe UI", 11, "bold")).pack(side=tk.LEFT)
+        self.status_frame = tk.Frame(head, bg=C["bg"])
+        self.status_frame.pack(side=tk.RIGHT)
+        self.status_dot = tk.Canvas(self.status_frame, width=8, height=8,
+                                    bg=C["bg"], highlightthickness=0)
+        self.status_dot.pack(side=tk.LEFT, padx=(0, 4))
+        self.dot = self.status_dot.create_oval(0, 0, 8, 8, fill=C["text3"], outline="")
+        self.status_label = tk.Label(self.status_frame, text="初始化中...",
+                                     bg=C["bg"], fg=C["text2"], font=("Segoe UI", 13))
+        self.status_label.pack(side=tk.LEFT)
+
+        # 当前连接卡片
+        self.conn_card = self.make_card(content, "当前连接")
+        route = tk.Frame(self.conn_card, bg=C["card"])
+        route.pack(fill=tk.X, pady=2)
+        self.node_labels = []
+        nodes = [
+            ("本地客户端", "等待连接"),
+            ("中转服务器", "未连接"),
+            ("上游 Agent", "待接入"),
+        ]
+        for i, (name, desc) in enumerate(nodes):
+            if i > 0:
+                tk.Label(route, text="›", bg=C["card"], fg=C["accent"],
+                         font=("Segoe UI", 12)).pack(side=tk.LEFT, padx=2)
+            nf = tk.Frame(route, bg=C["int4"], padx=6, pady=4)
+            nf.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            tk.Label(nf, text=name, bg=C["int4"], fg=C["text"],
+                     font=("Segoe UI", 10, "bold")).pack()
+            dl = tk.Label(nf, text=desc, bg=C["int4"], fg=C["text2"],
+                       font=("Segoe UI", 9))
+            dl.pack()
+            self.node_labels.append(dl)
+
+        # 状态行
+        stat = tk.Frame(self.conn_card, bg=C["card"])
+        stat.pack(fill=tk.X, pady=(4, 0))
+        tk.Label(stat, text=state["deviceName"], bg=C["card"], fg=C["text"],
+                 font=("Segoe UI", 11, "bold")).pack(side=tk.LEFT)
+        self.latency_label = tk.Label(stat, text="延迟 -- ms", bg=C["card"], fg=C["text2"],
+                                      font=("Segoe UI", 10))
+        self.latency_label.pack(side=tk.LEFT, padx=8)
+        self.status_badge = tk.Label(stat, text="未连接", bg=C["int8"], fg=C["text2"],
+                                     font=("Segoe UI", 9), padx=6, pady=1)
+        self.status_badge.pack(side=tk.RIGHT)
+
+        # 指标
+        metrics = tk.Frame(content, bg=C["bg"])
+        metrics.pack(fill=tk.X, pady=2)
+        for label, val, sub in [("连接延迟", "--", "最近心跳")]:
+            mf = tk.Frame(metrics, bg=C["int4"], padx=6, pady=4)
+            mf.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 3))
+            mf.pack_propagate(False)
+            mf.configure(width=180, height=30)
+            tk.Label(mf, text=label, bg=C["int4"], fg=C["text2"],
+                     font=("Segoe UI", 9)).pack(anchor="w")
+            tk.Label(mf, text=val, bg=C["int4"], fg=C["text"],
+                     font=("Segoe UI", 12, "bold")).pack(anchor="w")
+
+        # Agent 活动
+        self.act_card = self.make_card(content, "Agent 活动")
+        self.act_frame = tk.Frame(self.act_card, bg=C["card"])
+        self.act_frame.pack(fill=tk.X)
+        self.act_label = tk.Label(self.act_frame, text="暂无活动", bg=C["card"], fg=C["text3"],
+                                  font=("Segoe UI", 10))
+        self.act_label.pack(pady=4)
+
+        # 配对码
+        pair_card = self.make_card(content, "客户端配对")
+        pf = tk.Frame(pair_card, bg=C["card"])
+        pf.pack(fill=tk.X)
+        tk.Label(pf, text="配对码", bg=C["card"], fg=C["text2"],
+                 font=("Segoe UI", 10)).pack(side=tk.LEFT)
+        self.pair_badge = tk.Label(pf, text="", bg=C["card"], fg=C["text2"],
+                                   font=("Segoe UI", 9), padx=6, pady=1)
+        self.pair_badge.pack(side=tk.RIGHT)
+
+        pair_body = tk.Frame(pair_card, bg=C["card"])
+        pair_body.pack(fill=tk.X, pady=2)
+        self.code_label = tk.Label(pair_body, text=state["pairCode"],
+                                   bg=C["card"], fg=C["accent"],
+                                   font=("Courier New", 26, "bold"))
+        self.code_label.pack()
+        tk.Label(pair_body, text="将此配对码发给智能体，用于建立连接",
+                 bg=C["card"], fg=C["text2"], font=("Segoe UI", 9)).pack()
+        # 工作目录
+        wd_frame = tk.Frame(pair_body, bg=C["card"])
+        wd_frame.pack(fill=tk.X, pady=(6, 0))
+        self.workdir_label = tk.Label(wd_frame, text="📂 " + (state["workDir"] or "未设置工作目录"),
+                                      bg=C["card"], fg=C["text2"], font=("Segoe UI", 9))
+        self.workdir_label.pack(side=tk.LEFT)
+        tk.Button(wd_frame, text="浏览", bg=C["int8"], fg=C["text"], bd=0,
+                  font=("Segoe UI", 8), padx=8, pady=1,
+                  command=self.browse_workdir).pack(side=tk.RIGHT)
+
+        btn_frame = tk.Frame(pair_card, bg=C["card"])
+        btn_frame.pack(fill=tk.X, pady=(2, 0))
+        self.copy_btn = tk.Button(btn_frame, text="📋 复制并发送给Agent",
+                                  bg=C["primary"], fg="white", bd=0,
+                                  font=("Segoe UI", 10), padx=10, pady=3,
+                                  cursor="hand2", command=self.copy_code)
+        self.copy_btn.pack(fill=tk.X, pady=(0, 2))
+        tk.Button(btn_frame, text="🔄 重新生成",
+                  bg=C["int8"], fg=C["text"], bd=0,
+                  font=("Segoe UI", 10), padx=10, pady=3,
+                  cursor="hand2", command=self.refresh_code).pack(fill=tk.X)
+
+        # 日志
+        log_frame = tk.Frame(content, bg=C["log_bg"], padx=6, pady=4)
+        log_frame.pack(fill=tk.BOTH, expand=True, pady=(2, 0))
+        tk.Label(log_frame, text="relay.log", bg=C["log_bg"], fg="#9da5b0",
+                 font=("Segoe UI", 9)).pack(anchor="w")
+        self.log_text = tk.Text(log_frame, bg=C["log_bg"], fg=C["log_fg"],
+                                font=("Consolas", 9), bd=0,
+                                highlightthickness=0)
+        self.log_text.pack(fill=tk.BOTH, expand=True)
+        self.log_text.insert("1.0", "等待连接...")
+
+        # 版本
+        tk.Label(content, text="云桥 MCP v1.0.0", bg=C["bg"], fg=C["text3"],
+                 font=("Segoe UI", 9)).pack(pady=(2, 0))
+
+    def make_card(self, parent, title):
+        card = tk.Frame(parent, bg=C["card"], padx=6, pady=3)
+        card.pack(fill=tk.X, pady=1)
+        tk.Label(card, text=title, bg=C["card"], fg=C["text2"],
+                 font=("Segoe UI", 10, "bold")).pack(anchor="w")
+        return card
+
+    # ─── 配对码 ────────────────────────────
+    def copy_code(self):
+        self.root.clipboard_clear()
+        self.root.clipboard_append(state["pairCode"])
+        self.pair_badge.configure(text="已复制", bg=C["success"], fg="white")
+        self.copy_btn.configure(text="✅ 已复制，请发给Agent")
+        self.root.after(2000, lambda: (
+            self.copy_btn.configure(text="📋 复制并发送给Agent")
+        ))
+
+    def refresh_code(self):
+        state["pairCode"] = gen_code()
+        self.code_label.configure(text=state["pairCode"])
+
+    # ─── 设置弹窗 ──────────────────────────
+    def open_settings(self):
+        win = tk.Toplevel(self.root)
+        win.title("设置")
+        win.resizable(False, False)
+        win.configure(bg=C["panel"])
+        win.transient(self.root)
+        win.grab_set()
+
+        # 窗口居中于屏幕
+        sw = self.root.winfo_screenwidth()
+        sh = self.root.winfo_screenheight()
+        win.geometry(f"320x280+{(sw-320)//2}+{(sh-280)//2}")
+
+        has_config = bool(state["psk"] and state["relayUrl"])
+
+        fields = [
+            ("中继地址", "relay", state["relayUrl"] if has_config else ""),
+            ("PSK 密钥", "psk", state["psk"]),
+            ("设备名称", "name", state["deviceName"]),
+        ]
+        entries = {}
+
+        def save():
+            url = entries["relay"].get().strip()
+            psk = entries["psk"].get().strip()
+            name = entries["name"].get().strip() or platform.node()
+            if not url or not psk:
+                messagebox.showwarning("提示", "请填写中继地址和 PSK")
+                return
+            state["relayUrl"] = url
+            state["psk"] = psk
+            state["deviceName"] = name
+            save_config()
+            win.destroy()
+            self.start_connect()
+
+        entries = {}
+        entry_widgets = []
+
+        for i, (label, key, val) in enumerate(fields):
+            tk.Label(win, text=label, bg=C["panel"], fg=C["text2"],
+                     font=("Segoe UI", 9)).pack(anchor="w", padx=12, pady=(8 if i == 0 else 3, 0))
+            ef = tk.Frame(win, bg=C["panel"])
+            e = tk.Entry(ef, bg="white", fg=C["text"],
+                         font=("Segoe UI", 9), bd=1, relief="solid")
+            e.insert(0, val)
+            if key == "psk":
+                e.configure(show="*")
+            e.pack(fill=tk.X, side=tk.LEFT, expand=True)
+
+            ef.pack(fill=tk.X, padx=12, pady=2)
+            entries[key] = e
+            entry_widgets.append(e)
+
+        btnf = tk.Frame(win, bg=C["panel"])
+        btnf.pack(fill=tk.X, pady=10, padx=12, side=tk.BOTTOM)
+
+        if has_config:
+            # 已保存配置，先设为只读，加编辑按钮
+            for e in entry_widgets[:3]:
+                e.config(state="readonly", bg=C["int8"], fg=C["text2"], relief="sunken")
+            editing = [False]
+
+            def toggle_edit():
+                editing[0] = not editing[0]
+                for e in entry_widgets[:3]:
+                    e.config(state="normal" if editing[0] else "readonly",
+                             bg="white" if editing[0] else C["int8"],
+                             fg=C["text"] if editing[0] else C["text2"],
+                             relief="solid" if editing[0] else "sunken")
+                edit_btn.config(text="取消编辑" if editing[0] else "✏️ 编辑")
+                save_btn.pack(side=tk.RIGHT, padx=6) if editing[0] else save_btn.pack_forget()
+
+            edit_btn = tk.Button(btnf, text="✏️ 编辑", bg=C["int8"], fg=C["text"], bd=0,
+                                font=("Segoe UI", 9), padx=12, pady=3, command=toggle_edit)
+            edit_btn.pack(side=tk.LEFT, padx=(0, 6))
+            save_btn = tk.Button(btnf, text="保存并连接", bg=C["primary"], fg="white", bd=0,
+                                font=("Segoe UI", 9), padx=12, pady=3, command=save)
+            tk.Button(btnf, text="关闭", bg=C["int8"], fg=C["text"], bd=0,
+                      font=("Segoe UI", 9), padx=12, pady=3, command=win.destroy).pack(side=tk.RIGHT, padx=6)
+        else:
+            tk.Button(btnf, text="取消", bg=C["int8"], fg=C["text"], bd=0,
+                      font=("Segoe UI", 9), padx=12, pady=3, command=win.destroy).pack(side=tk.RIGHT, padx=6)
+            tk.Button(btnf, text="保存并连接", bg=C["primary"], fg="white", bd=0,
+                      font=("Segoe UI", 9), padx=12, pady=3, command=save).pack(side=tk.RIGHT, padx=6)
+
+
+    def start_connect(self):
+        self.set_status("connecting", "连接中...")
+        t = threading.Thread(target=self._ws_loop, daemon=True)
+        t.start()
+
+    def _ws_loop(self):
+        asyncio.run(self._ws_client())
+
+    async def _ws_client(self):
         url = state["relayUrl"]
-        if not psk or not url:
-            self.push("status", {"connected": False, "error": "请先配置 PSK 和中继地址"})
-            return
-
-        while not self._stop:
+        psk = state["psk"]
+        while True:
             try:
                 self.add_log("INFO", f"正在连接 {url}...")
-                self.push("status", {"connected": False, "status": "connecting"})
-
                 t0 = time.time()
                 async with websockets.connect(
-                    url,
-                    extra_headers={"X-PSK": psk},
-                    ping_interval=10,
+                    url, extra_headers={"X-PSK": psk}, ping_interval=10,
                 ) as ws:
-                    self.ws = ws
-                    latency = round((time.time() - t0) * 1000, 1)
-                    state["connected"] = True
-                    state["latency"] = latency
-                    self.add_log("INFO", f"已连接，延迟 {latency}ms")
-                    self.push("status", {
-                        "connected": True,
-                        "latency": latency,
-                        "status": "connected",
-                    })
+                    state["ws_client"] = ws
+                    lat = round((time.time() - t0) * 1000, 1)
+                    self.root.after(0, lambda: self.set_connected(lat))
 
-                    # 注册设备（带上配对码）
-                    code = state["pairCode"]
                     await ws.send(json.dumps({
-                        "type": "register",
-                        "deviceName": state["deviceName"],
-                        "os": sys.platform,
-                        "arch": platform.machine(),
-                        "hostname": platform.node(),
-                        "authCode": code,
+                        "type": "register", "deviceName": state["deviceName"],
+                        "os": sys.platform, "arch": platform.machine(),
+                        "hostname": platform.node(), "authCode": state["pairCode"],
                     }))
 
-                    # 接收消息
-                    async for message in ws:
-                        try:
-                            msg = json.loads(message)
-                        except json.JSONDecodeError:
-                            continue
+                    async for msg in ws:
+                        try: data = json.loads(msg)
+                        except: continue
+                        t = data.get("type")
+                        rid = data.get("requestId")
+                        payload = data.get("payload", {})
 
-                        t = msg.get("type")
-                        rid = msg.get("requestId")
+                        if t == "register_result" and data.get("success"):
+                            state["deviceId"] = data.get("deviceId", "")
+                            self.add_log("INFO", f"注册成功")
+                            # 上游 Agent 保持"等待配对"，只有智能体用配对码成功调用后才变绿
 
-                        if t == "register_result" and msg.get("success"):
-                            state["deviceId"] = msg.get("deviceId", "")
-                            self.add_log("INFO", f"注册成功，设备ID: {state['deviceId'][:8]}...")
-                            self.push("paired", {"deviceId": state["deviceId"]})
-                            continue
+                        elif t == "execute_command":
+                            cmd = payload.get("command", "")
+                            timeout = payload.get("timeout", 30000)
+                            self.add_log("INFO", f"执行: {cmd[:50]}")
+                            threading.Thread(target=self._run_cmd,
+                                args=(ws, rid, cmd, timeout), daemon=True).start()
 
-                        if t == "register_result" and not msg.get("success"):
-                            self.add_log("ERROR", f"注册失败: {msg.get('error', 'unknown')}")
-                            continue
+                        elif t == "read_file":
+                            path = payload.get("path", "")
+                            threading.Thread(target=self._read_file,
+                                args=(ws, rid, path), daemon=True).start()
 
-                        # 处理命令执行
-                        payload = msg.get("payload", {})
-                        await self.handle_command(t, rid, payload)
+                        elif t == "write_file":
+                            path = payload.get("path", "")
+                            content = payload.get("content", "")
+                            threading.Thread(target=self._write_file,
+                                args=(ws, rid, path, content), daemon=True).start()
+
+                        elif t == "get_device_info":
+                            threading.Thread(target=self._get_info,
+                                args=(ws, rid), daemon=True).start()
 
             except websockets.exceptions.ConnectionClosed:
-                state["connected"] = False
-                self.add_log("WARN", "连接断开")
-                self.push("status", {"connected": False, "status": "reconnecting"})
+                self.root.after(0, lambda: self.set_status("reconnecting", "重连中..."))
+                self.add_log("WARN", "连接断开，5秒后重连")
             except Exception as e:
-                state["connected"] = False
-                self.add_log("ERROR", f"连接错误: {e}")
-                self.push("status", {"connected": False, "status": "error", "error": str(e)})
+                self.root.after(0, lambda: self.set_status("error", f"错误: {str(e)[:30]}"))
+                self.add_log("ERROR", str(e)[:60])
             finally:
-                state["connected"] = False
-                self.ws = None
+                state["ws_client"] = None
+            await asyncio.sleep(5)
 
-            if not self._stop:
-                await asyncio.sleep(5)
+    # ─── UI 更新 ────────────────────────────
+    def set_status(self, status, text):
+        colors = {"connected": C["success"], "connecting": C["warning"],
+                  "reconnecting": C["warning"], "error": C["danger"]}
+        labels = {"connected": "已连接", "connecting": "连接中",
+                  "reconnecting": "重连中", "error": "错误"}
+        color = colors.get(status, C["text3"])
+        label = labels.get(status, text)
+        self.status_dot.itemconfig(self.dot, fill=color)
+        self.status_label.configure(text=label)
+        self.status_badge.configure(text=label, bg=color, fg="white")
 
-    async def handle_command(self, msg_type, request_id, payload):
-        self.add_activity("cmd", f"{msg_type}: {str(payload)[:60]}")
-        if msg_type == "execute_command":
-            command = payload.get("command", "")
-            timeout = payload.get("timeout", 30000)
+    def set_connected(self, latency):
+        self.set_status("connected", "已连接")
+        self.latency_label.configure(text=f"延迟 {latency:.0f} ms")
+        # 更新节点状态
+        if len(self.node_labels) >= 3:
+            self.node_labels[0].configure(text="已连接 ✅", fg=C["success"])
+            self.node_labels[1].configure(text="已连接 ✅", fg=C["success"])
+            self.node_labels[2].configure(text="等待配对码", fg=C["warning"])
+        # 配对码状态
+        self.pair_badge.configure(text="", bg=C["card"])
+
+    def add_log(self, level, msg):
+        ts = time.strftime("%H:%M:%S")
+        colors = {"INFO": C["log_fg"], "WARN": "#f5b36b", "ERROR": "#e77070"}
+        tag = f"log_{level}"
+        self.log_text.insert("end", f"[{ts}] {level} {msg}\n", tag)
+        self.log_text.see("end")
+        # 更新 Agent 活动
+        if hasattr(self, 'act_label'):
+            self.act_label.configure(text=f"[{ts}] {msg}", fg=C["text"])
+        # 检查是否是命令执行（智能体在线）
+        if "执行：" in msg or "命令" in msg:
+            if hasattr(self, 'agent_status'):
+                self.agent_status.configure(text="🤖 在线", fg=C["success"])
+                self.agent_last = time.time()
+        elif "完成" in msg or "退出码" in msg:
+            if hasattr(self, 'agent_last'):
+                self.agent_last = time.time()
+
+    # ─── 命令处理 ────────────────────────────
+    def _run_cmd(self, ws, rid, command, timeout):
+        import asyncio, subprocess
+        async def run():
             try:
+                cwd = state["workDir"] if state["workDir"] else None
                 proc = await asyncio.create_subprocess_shell(
-                    command,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
+                    command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                    cwd=cwd)
                 try:
-                    stdout, stderr = await asyncio.wait_for(
-                        proc.communicate(), timeout=timeout / 1000
-                    )
-                    exit_code = proc.returncode or 0
-                    killed = False
+                    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout/1000)
+                    ec = proc.returncode or 0; killed = False
                 except asyncio.TimeoutError:
-                    proc.kill()
-                    stdout, stderr = await proc.communicate()
-                    exit_code = 1
-                    killed = True
-
-                if self.ws:
-                    await self.ws.send(json.dumps({
-                        "type": "command_result", "requestId": request_id,
-                        "payload": {
-                            "exitCode": exit_code,
-                            "stdout": (stdout or b"").decode("utf-8", errors="replace"),
-                            "stderr": (stderr or b"").decode("utf-8", errors="replace"),
-                            "killed": killed,
-                        },
-                    }))
-                self.add_log("INFO", f"命令完成，退出码: {exit_code}")
+                    proc.kill(); stdout, stderr = await proc.communicate()
+                    ec = 1; killed = True
+                await ws.send(json.dumps({
+                    "type": "command_result", "requestId": rid,
+                    "payload": {
+                        "exitCode": ec,
+                        "stdout": (stdout or b"").decode("utf-8", errors="replace"),
+                        "stderr": (stderr or b"").decode("utf-8", errors="replace"),
+                        "killed": killed,
+                    },
+                }))
+                self.add_log("INFO", f"完成, 退出码: {ec}")
             except Exception as e:
-                self.add_log("ERROR", f"命令执行失败: {e}")
+                self.add_log("ERROR", f"执行失败: {e}")
+        asyncio.run(run())
 
-        elif msg_type == "read_file":
-            path = payload.get("path", "")
+    def _read_file(self, ws, rid, path):
+        import asyncio
+        async def run():
             try:
                 with open(path, "r", encoding="utf-8") as f:
                     content = f.read()
-                if self.ws:
-                    await self.ws.send(json.dumps({
-                        "type": "file_result", "requestId": request_id,
-                        "payload": {"success": True, "content": content, "path": path},
-                    }))
+                await ws.send(json.dumps({
+                    "type": "file_result", "requestId": rid,
+                    "payload": {"success": True, "content": content, "path": path},
+                }))
                 self.add_log("INFO", f"读取文件: {path}")
             except Exception as e:
-                if self.ws:
-                    await self.ws.send(json.dumps({
-                        "type": "file_result", "requestId": request_id,
-                        "payload": {"success": False, "error": str(e), "path": path},
-                    }))
+                await ws.send(json.dumps({
+                    "type": "file_result", "requestId": rid,
+                    "payload": {"success": False, "error": str(e), "path": path},
+                }))
                 self.add_log("ERROR", f"读取失败: {e}")
+        asyncio.run(run())
 
-        elif msg_type == "write_file":
-            path = payload.get("path", "")
-            content = payload.get("content", "")
+    def _write_file(self, ws, rid, path, content):
+        import asyncio
+        async def run():
             try:
                 os.makedirs(os.path.dirname(path), exist_ok=True)
                 with open(path, "w", encoding="utf-8") as f:
                     f.write(content)
-                if self.ws:
-                    await self.ws.send(json.dumps({
-                        "type": "file_result", "requestId": request_id,
-                        "payload": {"success": True, "path": path},
-                    }))
+                await ws.send(json.dumps({
+                    "type": "file_result", "requestId": rid,
+                    "payload": {"success": True, "path": path},
+                }))
                 self.add_log("INFO", f"写入文件: {path}")
             except Exception as e:
-                if self.ws:
-                    await self.ws.send(json.dumps({
-                        "type": "file_result", "requestId": request_id,
-                        "payload": {"success": False, "error": str(e), "path": path},
-                    }))
-                self.add_log("ERROR", f"写入失败: {e}")
-
-        elif msg_type == "get_device_info":
-            if self.ws:
-                await self.ws.send(json.dumps({
-                    "type": "device_info", "requestId": request_id,
-                    "payload": {
-                        "hostname": platform.node(),
-                        "platform": sys.platform,
-                        "arch": platform.machine(),
-                        "cpus": os.cpu_count() or 0,
-                        "uptime": time.time(),
-                        "homedir": str(Path.home()),
-                        "userInfo": {"username": os.getlogin()},
-                    },
+                await ws.send(json.dumps({
+                    "type": "file_result", "requestId": rid,
+                    "payload": {"success": False, "error": str(e), "path": path},
                 }))
+                self.add_log("ERROR", f"写入失败: {e}")
+        asyncio.run(run())
 
+    def _get_info(self, ws, rid):
+        import asyncio
+        async def run():
+            await ws.send(json.dumps({
+                "type": "device_info", "requestId": rid,
+                "payload": {
+                    "hostname": platform.node(), "platform": sys.platform,
+                    "arch": platform.machine(), "cpus": os.cpu_count() or 0,
+                    "uptime": time.time(), "homedir": str(Path.home()),
+                    "userInfo": {"username": os.getlogin()},
+                },
+            }))
+            self.add_log("INFO", "已返回系统信息")
+        asyncio.run(run())
 
-# ─── WebView API ──────────────────────────────
-class Api:
-    def __init__(self):
-        self.client = None
-        self.ws_thread = None
+    def browse_workdir(self):
+        from tkinter import filedialog
+        d = filedialog.askdirectory(title="选择工作目录")
+        if d:
+            state["workDir"] = d
+            self.workdir_label.configure(text="📂 " + d)
+            save_config()
 
-    def get_initial(self):
-        cfg = load_config()
-        state["psk"] = cfg.get("psk", "")
-        state["relayUrl"] = cfg.get("relayUrl", DEFAULT_RELAY)
-        state["pairCode"] = generate_code()
-        state["deviceName"] = cfg.get("deviceName", platform.node())
-        return {
-            "pairCode": state["pairCode"],
-            "psk": state["psk"],
-            "relayUrl": state["relayUrl"],
-            "deviceName": state["deviceName"],
-            "version": "1.0.0",
-        }
+    def on_close(self):
+        if state["ws_client"]:
+            try:
+                import asyncio
+                asyncio.run(state["ws_client"].close())
+            except: pass
+        self.root.destroy()
 
-    def refresh_code(self):
-        state["pairCode"] = generate_code()
-        return {"pairCode": state["pairCode"]}
-
-    def save_config(self, psk, relay_url, device_name):
-        state["psk"] = psk
-        state["relayUrl"] = relay_url
-        state["deviceName"] = device_name
-        save_config({"psk": psk, "relayUrl": relay_url, "deviceName": device_name})
-        return {"ok": True}
-
-    def start_connect(self):
-        if self.client and not self.client._stop:
-            self.client._stop = True
-        self.client = RelayClient(self)
-        self.client._stop = False
-
-        def run_loop():
-            asyncio.run(self.client.run())
-
-        self.ws_thread = threading.Thread(target=run_loop, daemon=True)
-        self.ws_thread.start()
-        return {"ok": True}
-
-    def stop_connect(self):
-        if self.client:
-            self.client._stop = True
-            if self.client.ws:
-                # 不能直接 close asyncio 对象，标记即可
-                pass
-        return {"ok": True}
-
-    def copy_code(self, code):
-        state["pairCode"] = code
-        return {"ok": True}
-
-
-# ─── 启动 ────────────────────────────────────
-def main():
-    ui_path = Path(__file__).parent / "ui.html"
-    if not ui_path.exists():
-        # 回退到内嵌 HTML
-        print("ui.html 不存在")
-        sys.exit(1)
-
-    api = Api()
-    window = webview.create_window(
-        "云桥 MCP",
-        str(ui_path),
-        js_api=api,
-        width=360,
-        height=580,
-        resizable=False,
-        text_select=True,
-    )
-    webview.start(
-        private_mode=False,
-        storage_path=str(CONFIG_DIR),
-    )
+    def run(self):
+        self.root.mainloop()
 
 
 if __name__ == "__main__":
-    main()
+    App().run()
