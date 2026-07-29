@@ -175,7 +175,7 @@ class App:
         self.act_label.pack(pady=4)
 
         # 配对码
-        pair_card = self.make_card(content, "客户端配对")
+        pair_card = self.make_card(content, "Agent 配对码")
         pf = tk.Frame(pair_card, bg=C["card"])
         pf.pack(fill=tk.X)
         tk.Label(pf, text="配对码", bg=C["card"], fg=C["text2"],
