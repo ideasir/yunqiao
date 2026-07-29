@@ -105,11 +105,7 @@ class App:
                                      font=("Segoe UI", 11), bd=0, cursor="hand2",
                                      activebackground=C["panel"], command=self.toggle_connect)
         self.connect_btn.pack(side=tk.RIGHT, padx=(0, 4))
-        # 设置按钮
-        self.setting_btn = tk.Button(title, text="⚙", bg=C["panel"], fg=C["text2"],
-                                     font=("Segoe UI", 13), bd=0, cursor="hand2",
-                                     activebackground=C["panel"], command=self.open_settings)
-        self.setting_btn.pack(side=tk.RIGHT, padx=8)
+
 
         # 内容区
         content = tk.Frame(self.root, bg=C["bg"])
@@ -146,8 +142,14 @@ class App:
                          font=("Segoe UI", 12)).pack(side=tk.LEFT, padx=2)
             nf = tk.Frame(route, bg=C["int4"], padx=6, pady=4)
             nf.pack(side=tk.LEFT, fill=tk.X, expand=True)
-            tk.Label(nf, text=name, bg=C["int4"], fg=C["text"],
-                     font=("Segoe UI", 10, "bold")).pack()
+            if i == 1:
+                # 中转服务器可点击打开设置
+                tk.Button(nf, text=name, bg=C["int4"], fg=C["text"],
+                          font=("Segoe UI", 10, "bold"), bd=0, cursor="hand2",
+                          activebackground=C["int4"], command=self.open_settings).pack()
+            else:
+                tk.Label(nf, text=name, bg=C["int4"], fg=C["text"],
+                         font=("Segoe UI", 10, "bold")).pack()
             dl = tk.Label(nf, text=desc, bg=C["int4"], fg=C["text2"],
                        font=("Segoe UI", 9))
             dl.pack()
