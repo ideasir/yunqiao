@@ -1,20 +1,34 @@
 import { createServer } from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
-import { randomUUID, randomInt } from 'node:crypto';
+import { randomUUID, randomInt, randomBytes } from 'node:crypto';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { z } from 'zod/v4';
 
 const PORT = parseInt(process.env.PORT || '9876');
-const PSK = process.env.RELAY_PSK;
+const PSK_FILE = process.env.PSK_FILE || '/opt/cloud-mcp/.psk';
+const ALLOWED_DEVICES = (process.env.ALLOWED_DEVICES || '').split(',').filter(Boolean);
 const COMMAND_TIMEOUT = parseInt(process.env.COMMAND_TIMEOUT || '60000');
 const MCP_PATH = '/mcp';
 const MCP_MESSAGE_PATH = '/mcp/message';
 
-// 启动时检查 PSK
-if (!PSK || PSK === 'change-me-to-a-secure-random-string') {
-  console.error('[server] ❌ 必须设置 RELAY_PSK 环境变量，且不能使用默认值');
-  process.exit(1);
+// 自动管理 PSK：第一次启动生成，之后从文件读取
+let PSK = '';
+if (existsSync(PSK_FILE)) {
+  PSK = readFileSync(PSK_FILE, 'utf-8').trim();
+  console.error(`[server] 🔑 PSK 已从 ${PSK_FILE} 读取`);
+} else {
+  PSK = randomBytes(32).toString('hex');
+  writeFileSync(PSK_FILE, PSK, 'utf-8');
+  console.error(`[server] 🔑 新 PSK 已生成并保存到 ${PSK_FILE}`);
+  console.error(`[server] 📋 PSK: ${PSK}`);
+}
+
+// 也可通过环境变量覆盖
+if (process.env.RELAY_PSK) {
+  PSK = process.env.RELAY_PSK;
+  console.error('[server] 🔑 使用环境变量 RELAY_PSK 覆盖');
 }
 
 const ALLOWED_COMMANDS = (process.env.ALLOWED_COMMANDS || '').split(',').filter(Boolean);
@@ -305,14 +319,22 @@ wss.on('connection', (ws, req) => {
 
     if (type === 'register') {
       const { deviceName, os, arch, hostname, authCode } = msg;
+      const name = deviceName || 'unknown';
+      
+      // 设备名白名单检查
+      if (ALLOWED_DEVICES.length > 0 && !ALLOWED_DEVICES.includes(name)) {
+        console.error(`[device] rejected: ${name} (不在白名单中)`);
+        sendJSON(ws, { type: 'register_result', requestId, success: false, error: 'device not allowed' });
+        return;
+      }
+      
       devices.set(deviceId, {
-        id: deviceId, name: deviceName || 'unknown',
-        os: os || 'unknown', arch: arch || 'unknown',
+        id: deviceId, name, os: os || 'unknown', arch: arch || 'unknown',
         hostname: hostname || 'unknown', ws,
         authCode: authCode || null,
         connectedAt: new Date().toISOString(),
       });
-      console.error(`[device] registered: ${deviceName} (${deviceId}) code:${authCode || 'none'}`);
+      console.error(`[device] registered: ${name} (${deviceId}) code:${authCode || 'none'}`);
       sendJSON(ws, { type: 'register_result', requestId, success: true, deviceId });
       return;
     }
