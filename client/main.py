@@ -443,9 +443,9 @@ class App:
         tag = f"log_{level}"
         self.log_text.insert("end", f"[{ts}] {level} {msg}\n", tag)
         self.log_text.see("end")
-        # 更新 Agent 活动
-        if hasattr(self, 'act_label'):
-            self.act_label.configure(text=f"[{ts}] {msg}", fg=C["text"])
+        # 更新 Agent 活动（只显示执行消息，不显示完成/退出码）
+        if hasattr(self, 'act_label') and "执行" in msg:
+            self.act_label.configure(text=f"▶ {msg.replace('执行: ', '')}", fg=C["success"])
         # 更新工具网格
         self.update_tool_grid(msg)
         # 检查是否是命令执行（智能体在线）
@@ -514,27 +514,34 @@ class App:
         # 显示最近最多 8 个工具
         for t in self.tool_history[-8:]:
             is_active = t["active"]
-            fg = C["primary"] if is_active else C["text2"]
-            bg = C["card"]
+            if is_active:
+                # 活跃：绿色背景 + 闪烁
+                bg = "#1a3a1a"
+                fg = "#4ade80"
+                bd = 1
+            else:
+                # 历史：灰色芯片
+                bg = C["int4"]
+                fg = C["text3"]
+                bd = 0
             lbl = tk.Label(self.tool_frame, text=t["name"], bg=bg, fg=fg,
-                           font=("Segoe UI", 9), padx=6, pady=2,
-                           relief="solid" if is_active else "flat",
-                           bd=1 if is_active else 0)
-            lbl.pack(side=tk.LEFT, padx=2)
+                           font=("Segoe UI", 9), padx=8, pady=3,
+                           relief="solid", bd=bd)
+            lbl.pack(side=tk.LEFT, padx=3)
             self.tool_labels.append(lbl)
             if is_active:
                 self.blink_tool(lbl)
 
     def blink_tool(self, label):
-        """工具闪烁效果"""
+        """工具闪烁效果（绿色闪烁）"""
         def toggle():
             if not label.winfo_exists():
                 return
             current = label.cget("fg")
-            if current == C["primary"]:
-                label.configure(fg=C["text3"])
+            if current == "#4ade80":
+                label.configure(fg="#166534", bg="#0a1a0a")
             else:
-                label.configure(fg=C["primary"])
+                label.configure(fg="#4ade80", bg="#1a3a1a")
             self.root.after(500, toggle)
         toggle()
 
