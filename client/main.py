@@ -166,7 +166,16 @@ class App:
         self.status_badge.pack(side=tk.RIGHT)
 
         # Agent 活动
-        self.act_card = self.make_card(content, "Agent 活动")
+        self.act_card = tk.Frame(content, bg=C["card"], padx=6, pady=3)
+        self.act_card.pack(fill=tk.X, pady=1)
+        act_head = tk.Frame(self.act_card, bg=C["card"])
+        act_head.pack(fill=tk.X)
+        tk.Label(act_head, text="Agent 活动", bg=C["card"], fg=C["text2"],
+                 font=("Segoe UI", 10, "bold")).pack(side=tk.LEFT)
+        self.status_light = tk.Canvas(act_head, width=10, height=10,
+                                      bg=C["card"], highlightthickness=0)
+        self.status_light.pack(side=tk.RIGHT, padx=(0, 4))
+        self.light = self.status_light.create_oval(1, 1, 9, 9, fill=C["text3"], outline="")
         # 工具网格
         self.tool_frame = tk.Frame(self.act_card, bg=C["card"])
         self.tool_frame.pack(fill=tk.X, pady=(0, 2))
