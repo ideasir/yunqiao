@@ -240,8 +240,10 @@ class App:
 
     # ─── 配对码 ────────────────────────────
     def copy_code(self):
+        code = state["pairCode"]
+        cmd = f"MCP_AUTH_CODE={code} node skills/mcp-client.mjs list"
         self.root.clipboard_clear()
-        self.root.clipboard_append(state["pairCode"])
+        self.root.clipboard_append(cmd)
         self.pair_badge.configure(text="已复制", bg=C["success"], fg="white")
         self.copy_btn.configure(text="✅ 已复制，请发给Agent")
         self.root.after(2000, lambda: (
@@ -451,6 +453,9 @@ class App:
             if hasattr(self, 'agent_status'):
                 self.agent_status.configure(text="🤖 在线", fg=C["success"])
                 self.agent_last = time.time()
+            # Agent 配对成功，更新上游节点状态
+            if len(self.node_labels) >= 3:
+                self.node_labels[2].configure(text="已接入", fg=C["success"])
         elif "完成" in msg or "退出码" in msg:
             if hasattr(self, 'agent_last'):
                 self.agent_last = time.time()
