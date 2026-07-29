@@ -479,12 +479,12 @@ class App:
         self.log_text.insert("end", f"[{ts}] {level} {msg}\n", tag)
         self.log_text.see("end")
         # 更新 Agent 活动（只显示执行消息，不显示完成/退出码）
-        if hasattr(self, 'act_label') and "执行" in msg:
+        if hasattr(self, 'act_label') and "执行:" in msg:
             self.act_label.configure(text=f"▶ {msg.replace('执行: ', '')}", fg=C["success"])
         # 更新工具网格
         self.update_tool_grid(msg)
         # 检查是否是命令执行（智能体在线）
-        if "执行：" in msg or "命令" in msg:
+        if "执行" in msg or "命令" in msg:
             if hasattr(self, 'agent_status'):
                 self.agent_status.configure(text="🤖 在线", fg=C["success"])
                 self.agent_last = time.time()
