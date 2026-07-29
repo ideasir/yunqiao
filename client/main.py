@@ -163,18 +163,20 @@ class App:
         # 指标
         metrics = tk.Frame(content, bg=C["bg"])
         metrics.pack(fill=tk.X, pady=2)
-        for label, val, sub in [("连接延迟", "--", "最近心跳")]:
-            mf = tk.Frame(metrics, bg=C["int4"], padx=6, pady=4)
-            mf.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 3))
-            mf.pack_propagate(False)
-            mf.configure(width=180, height=30)
-            tk.Label(mf, text=label, bg=C["int4"], fg=C["text2"],
-                     font=("Segoe UI", 9)).pack(anchor="w")
-            tk.Label(mf, text=val, bg=C["int4"], fg=C["text"],
-                     font=("Segoe UI", 12, "bold")).pack(anchor="w")
+        mf = tk.Frame(metrics, bg=C["int4"], padx=6, pady=4)
+        mf.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 3))
+        mf.pack_propagate(False)
+        mf.configure(width=180, height=30)
+        tk.Label(mf, text="--", bg=C["int4"], fg=C["text"],
+                 font=("Segoe UI", 12, "bold")).pack(anchor="w")
 
         # Agent 活动
         self.act_card = self.make_card(content, "Agent 活动")
+        # 工具网格
+        self.tool_frame = tk.Frame(self.act_card, bg=C["card"])
+        self.tool_frame.pack(fill=tk.X, pady=(0, 2))
+        self.tool_labels = []
+        # 活动日志
         self.act_frame = tk.Frame(self.act_card, bg=C["card"])
         self.act_frame.pack(fill=tk.X)
         self.act_label = tk.Label(self.act_frame, text="暂无活动", bg=C["card"], fg=C["text3"],
@@ -436,7 +438,7 @@ class App:
         if len(self.node_labels) >= 3:
             self.node_labels[0].configure(text="已连接 ✅", fg=C["success"])
             self.node_labels[1].configure(text="已连接 ✅", fg=C["success"])
-            self.node_labels[2].configure(text="等待配对码", fg=C["warning"])
+            self.node_labels[2].configure(text="已接入", fg=C["success"])
         # 配对码状态
         self.pair_badge.configure(text="", bg=C["card"])
 
@@ -449,6 +451,8 @@ class App:
         # 更新 Agent 活动
         if hasattr(self, 'act_label'):
             self.act_label.configure(text=f"[{ts}] {msg}", fg=C["text"])
+        # 更新工具网格
+        self.update_tool_grid(msg)
         # 检查是否是命令执行（智能体在线）
         if "执行：" in msg or "命令" in msg:
             if hasattr(self, 'agent_status'):
@@ -457,6 +461,55 @@ class App:
         elif "完成" in msg or "退出码" in msg:
             if hasattr(self, 'agent_last'):
                 self.agent_last = time.time()
+
+    def update_tool_grid(self, msg):
+        """解析工具调用并更新工具网格"""
+        import re
+        if not hasattr(self, 'tool_frame'):
+            return
+        # 清空旧工具
+        for w in self.tool_frame.winfo_children():
+            w.destroy()
+        self.tool_labels = []
+        # 提取工具名
+        tools = []
+        for m in re.findall(r'执行[：:]\s*(\S+)', msg):
+            tools.append(m)
+        for m in re.findall(r'调用[：:]\s*(\S+)', msg):
+            tools.append(m)
+        if not tools:
+            for kw in ["read_file", "write_file", "run_command", "list_directory",
+                       "exec", "git", "pip", "npm", "python", "node", "powershell",
+                       "cmd", "dir", "cd", "mkdir", "echo", "type"]:
+                if kw in msg.lower():
+                    tools.append(kw)
+                    break
+        # 显示工具芯片
+        if tools:
+            for t in tools[:6]:
+                is_active = "执行" in msg or "调用" in msg
+                fg = C["primary"] if is_active else C["text2"]
+                lbl = tk.Label(self.tool_frame, text=t, bg=C["card"], fg=fg,
+                               font=("Segoe UI", 9), padx=6, pady=2,
+                               relief="solid" if is_active else "flat",
+                               bd=1 if is_active else 0)
+                lbl.pack(side=tk.LEFT, padx=2)
+                self.tool_labels.append(lbl)
+                if is_active:
+                    self.blink_tool(lbl)
+
+    def blink_tool(self, label):
+        """工具闪烁效果"""
+        def toggle():
+            if not label.winfo_exists():
+                return
+            current = label.cget("fg")
+            if current == C["primary"]:
+                label.configure(fg=C["text3"])
+            else:
+                label.configure(fg=C["primary"])
+            self.root.after(500, toggle)
+        toggle()
 
     # ─── 命令处理 ────────────────────────────
     def _run_cmd(self, ws, rid, command, timeout):
