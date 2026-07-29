@@ -166,6 +166,7 @@ class App:
         self.tool_frame = tk.Frame(self.act_card, bg=C["card"])
         self.tool_frame.pack(fill=tk.X, pady=(0, 2))
         self.tool_labels = []
+        self.tool_history = []  # [{"name": str, "active": bool}]
         # 活动日志
         self.act_frame = tk.Frame(self.act_card, bg=C["card"])
         self.act_frame.pack(fill=tk.X)
@@ -453,40 +454,69 @@ class App:
                 self.agent_last = time.time()
 
     def update_tool_grid(self, msg):
-        """解析工具调用并更新工具网格"""
+        """解析工具调用并累积更新工具网格"""
         import re
-        if not hasattr(self, 'tool_frame'):
+        if not hasattr(self, 'tool_frame') or not hasattr(self, 'tool_history'):
             return
-        # 清空旧工具
+
+        # 判断是开始执行还是完成
+        is_exec = "执行" in msg or "调用" in msg
+        is_done = "完成" in msg or "退出码" in msg
+
+        # 提取工具/命令名
+        tool_name = ""
+        for m in re.findall(r'执行[：:]\s*(\S+)', msg):
+            tool_name = m
+            break
+        if not tool_name:
+            for m in re.findall(r'调用[：:]\s*(\S+)', msg):
+                tool_name = m
+                break
+        if not tool_name:
+            for kw in ["read_file", "write_file", "run_command", "list_directory",
+                       "exec", "git", "pip", "npm", "python", "node", "powershell",
+                       "cmd", "dir", "cd", "mkdir", "echo", "type", "where", "del"]:
+                if kw in msg.lower():
+                    tool_name = kw
+                    break
+
+        if is_exec and tool_name:
+            # 新工具开始执行 - 添加到历史，标记为活跃
+            # 先把之前的都标记为非活跃
+            for t in self.tool_history:
+                t["active"] = False
+            # 如果同名工具已在历史中，更新为活跃；否则追加
+            found = False
+            for t in self.tool_history:
+                if t["name"] == tool_name:
+                    t["active"] = True
+                    found = True
+                    break
+            if not found:
+                self.tool_history.append({"name": tool_name, "active": True})
+        elif is_done and self.tool_history:
+            # 完成 - 把当前活跃的标记为非活跃
+            for t in self.tool_history:
+                t["active"] = False
+
+        # 重绘所有工具芯片
         for w in self.tool_frame.winfo_children():
             w.destroy()
         self.tool_labels = []
-        # 提取工具名
-        tools = []
-        for m in re.findall(r'执行[：:]\s*(\S+)', msg):
-            tools.append(m)
-        for m in re.findall(r'调用[：:]\s*(\S+)', msg):
-            tools.append(m)
-        if not tools:
-            for kw in ["read_file", "write_file", "run_command", "list_directory",
-                       "exec", "git", "pip", "npm", "python", "node", "powershell",
-                       "cmd", "dir", "cd", "mkdir", "echo", "type"]:
-                if kw in msg.lower():
-                    tools.append(kw)
-                    break
-        # 显示工具芯片
-        if tools:
-            for t in tools[:6]:
-                is_active = "执行" in msg or "调用" in msg
-                fg = C["primary"] if is_active else C["text2"]
-                lbl = tk.Label(self.tool_frame, text=t, bg=C["card"], fg=fg,
-                               font=("Segoe UI", 9), padx=6, pady=2,
-                               relief="solid" if is_active else "flat",
-                               bd=1 if is_active else 0)
-                lbl.pack(side=tk.LEFT, padx=2)
-                self.tool_labels.append(lbl)
-                if is_active:
-                    self.blink_tool(lbl)
+
+        # 显示最近最多 8 个工具
+        for t in self.tool_history[-8:]:
+            is_active = t["active"]
+            fg = C["primary"] if is_active else C["text2"]
+            bg = C["card"]
+            lbl = tk.Label(self.tool_frame, text=t["name"], bg=bg, fg=fg,
+                           font=("Segoe UI", 9), padx=6, pady=2,
+                           relief="solid" if is_active else "flat",
+                           bd=1 if is_active else 0)
+            lbl.pack(side=tk.LEFT, padx=2)
+            self.tool_labels.append(lbl)
+            if is_active:
+                self.blink_tool(lbl)
 
     def blink_tool(self, label):
         """工具闪烁效果"""
