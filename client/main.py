@@ -188,18 +188,20 @@ class App:
         pair_body.pack(fill=tk.X, pady=2)
         self.code_label = tk.Label(pair_body, text=state["pairCode"],
                                    bg=C["card"], fg=C["accent"],
-                                   font=("Courier New", 26, "bold"))
+                                   font=("Courier New", 20, "bold"))
         self.code_label.pack()
         tk.Label(pair_body, text="将此配对码发给智能体，用于建立连接",
                  bg=C["card"], fg=C["text2"], font=("Segoe UI", 9)).pack()
-        # 工作目录
-        wd_frame = tk.Frame(pair_body, bg=C["card"])
-        wd_frame.pack(fill=tk.X, pady=(6, 0))
-        self.workdir_label = tk.Label(wd_frame, text="📂 " + (state["workDir"] or "未设置工作目录"),
-                                      bg=C["card"], fg=C["text2"], font=("Segoe UI", 9))
+        # Agent 工作区
+        wd_label = tk.Label(pair_body, text="Agent 的工作区", bg=C["card"], fg=C["text2"],
+                            font=("Segoe UI", 9)).pack(anchor="w", pady=(6, 2))
+        wd_frame = tk.Frame(pair_body, bg=C["int4"], padx=6, pady=4)
+        wd_frame.pack(fill=tk.X)
+        self.workdir_label = tk.Label(wd_frame, text=state["workDir"] or "未设置工作目录",
+                                      bg=C["int4"], fg=C["text"], font=("Segoe UI", 10))
         self.workdir_label.pack(side=tk.LEFT)
-        tk.Button(wd_frame, text="浏览", bg=C["int8"], fg=C["text"], bd=0,
-                  font=("Segoe UI", 8), padx=8, pady=1,
+        tk.Button(wd_frame, text="📁 浏览", bg=C["int8"], fg=C["text"], bd=0,
+                  font=("Segoe UI", 9), padx=8, pady=2,
                   command=self.browse_workdir).pack(side=tk.RIGHT)
 
         btn_frame = tk.Frame(pair_card, bg=C["card"])
