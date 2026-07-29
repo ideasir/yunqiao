@@ -100,6 +100,11 @@ class App:
                  font=("Segoe UI", 12, "bold"), width=2).pack(side=tk.LEFT, padx=8, pady=4)
         tk.Label(title, text="云桥 MCP", bg=C["panel"], fg=C["text"],
                  font=("Segoe UI", 12, "bold")).pack(side=tk.LEFT, padx=4)
+        # 连接/断开按钮
+        self.connect_btn = tk.Button(title, text="连接", bg=C["panel"], fg=C["success"],
+                                     font=("Segoe UI", 11), bd=0, cursor="hand2",
+                                     activebackground=C["panel"], command=self.toggle_connect)
+        self.connect_btn.pack(side=tk.RIGHT, padx=(0, 4))
         # 设置按钮
         self.setting_btn = tk.Button(title, text="⚙", bg=C["panel"], fg=C["text2"],
                                      font=("Segoe UI", 13), bd=0, cursor="hand2",
@@ -344,8 +349,32 @@ class App:
 
     def start_connect(self):
         self.set_status("connecting", "连接中...")
+        self.connect_btn.configure(text="断开", fg=C["danger"])
         t = threading.Thread(target=self._ws_loop, daemon=True)
         t.start()
+
+    def toggle_connect(self):
+        """切换连接/断开"""
+        if state["ws_client"] and state["connected"]:
+            # 断开连接
+            self.add_log("INFO", "手动断开连接")
+            state["connected"] = False
+            ws = state["ws_client"]
+            state["ws_client"] = None
+            try: ws.close()
+            except: pass
+            self.set_status("disconnected", "未连接")
+            self.connect_btn.configure(text="连接", fg=C["success"])
+            if len(self.node_labels) >= 3:
+                self.node_labels[0].configure(text="等待连接", fg=C["text2"])
+                self.node_labels[1].configure(text="未连接", fg=C["text2"])
+                self.node_labels[2].configure(text="待接入", fg=C["text2"])
+        else:
+            # 连接
+            if not state["psk"]:
+                self.open_settings()
+                return
+            self.start_connect()
 
     def _ws_loop(self):
         asyncio.run(self._ws_client())
@@ -361,6 +390,7 @@ class App:
                     url, extra_headers={"X-PSK": psk}, ping_interval=10,
                 ) as ws:
                     state["ws_client"] = ws
+                    state["connected"] = True
                     lat = round((time.time() - t0) * 1000, 1)
                     self.root.after(0, lambda: self.set_connected(lat))
 
@@ -412,14 +442,18 @@ class App:
                 self.add_log("ERROR", str(e)[:60])
             finally:
                 state["ws_client"] = None
+                state["connected"] = False
+                self.root.after(0, lambda: self.connect_btn.configure(text="连接", fg=C["success"]))
             await asyncio.sleep(5)
 
     # ─── UI 更新 ────────────────────────────
     def set_status(self, status, text):
         colors = {"connected": C["success"], "connecting": C["warning"],
-                  "reconnecting": C["warning"], "error": C["danger"]}
+                  "reconnecting": C["warning"], "error": C["danger"],
+                  "disconnected": C["text3"]}
         labels = {"connected": "已连接", "connecting": "连接中",
-                  "reconnecting": "重连中", "error": "错误"}
+                  "reconnecting": "重连中", "error": "错误",
+                  "disconnected": "未连接"}
         color = colors.get(status, C["text3"])
         label = labels.get(status, text)
         self.status_dot.itemconfig(self.dot, fill=color)
@@ -428,6 +462,7 @@ class App:
 
     def set_connected(self, latency):
         self.set_status("connected", "已连接")
+        self.connect_btn.configure(text="断开", fg=C["danger"])
         self.latency_label.configure(text=f"延迟 {latency:.0f} ms")
         # 更新节点状态
         if len(self.node_labels) >= 3:
