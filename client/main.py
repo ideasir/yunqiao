@@ -438,7 +438,7 @@ class App:
         if len(self.node_labels) >= 3:
             self.node_labels[0].configure(text="已连接 ✅", fg=C["success"])
             self.node_labels[1].configure(text="已连接 ✅", fg=C["success"])
-            self.node_labels[2].configure(text="已接入", fg=C["success"])
+            self.node_labels[2].configure(text="等待配对码", fg=C["warning"])
         # 配对码状态
         self.pair_badge.configure(text="", bg=C["card"])
 
