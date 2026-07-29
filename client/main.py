@@ -274,10 +274,14 @@ class App:
         ))
 
     def copy_skills_cmd(self):
-        """复制skills命令给Agent安装"""
+        """复制连接地址+skills命令给Agent安装"""
         code = state["pairCode"]
+        server_url = state.get("relayUrl", "wss://yunqiao.very.im/device")
+        mcp_url = server_url.replace("/device", "/mcp").replace("ws://", "http://").replace("wss://", "https://")
+        text = f"连接地址: {mcp_url}
+技能命令: > mcp-client {code}"
         self.root.clipboard_clear()
-        self.root.clipboard_append(f"> mcp-client {code}")
+        self.root.clipboard_append(text)
         self.first_use_btn.configure(text="✅ 已复制，请发给Agent", fg=C["success"])
         self.root.after(3000, lambda: self.first_use_btn.configure(
             text="首次使用请点击这里", fg=C["accent"]))
