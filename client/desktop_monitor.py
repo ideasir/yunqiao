@@ -18,12 +18,22 @@ import time
 import threading
 import subprocess
 import queue
+import random
 
 # ─── 配置 ───────────────────────────────────────
 RELAY_URL = os.environ.get("RELAY_URL", "wss://yunqiao.very.im/device")
-RELAY_PSK = os.environ.get("RELAY_PSK", "PSK_REMOVED")
+RELAY_PSK = os.environ.get("RELAY_PSK")
+if not RELAY_PSK:
+    print("❌ 必须设置 RELAY_PSK 环境变量")
+    sys.exit(1)
 DEVICE_NAME = os.environ.get("DEVICE_NAME", platform.node())
 RECONNECT_DELAY = int(os.environ.get("RECONNECT_DELAY", "5000"))
+
+# 验证码
+def generate_code():
+    return str(random.randint(100000, 999999))
+
+AUTH_CODE = generate_code()
 
 # 尝试导入 websockets
 try:
@@ -59,6 +69,13 @@ def add_activity(msg_type, detail=""):
 
 
 # ─── WebSocket 客户端 ──────────────────────────
+def refresh_code():
+    global AUTH_CODE
+    AUTH_CODE = generate_code()
+    add_activity("system", f"验证码已刷新: {AUTH_CODE}")
+    return AUTH_CODE
+
+
 async def ws_client():
     url = f"{RELAY_URL}?psk={RELAY_PSK}"
     add_activity("system", f"正在连接服务器 {RELAY_URL}...")
@@ -72,13 +89,14 @@ async def ws_client():
                 server_status["latency"] = round(latency, 1)
                 add_activity("system", f"服务器已连接，延迟 {latency:.0f}ms")
 
-                # 注册设备
+                # 注册设备（带上验证码）
                 await ws.send(json.dumps({
                     "type": "register",
                     "deviceName": DEVICE_NAME,
                     "os": sys.platform,
                     "arch": platform.machine(),
                     "hostname": platform.node(),
+                    "authCode": AUTH_CODE,
                 }))
 
                 # 延迟心跳
@@ -302,6 +320,23 @@ def build_ui():
     uptime_label = tk.Label(stats_frame, text="运行时间: 0s", fg=FG, bg=BG_CARD,
                             font=("Segoe UI", 9))
     uptime_label.pack(side=tk.RIGHT, padx=10, pady=5)
+
+    # ─── 验证码区域 ───
+    code_frame = tk.Frame(root, bg=BG_CARD, height=50)
+    code_frame.pack(fill=tk.X, padx=10, pady=(0, 5))
+
+    code_label = tk.Label(code_frame, text=f"🔐 验证码: {AUTH_CODE}", fg=ACCENT, bg=BG_CARD,
+                          font=("Segoe UI", 14, "bold"))
+    code_label.pack(side=tk.LEFT, padx=15, pady=8)
+
+    def refresh_click():
+        new_code = refresh_code()
+        code_label.config(text=f"🔐 验证码: {new_code}")
+
+    refresh_btn = tk.Button(code_frame, text="🔄 重新生成", command=refresh_click,
+                            bg=BG_DARK, fg=FG, font=("Segoe UI", 9),
+                            relief=tk.FLAT, padx=10, cursor="hand2")
+    refresh_btn.pack(side=tk.RIGHT, padx=15, pady=8)
 
     # ─── 系统托盘 ───
     def on_minimize():

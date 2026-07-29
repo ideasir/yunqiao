@@ -16,6 +16,8 @@
 import { Client } from '/opt/node-v24.11.1-linux-x64/lib/node_modules/mcporter/node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js';
 import { SSEClientTransport } from '/opt/node-v24.11.1-linux-x64/lib/node_modules/mcporter/node_modules/@modelcontextprotocol/sdk/dist/esm/client/sse.js';
 
+// 从全局环境变量读取验证码
+const AUTH_CODE = process.env.MCP_AUTH_CODE || '';
 const SERVER_URL = process.env.MCP_SERVER_URL || 'https://yunqiao.very.im/mcp';
 
 async function main() {
@@ -67,6 +69,10 @@ async function main() {
           console.error('参数必须是有效的 JSON');
           process.exit(1);
         }
+      }
+      // 自动注入验证码（如果设了 MCP_AUTH_CODE 且工具需要 code 参数）
+      if (AUTH_CODE && !args.code) {
+        args.code = AUTH_CODE;
       }
       const result = await client.callTool({ name: toolName, arguments: args });
       for (const content of result.content) {

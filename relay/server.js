@@ -1,23 +1,27 @@
 import { createServer } from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomInt } from 'node:crypto';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { z } from 'zod/v4';
 
 const PORT = parseInt(process.env.PORT || '9876');
-const PSK = process.env.RELAY_PSK || 'change-me-to-a-secure-random-string';
+const PSK = process.env.RELAY_PSK;
 const COMMAND_TIMEOUT = parseInt(process.env.COMMAND_TIMEOUT || '60000');
 const MCP_PATH = '/mcp';
 const MCP_MESSAGE_PATH = '/mcp/message';
 
-// 安全边界（可选配置，默认不限制）
+// 启动时检查 PSK
+if (!PSK || PSK === 'change-me-to-a-secure-random-string') {
+  console.error('[server] ❌ 必须设置 RELAY_PSK 环境变量，且不能使用默认值');
+  process.exit(1);
+}
+
 const ALLOWED_COMMANDS = (process.env.ALLOWED_COMMANDS || '').split(',').filter(Boolean);
 const ALLOWED_FILE_PREFIX = process.env.ALLOWED_FILE_PREFIX || '';
 
 const devices = new Map();
 const pendingRequests = new Map();
-// MCP 传输实例映射（sessionId -> transport）
 const transports = new Map();
 
 function sendJSON(ws, data) {
@@ -74,18 +78,19 @@ function createMcpServer() {
   });
 
   server.registerTool('list_devices', {
-    description: '列出所有已连接到中转的私人电脑设备',
+    description: '列出所有已连接到中转的私人电脑设备（含验证码状态）',
     inputSchema: z.object({}),
   }, async () => {
     const list = Array.from(devices.values()).map(d => ({
       id: d.id, name: d.name, os: d.os, arch: d.arch,
       hostname: d.hostname, connectedAt: d.connectedAt,
+      verified: !!d.authCode,
     }));
     if (list.length === 0) {
       return { content: [{ type: 'text', text: '当前没有已连接的设备' }] };
     }
     const text = list.map(d =>
-      `- ${d.name} (${d.id})\n  OS: ${d.os} ${d.arch}\n  Hostname: ${d.hostname}\n  Connected: ${d.connectedAt}`
+      `- ${d.name} (${d.id})\n  OS: ${d.os} ${d.arch}\n  Hostname: ${d.hostname}\n  Connected: ${d.connectedAt}\n  Verified: ${d.verified ? '✅' : '❌'}`
     ).join('\n\n');
     return { content: [{ type: 'text', text }] };
   });
@@ -94,10 +99,16 @@ function createMcpServer() {
     description: '在指定的私人电脑上执行 shell 命令并返回结果',
     inputSchema: z.object({
       deviceId: z.string().describe('目标设备 ID'),
+      code: z.string().describe('客户端显示的验证码'),
       command: z.string().describe('要执行的 shell 命令'),
       timeout: z.number().optional().describe('命令超时时间（毫秒），默认 30000'),
     }),
-  }, async ({ deviceId, command, timeout }) => {
+  }, async ({ deviceId, code, command, timeout }) => {
+    const device = devices.get(deviceId);
+    if (!device) return { content: [{ type: 'text', text: 'Error: device not found' }], isError: true };
+    if (device.authCode !== code) {
+      return { content: [{ type: 'text', text: 'Error: 验证码错误，请在客户端查看最新验证码' }], isError: true };
+    }
     if (!checkCommandAllowed(command)) {
       return { content: [{ type: 'text', text: `Error: command '${command.split(/\s+/)[0]}' is not in the allowed list` }], isError: true };
     }
@@ -115,9 +126,15 @@ function createMcpServer() {
     description: '读取私人电脑上的文件内容',
     inputSchema: z.object({
       deviceId: z.string().describe('目标设备 ID'),
+      code: z.string().describe('客户端显示的验证码'),
       path: z.string().describe('文件绝对路径'),
     }),
-  }, async ({ deviceId, path }) => {
+  }, async ({ deviceId, code, path }) => {
+    const device = devices.get(deviceId);
+    if (!device) return { content: [{ type: 'text', text: 'Error: device not found' }], isError: true };
+    if (device.authCode !== code) {
+      return { content: [{ type: 'text', text: 'Error: 验证码错误，请在客户端查看最新验证码' }], isError: true };
+    }
     if (!checkPathAllowed(path)) {
       return { content: [{ type: 'text', text: `Error: path '${path}' is outside allowed file prefix` }], isError: true };
     }
@@ -132,10 +149,16 @@ function createMcpServer() {
     description: '将内容写入私人电脑上的文件',
     inputSchema: z.object({
       deviceId: z.string().describe('目标设备 ID'),
+      code: z.string().describe('客户端显示的验证码'),
       path: z.string().describe('文件绝对路径'),
       content: z.string().describe('要写入的文件内容'),
     }),
-  }, async ({ deviceId, path, content }) => {
+  }, async ({ deviceId, code, path, content }) => {
+    const device = devices.get(deviceId);
+    if (!device) return { content: [{ type: 'text', text: 'Error: device not found' }], isError: true };
+    if (device.authCode !== code) {
+      return { content: [{ type: 'text', text: 'Error: 验证码错误，请在客户端查看最新验证码' }], isError: true };
+    }
     if (!checkPathAllowed(path)) {
       return { content: [{ type: 'text', text: `Error: path '${path}' is outside allowed file prefix` }], isError: true };
     }
@@ -150,8 +173,14 @@ function createMcpServer() {
     description: '获取私人电脑的系统信息（OS、CPU、内存等）',
     inputSchema: z.object({
       deviceId: z.string().describe('目标设备 ID'),
+      code: z.string().describe('客户端显示的验证码'),
     }),
-  }, async ({ deviceId }) => {
+  }, async ({ deviceId, code }) => {
+    const device = devices.get(deviceId);
+    if (!device) return { content: [{ type: 'text', text: 'Error: device not found' }], isError: true };
+    if (device.authCode !== code) {
+      return { content: [{ type: 'text', text: 'Error: 验证码错误，请在客户端查看最新验证码' }], isError: true };
+    }
     const info = await getDeviceInfo(deviceId);
     const gb = (b) => (b / 1024 / 1024 / 1024).toFixed(1) + ' GB';
     const text = [
@@ -196,28 +225,20 @@ async function getDeviceInfo(deviceId) {
 const httpServer = createServer(async (req, res) => {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
 
-  // SSE 端点：建立 SSE 长连接
   if (url.pathname === MCP_PATH) {
     try {
-      // 每个 SSE 连接需要独立的 McpServer 实例
       const mcpServer = createMcpServer();
       const transport = new SSEServerTransport(MCP_MESSAGE_PATH, res);
-      // 使用 SSEServerTransport 内部生成的 sessionId 作为 key
       transports.set(transport.sessionId, { server: mcpServer, transport });
-      res.on('close', () => {
-        transports.delete(transport.sessionId);
-      });
+      res.on('close', () => { transports.delete(transport.sessionId); });
       await mcpServer.connect(transport);
     } catch (err) {
       console.error('[mcp] SSE connect error:', err);
-      try {
-        res.writeHead(500).end('Internal Server Error');
-      } catch { /* ignore */ }
+      try { res.writeHead(500).end('Internal Server Error'); } catch {}
     }
     return;
   }
 
-  // MCP 消息端点：处理来自客户端的 POST 请求
   if (url.pathname === MCP_MESSAGE_PATH) {
     const sessionId = url.searchParams.get('sessionId');
     if (!sessionId || !transports.has(sessionId)) {
@@ -228,9 +249,7 @@ const httpServer = createServer(async (req, res) => {
       await transports.get(sessionId).transport.handlePostMessage(req, res);
     } catch (err) {
       console.error('[mcp] handlePostMessage error:', err);
-      try {
-        res.writeHead(500).end('Internal Server Error');
-      } catch { /* ignore */ }
+      try { res.writeHead(500).end('Internal Server Error'); } catch {}
     }
     return;
   }
@@ -255,7 +274,8 @@ httpServer.on('upgrade', (req, socket, head) => {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
 
   if (url.pathname === '/device') {
-    const psk = url.searchParams.get('psk') || req.headers['x-psk'];
+    // 仅通过 Header 传 PSK，不用 URL 参数（避免记录到日志）
+    const psk = req.headers['x-psk'];
     if (psk !== PSK) {
       socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
       socket.destroy();
@@ -284,19 +304,30 @@ wss.on('connection', (ws, req) => {
     const { type, requestId } = msg;
 
     if (type === 'register') {
-      const { deviceName, os, arch, hostname } = msg;
+      const { deviceName, os, arch, hostname, authCode } = msg;
       devices.set(deviceId, {
         id: deviceId, name: deviceName || 'unknown',
         os: os || 'unknown', arch: arch || 'unknown',
         hostname: hostname || 'unknown', ws,
+        authCode: authCode || null,
         connectedAt: new Date().toISOString(),
       });
-      console.error(`[device] registered: ${deviceName} (${deviceId})`);
+      console.error(`[device] registered: ${deviceName} (${deviceId}) code:${authCode || 'none'}`);
       sendJSON(ws, { type: 'register_result', requestId, success: true, deviceId });
       return;
     }
 
-    // Relay command results back to pending MCP requests
+    // 更新验证码
+    if (type === 'update_code') {
+      const device = devices.get(deviceId);
+      if (device) {
+        device.authCode = msg.authCode;
+        console.error(`[device] code updated: ${deviceId} -> ${msg.authCode}`);
+        sendJSON(ws, { type: 'update_code_result', requestId, success: true });
+      }
+      return;
+    }
+
     if (requestId && pendingRequests.has(requestId)) {
       const { resolve, reject, timer } = pendingRequests.get(requestId);
       clearTimeout(timer);
@@ -315,7 +346,6 @@ wss.on('connection', (ws, req) => {
       console.error(`[device] disconnected: ${device.name} (${deviceId})`);
     }
     devices.delete(deviceId);
-    // 主动拒绝该设备的所有 pending 请求
     rejectDeviceRequests(deviceId, `device '${deviceId}' disconnected`);
   });
 
@@ -326,15 +356,11 @@ wss.on('connection', (ws, req) => {
 
 httpServer.listen(PORT, () => {
   console.error(`[server] listening on http://0.0.0.0:${PORT}`);
-  console.error(`[server] MCP SSE endpoint: http://0.0.0.0:${PORT}${MCP_PATH}`);
-  console.error(`[server] MCP message endpoint: http://0.0.0.0:${PORT}${MCP_MESSAGE_PATH}`);
-  console.error(`[server] Device WS: ws://0.0.0.0:${PORT}/device?psk=<key>`);
-  if (ALLOWED_COMMANDS.length) {
-    console.error(`[server] allowed commands: ${ALLOWED_COMMANDS.join(', ')}`);
-  }
-  if (ALLOWED_FILE_PREFIX) {
-    console.error(`[server] allowed file prefix: ${ALLOWED_FILE_PREFIX}`);
-  }
+  console.error(`[server] MCP endpoint: http://0.0.0.0:${PORT}${MCP_PATH}`);
+  console.error(`[server] Device WS: ws://0.0.0.0:${PORT}/device`);
+  console.error(`[server] 注意: PSK 仅通过 Header 传递，URL 参数已禁用`);
+  if (ALLOWED_COMMANDS.length) console.error(`[server] allowed commands: ${ALLOWED_COMMANDS.join(', ')}`);
+  if (ALLOWED_FILE_PREFIX) console.error(`[server] allowed file prefix: ${ALLOWED_FILE_PREFIX}`);
 });
 
 process.on('SIGINT', () => {
