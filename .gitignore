@@ -1,8 +1,8 @@
-node_modules/
 *.log
 dist/
 build/
 *.spec
 __pycache__/
 *.pyc
+node_modules/
 .env

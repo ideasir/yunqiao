@@ -21,7 +21,7 @@ import queue
 
 # ─── 配置 ───────────────────────────────────────
 RELAY_URL = os.environ.get("RELAY_URL", "wss://yunqiao.very.im/device")
-RELAY_PSK = os.environ.get("RELAY_PSK", "87ba9765c2aa80687c68fe955ea7829d1717afc77bd2f7eeb1b08e34ca0be01e")
+RELAY_PSK = os.environ.get("RELAY_PSK", "PSK_REMOVED")
 DEVICE_NAME = os.environ.get("DEVICE_NAME", platform.node())
 RECONNECT_DELAY = int(os.environ.get("RECONNECT_DELAY", "5000"))
 

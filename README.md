@@ -1,53 +1,67 @@
-# 云端协同 MCP 配置指南
+# 云桥 MCP · Yunqiao MCP
 
-## 架构
+> 通过公网中转，远程控制你的电脑 — 像调用 API 一样简单。
+
+---
+
+## 目录结构
 
 ```
-OpenClaw(沙箱) --MCP HTTP--> 公网服务器(MCP+Relay) <--WebSocket--> Windows(本地代理)
+yunqiao-mcp/
+├── relay/          ← 中转服务器（部署在 VPS）
+├── client/         ← 客户机代理（部署在本地电脑）
+├── skills/         ← 智能体 Skill（给 AI Agent 用）
+└── README.md
 ```
 
-- **沙箱↔服务器**: 短链接，MCP Streamable HTTP 协议，每调用一次一个请求
-- **服务器↔Windows**: 长链接，WebSocket 持久双向通道
+---
 
-## 部署
+## 快速部署
 
-### 1. 公网服务器（香港 VPS）
+### 1️⃣ 中转服务器 → `relay/`
+
+部署到一台有公网 IP 的 VPS 上。
 
 ```bash
-cd cloud-collaborative-mcp
+cd relay
 npm install
-export RELAY_PSK="your-secure-psk"
-export PORT=9876
-export ALLOWED_COMMANDS=node,python,git,powershell,cmd
-export ALLOWED_FILE_PREFIX=D:\aicodework\github
-npm run server
+
+# 配置密钥
+export RELAY_PSK="your-secure-random-key"
+
+# 启动（建议用 Nginx 反代 HTTPS）
+node server.js
 ```
 
-### 2. Windows 本地代理
+建议配合 Nginx + Let's Encrypt 配置 HTTPS，WebSocket 路径为 `/device`。
+
+### 2️⃣ 客户机代理 → `client/`
+
+在你需要远程控制的电脑上运行。
 
 ```bash
-cd cloud-collaborative-mcp
-npm install
-set RELAY_PSK=your-secure-psk
-set RELAY_URL=ws://45.152.65.49:9876/device
-set DEVICE_NAME=my-computer
-npm run agent
+cd client
+pip install websockets
+
+# 连接中转服务器
+set RELAY_PSK=your-secure-random-key
+set RELAY_URL=wss://your-domain.com/device
+python desktop_monitor.py
 ```
 
-### 3. OpenClaw MCP 配置
+- `desktop_monitor.py` — 桌面监控面板（推荐）
+- `agent.py` — 轻量后台版（无界面）
 
-在 `openclaw.json` 中添加：
+### 3️⃣ 智能体 Skill → `skills/`
 
-```json
-{
-  "mcpServers": {
-    "cloud-collaborative": {
-      "url": "http://45.152.65.49:9876/mcp",
-      "transport": "streamable-http"
-    }
-  }
-}
+给 AI Agent（OpenClaw / Codex 等）使用的 MCP 客户端。
+
+```bash
+node skills/mcp-client.mjs list
+node skills/mcp-client.mjs call list_devices '{}'
 ```
+
+---
 
 ## 可用工具
 
@@ -59,9 +73,15 @@ npm run agent
 | `write_file` | 写入文件 |
 | `get_device_info` | 获取系统信息 |
 
+---
+
 ## 安全
 
-- 通过 `ALLOWED_COMMANDS` 限制可执行的命令
-- 通过 `ALLOWED_FILE_PREFIX` 限制文件读写路径
-- 通过 `RELAY_PSK` 验证设备连接
-- 建议生产环境使用 WSS + 443 端口 + TLS 证书
+- PSK 预共享密钥认证
+- 支持命令白名单（`ALLOWED_COMMANDS`）
+- 支持文件路径白名单（`ALLOWED_FILE_PREFIX`）
+- 建议使用 HTTPS/WSS 加密通信
+
+---
+
+MIT License · 开源 · 自由使用
