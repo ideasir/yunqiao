@@ -1,0 +1,37 @@
+name: Build Windows exe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'client/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: client
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install pywebview websockets pyinstaller
+
+      - name: Build exe
+        run: |
+          pyinstaller --onefile --windowed --name "云桥MCP" main.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: 云桥MCP
+          path: client/dist/云桥MCP.exe
