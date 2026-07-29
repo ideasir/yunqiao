@@ -410,7 +410,9 @@ class App:
                         if t == "register_result" and data.get("success"):
                             state["deviceId"] = data.get("deviceId", "")
                             self.add_log("INFO", f"注册成功")
-                            # 上游 Agent 保持"等待配对"，只有智能体用配对码成功调用后才变绿
+                            # 配对码已验证，上游 Agent 已接入
+                            if len(self.node_labels) >= 3:
+                                self.node_labels[2].configure(text="已接入", fg=C["success"])
 
                         elif t == "execute_command":
                             cmd = payload.get("command", "")
