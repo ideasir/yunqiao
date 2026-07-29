@@ -241,7 +241,7 @@ class App:
     # ─── 配对码 ────────────────────────────
     def copy_code(self):
         code = state["pairCode"]
-        cmd = f"MCP_AUTH_CODE={code} node skills/mcp-client.mjs list"
+        cmd = f"> mcp-client {code}"
         self.root.clipboard_clear()
         self.root.clipboard_append(cmd)
         self.pair_badge.configure(text="已复制", bg=C["success"], fg="white")
