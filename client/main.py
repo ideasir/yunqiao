@@ -279,7 +279,8 @@ class App:
         server_url = state.get("relayUrl", "wss://yunqiao.very.im/device")
         mcp_url = server_url.replace("/device", "/mcp").replace("ws://", "http://").replace("wss://", "https://")
         skills_url = "https://raw.githubusercontent.com/ideasir/yunqiao-mcp/main/skills/mcp-client.mjs"
-        text = f"安装 skills: {skills_url}\n连接地址: {mcp_url}\n配对码: {code}"✅ 已复制，请发给Agent", fg=C["success"])
+        text = f"安装 skills: {skills_url}\n连接地址: {mcp_url}\n配对码: {code}"
+        self.first_use_btn.configure(text="✅ 已复制，请发给Agent", fg=C["success"])
         self.root.after(3000, lambda: self.first_use_btn.configure(
             text="首次使用请点击这里", fg=C["accent"]))
 
