@@ -486,6 +486,23 @@ class App:
                     ws_kwargs["additional_headers"] = {"X-PSK": psk}
                 else:
                     ws_kwargs["extra_headers"] = {"X-PSK": psk}
+                # 直连模式：用IP_UNICAST_IF绕过TUN
+                if state.get("directMode", True):
+                    iface_idx = get_physical_iface_idx()
+                    if iface_idx and sys.platform == "win32":
+                        import socket as sock_mod, ctypes
+                        from urllib.parse import urlparse
+                        bypass_sock = sock_mod.socket(sock_mod.AF_INET, sock_mod.SOCK_STREAM)
+                        bypass_sock.setsockopt(sock_mod.IPPROTO_IP, 31, ctypes.c_uint32(iface_idx))
+                        bypass_sock.settimeout(5)
+                        parsed = urlparse(url)
+                        bypass_sock.connect((parsed.hostname, parsed.port or 443))
+                        bypass_sock.settimeout(None)
+                        orig_create = asyncio.get_event_loop().create_connection
+                        def make_tun_bypass(pf, **kw):
+                            kw["sock"] = bypass_sock
+                            return orig_create(pf, **kw)
+                        ws_kwargs["create_connection"] = make_tun_bypass
                 async with websockets.connect(
                     url, **ws_kwargs,
                 ) as ws:
