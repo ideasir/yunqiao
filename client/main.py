@@ -60,29 +60,46 @@ def save_config():
 def gen_code():
     return str(random.randint(100000, 999999))
 
-def get_physical_ip():
-    """获取物理网卡IP（绕过TUN虚拟网卡）"""
+def add_tun_route():
+    """添加中转服务器的路由绕过TUN（需管理员权限）"""
     try:
-        import socket as sock_mod
+        import subprocess, socket, re
+        if sys.platform != "win32":
+            return
+        # 获取中继IP
+        import urllib.parse
+        relay_host = "45.152.65.49"
+        # 用route print找物理网卡的网关和接口
+        r = subprocess.run(["route", "print", "0.0.0.0"], capture_output=True, text=True, timeout=5)
+        gw = None
+        iface_idx = None
+        for line in r.stdout.split("\n"):
+            parts = line.strip().split()
+            if len(parts) >= 5 and parts[0] == "0.0.0.0" and parts[1] == "0.0.0.0":
+                gw = parts[2]
+                iface_idx = parts[4]
+                iface_ip = parts[3]
+                # 跳过TUN（10.x或100.x）
+                if iface_ip.startswith("10.") or iface_ip.startswith("100."):
+                    continue
+                break
+        if gw:
+            # 添加直连路由
+            subprocess.run(["route", "add", relay_host, "mask", "255.255.255.255", gw, "metric", "1"],
+                          capture_output=True, timeout=5)
+            return True
+    except:
+        pass
+    return False
+
+def remove_tun_route():
+    """移除直连路由"""
+    try:
         import subprocess
         if sys.platform == "win32":
-            r = subprocess.run(["route", "print", "0.0.0.0"], capture_output=True, text=True, timeout=5)
-            for line in r.stdout.split("\n"):
-                parts = line.strip().split()
-                if len(parts) >= 5 and parts[0] == "0.0.0.0" and parts[1] == "0.0.0.0":
-                    gw = parts[2]
-                    iface_ip = parts[3]
-                    if not iface_ip.startswith("10.") and not iface_ip.startswith("100."):
-                        return iface_ip
-        # 备选：UDP探测
-        s = sock_mod.socket(sock_mod.AF_INET, sock_mod.SOCK_DGRAM)
-        s.settimeout(1)
-        s.connect(("45.152.65.49", 9876))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
+            subprocess.run(["route", "delete", "45.152.65.49"], capture_output=True, timeout=5)
     except:
-        return None
+        pass
 
 
 # ─── 主窗口 ──────────────────────────────────
@@ -420,11 +437,13 @@ class App:
     def start_connect(self):
         self.set_status("connecting", "连接中...")
         self.connect_btn.configure(text="断开", fg=C["danger"], bg=C["int8"])
-        # 直连模式：绕过系统代理
+        # 直连模式：绕过系统代理 + TUN
         if state.get("directMode", True):
             os.environ["NO_PROXY"] = "*"
+            add_tun_route()
         else:
             os.environ.pop("NO_PROXY", None)
+            remove_tun_route()
         t = threading.Thread(target=self._ws_loop, daemon=True)
         t.start()
 
