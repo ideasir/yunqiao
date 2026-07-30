@@ -514,9 +514,10 @@ class App:
                             if hasattr(self, 'status_light') and hasattr(self, 'light'):
                                 self.status_light.itemconfig(self.light, fill=C["success"])
                                 self._light_blinking = False
-                            # 取消离开定时器
-                            if hasattr(self, '_agent_timer'):
-                                self.root.after_cancel(self._agent_timer)
+                            # 取消所有定时器
+                            for t in ['_agent_timer', '_gray_timer']:
+                                if hasattr(self, t):
+                                    self.root.after_cancel(getattr(self, t))
 
                         elif t == "agent_disconnected":
                             self.add_log("INFO", "Agent 已断开")
@@ -525,6 +526,10 @@ class App:
                             if hasattr(self, 'status_light') and hasattr(self, 'light'):
                                 self._light_blinking = True
                                 self.blink_light()
+                            # 30秒后变灰
+                            if hasattr(self, '_gray_timer'):
+                                self.root.after_cancel(self._gray_timer)
+                            self._gray_timer = self.root.after(30000, self._agent_gray)
 
                         elif t == "get_device_info":
                             threading.Thread(target=self._get_info,
@@ -566,6 +571,12 @@ class App:
             else:
                 self.status_light.itemconfig(self.light, fill=C["text3"])
                 self._light_blinking = False
+
+    def _agent_gray(self):
+        """Agent断开超过30秒，变灰"""
+        if hasattr(self, 'status_light') and hasattr(self, 'light'):
+            self.status_light.itemconfig(self.light, fill=C["text3"])
+            self._light_blinking = False
 
     def _agent_gone(self):
         """Agent 10秒无命令，设为离开状态"""
