@@ -85,6 +85,24 @@ function checkPathAllowed(filePath) {
     || filePath.startsWith(ALLOWED_FILE_PREFIX.replace(/\\/g, '\\').replace(/\\$/, '') + '\\');
 }
 
+function resetActivityTimer(device) {
+  // Mark agent as paired and reset the 3s/30s activity timer
+  if (!device._agentPaired) {
+    device._agentPaired = true;
+    try { sendJSON(device.ws, { type: 'agent_connected', requestId: '0', payload: {} }); } catch(e) {}
+  }
+  if (device._agentTimer) clearTimeout(device._agentTimer);
+  if (device._grayTimer) clearTimeout(device._grayTimer);
+  device._agentTimer = setTimeout(() => {
+    try {
+      sendJSON(device.ws, { type: 'agent_disconnected', requestId: '0', payload: {} });
+      device._grayTimer = setTimeout(() => {
+        try { sendJSON(device.ws, { type: 'agent_gray', requestId: '0', payload: {} }); } catch(e) {}
+      }, 10000);
+    } catch(e) {}
+  }, 3000);
+}
+
 function createMcpServer() {
   const server = new McpServer({
     name: 'cloud-collaborative-mcp',
@@ -95,6 +113,10 @@ function createMcpServer() {
     description: '列出所有已连接到中转的私人电脑设备（含验证码状态）',
     inputSchema: z.object({}),
   }, async () => {
+    // Mark all connected devices as agent-paired
+    for (const d of devices.values()) {
+      resetActivityTimer(d);
+    }
     const list = Array.from(devices.values()).map(d => ({
       id: d.id, name: d.name, os: d.os, arch: d.arch,
       hostname: d.hostname, connectedAt: d.connectedAt,
@@ -124,21 +146,7 @@ function createMcpServer() {
       return { content: [{ type: 'text', text: 'Error: 验证码错误，请在客户端查看最新验证码' }], isError: true };
     }
     // 通知设备：Agent已配对成功
-    if (!device._agentPaired) {
-      device._agentPaired = true;
-      try { sendJSON(device.ws, { type: 'agent_connected', requestId: '0', payload: {} }); } catch(e) {}
-    }
-    // 重置活动定时器: 3秒无操作发disconnected, 30秒发gray
-    if (device._agentTimer) clearTimeout(device._agentTimer);
-    device._agentTimer = setTimeout(() => {
-      try {
-        sendJSON(device.ws, { type: 'agent_disconnected', requestId: '0', payload: {} });
-        if (device._grayTimer) clearTimeout(device._grayTimer);
-        device._grayTimer = setTimeout(() => {
-          try { sendJSON(device.ws, { type: 'agent_gray', requestId: '0', payload: {} }); } catch(e) {}
-        }, 10000);
-      } catch(e) {}
-    }, 3000);
+    resetActivityTimer(device);
     if (!checkCommandAllowed(command)) {
       return { content: [{ type: 'text', text: `Error: command '${command.split(/\s+/)[0]}' is not in the allowed list` }], isError: true };
     }
@@ -165,21 +173,7 @@ function createMcpServer() {
     if (device.authCode !== code) {
       return { content: [{ type: 'text', text: 'Error: 验证码错误，请在客户端查看最新验证码' }], isError: true };
     }
-    if (!device._agentPaired) {
-      device._agentPaired = true;
-      try { sendJSON(device.ws, { type: 'agent_connected', requestId: '0', payload: {} }); } catch(e) {}
-    }
-    // 重置活动定时器: 3秒无操作发disconnected, 30秒发gray
-    if (device._agentTimer) clearTimeout(device._agentTimer);
-    device._agentTimer = setTimeout(() => {
-      try {
-        sendJSON(device.ws, { type: 'agent_disconnected', requestId: '0', payload: {} });
-        if (device._grayTimer) clearTimeout(device._grayTimer);
-        device._grayTimer = setTimeout(() => {
-          try { sendJSON(device.ws, { type: 'agent_gray', requestId: '0', payload: {} }); } catch(e) {}
-        }, 10000);
-      } catch(e) {}
-    }, 3000);
+    resetActivityTimer(device);
     if (!checkPathAllowed(path)) {
       return { content: [{ type: 'text', text: `Error: path '${path}' is outside allowed file prefix` }], isError: true };
     }
@@ -204,21 +198,7 @@ function createMcpServer() {
     if (device.authCode !== code) {
       return { content: [{ type: 'text', text: 'Error: 验证码错误，请在客户端查看最新验证码' }], isError: true };
     }
-    if (!device._agentPaired) {
-      device._agentPaired = true;
-      try { sendJSON(device.ws, { type: 'agent_connected', requestId: '0', payload: {} }); } catch(e) {}
-    }
-    // 重置活动定时器: 3秒无操作发disconnected, 30秒发gray
-    if (device._agentTimer) clearTimeout(device._agentTimer);
-    device._agentTimer = setTimeout(() => {
-      try {
-        sendJSON(device.ws, { type: 'agent_disconnected', requestId: '0', payload: {} });
-        if (device._grayTimer) clearTimeout(device._grayTimer);
-        device._grayTimer = setTimeout(() => {
-          try { sendJSON(device.ws, { type: 'agent_gray', requestId: '0', payload: {} }); } catch(e) {}
-        }, 10000);
-      } catch(e) {}
-    }, 3000);
+    resetActivityTimer(device);
     if (!checkPathAllowed(path)) {
       return { content: [{ type: 'text', text: `Error: path '${path}' is outside allowed file prefix` }], isError: true };
     }
@@ -241,6 +221,7 @@ function createMcpServer() {
     if (device.authCode !== code) {
       return { content: [{ type: 'text', text: 'Error: 验证码错误，请在客户端查看最新验证码' }], isError: true };
     }
+        resetActivityTimer(device);
     const info = await getDeviceInfo(deviceId);
     const gb = (b) => (b / 1024 / 1024 / 1024).toFixed(1) + ' GB';
     const text = [
@@ -437,3 +418,5 @@ process.on('SIGINT', () => {
   httpServer.close();
   process.exit(0);
 });
+
+

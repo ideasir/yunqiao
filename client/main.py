@@ -54,7 +54,7 @@ def load_config():
 def save_config():
     CONFIG_FILE.write_text(json.dumps({
         "psk": state["psk"], "relayUrl": state["relayUrl"],
-        "deviceName": state["deviceName"], "workDir": state["workDir"],
+        "deviceName": state["deviceName"], "workDir": state["workDir"], "directMode": state.get("directMode", True),
     }, indent=2))
 
 def gen_code():
@@ -107,7 +107,10 @@ class App:
         state["relayUrl"] = cfg.get("relayUrl", DEFAULT_RELAY)
         state["deviceName"] = cfg.get("deviceName", platform.node())
         state["workDir"] = cfg.get("workDir", "")
+        state["directMode"] = cfg.get("directMode", True)
         state["pairCode"] = gen_code()
+        self.agent_status = None
+        self.agent_last = 0
 
         self.build_ui()
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
@@ -285,6 +288,14 @@ class App:
                  font=("Segoe UI", 10, "bold")).pack(anchor="w")
         return card
 
+    def _update_status_ui(self, color, label):
+        try:
+            self.status_dot.itemconfig(self.dot, fill=color)
+            self.status_label.configure(text=label)
+            self.status_badge.configure(text=label, bg=color, fg="white")
+        except tk.TclError:
+            pass
+
     # ─── 配对码 ────────────────────────────
     def copy_code(self):
         text = f"云桥 配对码 {state['pairCode']}"
@@ -460,8 +471,6 @@ class App:
                 self.add_log("INFO", f"正在连接 {url}...")
                 t0 = time.time()
                                 # 用自定义请求头传递PSK
-                import websockets.client as ws_client
-                ws_headers = {"X-PSK": psk}
                 async with websockets.connect(
                     url, extra_headers={"X-PSK": psk},
                 ) as ws:
@@ -486,7 +495,8 @@ class App:
                         if t == "register_result" and data.get("success"):
                             state["deviceId"] = data.get("deviceId", "")
                             self.add_log("INFO", f"注册成功")
-                            # 上游 Agent 保持"等待配对"，只有智能体用配对码成功调用后才变绿
+                            if len(self.node_labels) >= 3:
+                                self.node_labels[2].configure(text="未配对", fg=C["text3"])
 
                         elif t == "execute_command":
                             cmd = payload.get("command", "")
@@ -509,7 +519,10 @@ class App:
                         elif t == "agent_connected":
                             self.add_log("INFO", "Agent 配对成功")
                             if len(self.node_labels) >= 3:
-                                self.node_labels[2].configure(text="配对成功", fg=C["success"])
+                                self.node_labels[2].configure(text="已配对", fg=C["success"])
+                            if hasattr(self, 'status_light') and hasattr(self, 'light'):
+                                self.status_light.itemconfig(self.light, fill=C["success"])
+                                self._light_blinking = False
                             if hasattr(self, 'status_light') and hasattr(self, 'light'):
                                 self.status_light.itemconfig(self.light, fill=C["success"])
                                 self._light_blinking = False
@@ -555,9 +568,7 @@ class App:
                   "disconnected": "未连接"}
         color = colors.get(status, C["text3"])
         label = labels.get(status, text)
-        self.status_dot.itemconfig(self.dot, fill=color)
-        self.status_label.configure(text=label)
-        self.status_badge.configure(text=label, bg=color, fg="white")
+        self.root.after(0, lambda: self._update_status_ui(color, label))
         # 更新Agent活动状态灯
         if hasattr(self, 'status_light') and hasattr(self, 'light'):
             if status == "connected":
@@ -590,7 +601,7 @@ class App:
         if len(self.node_labels) >= 3:
             self.node_labels[0].configure(text="已连接 ✅", fg=C["success"])
             self.node_labels[1].configure(text="已连接 ✅", fg=C["success"])
-            self.node_labels[2].configure(text="等待配对码", fg=C["warning"])
+            self.node_labels[2].configure(text="未连接", fg=C["text3"])
 
         # 配对码状态
         self.pair_badge.configure(text="", bg=C["card"])
@@ -599,28 +610,7 @@ class App:
         ts = time.strftime("%H:%M:%S")
         colors = {"INFO": C["log_fg"], "WARN": "#f5b36b", "ERROR": "#e77070"}
         tag = f"log_{level}"
-        self.log_text.insert("end", f"[{ts}] {level} {msg}\n", tag)
-        self.log_text.see("end")
-        # 更新 Agent 活动（只显示执行消息，不显示完成/退出码）
-        if hasattr(self, 'act_label') and "执行:" in msg:
-            self.act_label.configure(text=f"▶ {msg.replace('执行: ', '')}", fg=C["success"])
-        # 更新工具网格
-        self.update_tool_grid(msg)
-        # 检查是否是命令执行（智能体在线）
-        if "执行" in msg or "命令" in msg:
-            if hasattr(self, 'agent_status'):
-                self.agent_status.configure(text="🤖 在线", fg=C["success"])
-                self.agent_last = time.time()
-            # Agent 配对成功，更新上游节点状态和指示灯
-            if len(self.node_labels) >= 3:
-                self.node_labels[2].configure(text="已接入", fg=C["success"])
-            if hasattr(self, 'status_light') and hasattr(self, 'light'):
-                self.status_light.itemconfig(self.light, fill=C["success"])
-                self._light_blinking = False
-
-        elif "完成" in msg or "退出码" in msg:
-            if hasattr(self, 'agent_last'):
-                self.agent_last = time.time()
+        self.root.after(0, lambda: self._update_log_ui(ts, level, msg, tag))
 
     def update_tool_grid(self, msg):
         """解析工具调用并累积更新工具网格"""
@@ -628,7 +618,16 @@ class App:
         if not hasattr(self, 'tool_frame') or not hasattr(self, 'tool_history'):
             return
 
-        # 判断是开始执行还是完成
+        if not hasattr(self, 'tool_frame') or not hasattr(self, 'tool_history'):
+            return
+        self.root.after(0, lambda: self._update_tool_grid_impl(msg))
+        return
+
+    def _update_tool_grid_impl(self, msg):
+        """Actual tool grid update (called via after(0))."""
+        import re
+        if not hasattr(self, 'tool_frame') or not hasattr(self, 'tool_history'):
+            return
         is_exec = "执行" in msg or "调用" in msg
         is_done = "完成" in msg or "退出码" in msg
 
@@ -707,6 +706,26 @@ class App:
             self.root.after(500, toggle)
         toggle()
 
+    def _update_log_ui(self, ts, level, msg, tag):
+        try:
+            self.log_text.insert("end", f"[{ts}] {level} {msg}\n", tag)
+            self.log_text.see("end")
+            if "执行:" in msg:
+                if hasattr(self, 'act_label'):
+                    self.act_label.configure(text=f"▶ {msg.replace('执行: ', '')}", fg=C["success"])
+                if hasattr(self, 'status_light') and hasattr(self, 'light'):
+                    self.status_light.itemconfig(self.light, fill=C["success"])
+                    self._light_blinking = False
+            if "完成" in msg or "退出码" in msg:
+                if hasattr(self, 'act_label'):
+                    self.act_label.configure(text="暂无活动", fg=C["text3"])
+                if hasattr(self, 'status_light') and hasattr(self, 'light'):
+                    self.status_light.itemconfig(self.light, fill=C["text3"])
+                    self._light_blinking = False
+            self.update_tool_grid(msg)
+        except tk.TclError:
+            pass
+
     # ─── 命令处理 ────────────────────────────
     def _run_cmd(self, ws, rid, command, timeout):
         import asyncio, subprocess
@@ -759,7 +778,9 @@ class App:
         import asyncio
         async def run():
             try:
-                os.makedirs(os.path.dirname(path), exist_ok=True)
+                dirpath = os.path.dirname(path)
+                if dirpath:
+                    os.makedirs(dirpath, exist_ok=True)
                 with open(path, "w", encoding="utf-8") as f:
                     f.write(content)
                 await ws.send(json.dumps({
@@ -812,3 +833,22 @@ class App:
 
 if __name__ == "__main__":
     App().run()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
