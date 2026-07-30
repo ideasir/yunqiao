@@ -464,7 +464,7 @@ class App:
                 import websockets.client as ws_client
                 ws_headers = {"X-PSK": psk}
                 async with websockets.connect(
-                    url, additional_headers=ws_headers,
+                    url, extra_headers={"X-PSK": psk},
                 ) as ws:
                     state["ws_client"] = ws
                     state["connected"] = True
