@@ -524,6 +524,12 @@ class App:
                                 self._light_blinking = True
                                 self.blink_light()
 
+                        elif t == "agent_gray":
+                            self.add_log("INFO", "Agent 已离线")
+                            if hasattr(self, 'status_light') and hasattr(self, 'light'):
+                                self.status_light.itemconfig(self.light, fill=C["text3"])
+                                self._light_blinking = False
+
 
                         elif t == "get_device_info":
                             threading.Thread(target=self._get_info,
