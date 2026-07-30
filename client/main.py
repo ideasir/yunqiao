@@ -60,6 +60,21 @@ def save_config():
 def gen_code():
     return str(random.randint(100000, 999999))
 
+def get_physical_ip():
+    """获取物理网卡IP（绕过TUN虚拟网卡）"""
+    try:
+        import socket as sock_mod
+        # 创建UDP socket连接中继服务器获取本机IP
+        # 这样得到的IP一定是实际路由出去的网卡IP
+        s = sock_mod.socket(sock_mod.AF_INET, sock_mod.SOCK_DGRAM)
+        s.settimeout(1)
+        s.connect(("45.152.65.49", 9876))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except:
+        return None
+
 
 # ─── 主窗口 ──────────────────────────────────
 class App:
