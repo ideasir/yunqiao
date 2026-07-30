@@ -515,7 +515,8 @@ class App:
                 self.root.after(0, lambda: self.set_status("reconnecting", "重连中..."))
                 self.add_log("WARN", "连接断开，5秒后重连")
             except Exception as e:
-                self.root.after(0, lambda: self.set_status("error", f"错误: {str(e)[:30]}"))
+                _err = str(e)[:30]
+                self.root.after(0, lambda: self.set_status("error", f"错误: {_err}"))
                 self.add_log("ERROR", str(e)[:60])
             finally:
                 state["ws_client"] = None
