@@ -64,8 +64,17 @@ def get_physical_ip():
     """获取物理网卡IP（绕过TUN虚拟网卡）"""
     try:
         import socket as sock_mod
-        # 创建UDP socket连接中继服务器获取本机IP
-        # 这样得到的IP一定是实际路由出去的网卡IP
+        import subprocess
+        if sys.platform == "win32":
+            r = subprocess.run(["route", "print", "0.0.0.0"], capture_output=True, text=True, timeout=5)
+            for line in r.stdout.split("\n"):
+                parts = line.strip().split()
+                if len(parts) >= 5 and parts[0] == "0.0.0.0" and parts[1] == "0.0.0.0":
+                    gw = parts[2]
+                    iface_ip = parts[3]
+                    if not iface_ip.startswith("10.") and not iface_ip.startswith("100."):
+                        return iface_ip
+        # 备选：UDP探测
         s = sock_mod.socket(sock_mod.AF_INET, sock_mod.SOCK_DGRAM)
         s.settimeout(1)
         s.connect(("45.152.65.49", 9876))
