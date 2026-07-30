@@ -582,6 +582,10 @@ class App:
             self.node_labels[0].configure(text="已连接 ✅", fg=C["success"])
             self.node_labels[1].configure(text="已连接 ✅", fg=C["success"])
             self.node_labels[2].configure(text="等待配对码", fg=C["warning"])
+        # 重置Agent状态灯为灰色（等待配对）
+        if hasattr(self, 'status_light') and hasattr(self, 'light'):
+            self.status_light.itemconfig(self.light, fill=C["text3"])
+            self._light_blinking = False
         # 配对码状态
         self.pair_badge.configure(text="", bg=C["card"])
 
