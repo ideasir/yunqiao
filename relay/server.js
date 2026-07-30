@@ -37,6 +37,8 @@ const ALLOWED_FILE_PREFIX = process.env.ALLOWED_FILE_PREFIX || '';
 const devices = new Map();
 const pendingRequests = new Map();
 const transports = new Map();
+const sessionDevices = new Map();
+let currentMcpSession = null;
 
 function sendJSON(ws, data) {
   if (ws.readyState === WebSocket.OPEN) {
@@ -268,6 +270,7 @@ const httpServer = createServer(async (req, res) => {
 
   if (url.pathname === MCP_MESSAGE_PATH) {
     const sessionId = url.searchParams.get('sessionId');
+    currentMcpSession = sessionId;
     if (!sessionId || !transports.has(sessionId)) {
       res.writeHead(400).end('Missing or invalid sessionId');
       return;
