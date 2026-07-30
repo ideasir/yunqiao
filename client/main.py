@@ -545,6 +545,22 @@ class App:
             else:
                 self._light_blinking = False
 
+    def blink_light(self):
+        """Agent活动状态灯闪烁"""
+        self._light_blinking = True
+        def toggle():
+            if not hasattr(self, 'status_light') or not self._light_blinking:
+                return
+            if not self.status_light.winfo_exists():
+                return
+            current = self.status_light.itemcget(self.light, "fill")
+            if current == C["warning"]:
+                self.status_light.itemconfig(self.light, fill=C["bg"])
+            else:
+                self.status_light.itemconfig(self.light, fill=C["warning"])
+            self.root.after(600, toggle)
+        toggle()
+
     def set_connected(self, latency):
         self.set_status("connected", "已连接")
         self.connect_btn.configure(text="断开", fg=C["danger"])
