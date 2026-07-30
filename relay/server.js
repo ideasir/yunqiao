@@ -123,6 +123,11 @@ function createMcpServer() {
     if (device.authCode !== code) {
       return { content: [{ type: 'text', text: 'Error: 验证码错误，请在客户端查看最新验证码' }], isError: true };
     }
+    // 通知设备：Agent已配对成功
+    if (!device._agentPaired) {
+      device._agentPaired = true;
+      try { sendJSON(device.ws, { type: 'agent_connected', requestId: '0', payload: {} }); } catch(e) {}
+    }
     if (!checkCommandAllowed(command)) {
       return { content: [{ type: 'text', text: `Error: command '${command.split(/\s+/)[0]}' is not in the allowed list` }], isError: true };
     }
@@ -149,6 +154,10 @@ function createMcpServer() {
     if (device.authCode !== code) {
       return { content: [{ type: 'text', text: 'Error: 验证码错误，请在客户端查看最新验证码' }], isError: true };
     }
+    if (!device._agentPaired) {
+      device._agentPaired = true;
+      try { sendJSON(device.ws, { type: 'agent_connected', requestId: '0', payload: {} }); } catch(e) {}
+    }
     if (!checkPathAllowed(path)) {
       return { content: [{ type: 'text', text: `Error: path '${path}' is outside allowed file prefix` }], isError: true };
     }
@@ -172,6 +181,10 @@ function createMcpServer() {
     if (!device) return { content: [{ type: 'text', text: 'Error: device not found' }], isError: true };
     if (device.authCode !== code) {
       return { content: [{ type: 'text', text: 'Error: 验证码错误，请在客户端查看最新验证码' }], isError: true };
+    }
+    if (!device._agentPaired) {
+      device._agentPaired = true;
+      try { sendJSON(device.ws, { type: 'agent_connected', requestId: '0', payload: {} }); } catch(e) {}
     }
     if (!checkPathAllowed(path)) {
       return { content: [{ type: 'text', text: `Error: path '${path}' is outside allowed file prefix` }], isError: true };
