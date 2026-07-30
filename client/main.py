@@ -518,8 +518,6 @@ class App:
 
                         elif t == "agent_disconnected":
                             self.add_log("INFO", "Agent 已断开")
-                            if len(self.node_labels) >= 3:
-                                self.node_labels[2].configure(text="等待配对码", fg=C["warning"])
                             if hasattr(self, 'status_light') and hasattr(self, 'light'):
                                 self.status_light.itemconfig(self.light, fill=C["warning"])
                                 self._light_blinking = False
