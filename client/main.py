@@ -416,7 +416,7 @@ class App:
                 self.add_log("INFO", f"正在连接 {url}...")
                 t0 = time.time()
                 async with websockets.connect(
-                    url, extra_headers={"X-PSK": psk}, ping_interval=10,
+                    url, additional_headers={"X-PSK": psk}, ping_interval=10,
                 ) as ws:
                     state["ws_client"] = ws
                     state["connected"] = True
