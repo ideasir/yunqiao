@@ -60,42 +60,7 @@ def save_config():
 def gen_code():
     return str(random.randint(100000, 999999))
 
-def get_physical_iface_idx():
-    """获取物理网卡接口索引"""
-    try:
-        import subprocess
-        if sys.platform != "win32":
-            return None
-        # wmic找物理网卡
-        r = subprocess.run("wmic nic where NetEnabled=TRUE get Index,AdapterTypeID",
-                          capture_output=True, text=True, timeout=10, shell=True)
-        for line in r.stdout.splitlines():
-            parts = line.strip().split()
-            if len(parts) >= 2 and parts[0].isdigit():
-                atype = int(parts[0]); idx = int(parts[1])
-                if atype == 0:
-                    return idx
-        # 备选：route print
-        r2 = subprocess.run(["route", "print"], capture_output=True, text=True, timeout=5)
-        lines = r2.stdout.splitlines()
-        in_iface = False
-        for line in lines:
-            if "接口列表" in line or "Interface List" in line:
-                in_iface = True; continue
-            if in_iface and line.strip() and "..." in line:
-                parts = line.strip().split("...")
-                if len(parts) >= 2:
-                    idx = parts[0].strip()
-                    desc = parts[1].strip().lower()
-                    if any(kw in desc for kw in ["tun","tap","virtual","vpn"]):
-                        continue
-                    try: return int(idx)
-                    except: pass
-            if in_iface and line.startswith("="):
-                break
-    except:
-        pass
-    return None
+
 
 
 
@@ -490,25 +455,6 @@ class App:
                     ws_kwargs["additional_headers"] = {"X-PSK": psk}
                 else:
                     ws_kwargs["extra_headers"] = {"X-PSK": psk}
-                # 直连模式：用IP_UNICAST_IF绕过TUN
-                if state.get("directMode", True):
-                    iface_idx = get_physical_iface_idx()
-                    if iface_idx and sys.platform == "win32":
-                        import socket as sock_mod
-                        import ctypes
-                        from urllib.parse import urlparse
-                        bypass_sock = sock_mod.socket(sock_mod.AF_INET, sock_mod.SOCK_STREAM)
-                        idx_bytes = ctypes.c_uint32(iface_idx)
-                        bypass_sock.setsockopt(sock_mod.IPPROTO_IP, 31, idx_bytes)
-                        bypass_sock.settimeout(5)
-                        parsed = urlparse(url)
-                        bypass_sock.connect((parsed.hostname, parsed.port or 443))
-                        bypass_sock.settimeout(None)
-                        orig_create = asyncio.get_event_loop().create_connection
-                        def make_tun_bypass(pf, **kw):
-                            kw["sock"] = bypass_sock
-                            return orig_create(pf, **kw)
-                        ws_kwargs["create_connection"] = make_tun_bypass
                 async with websockets.connect(
                     url, **ws_kwargs,
                 ) as ws:
