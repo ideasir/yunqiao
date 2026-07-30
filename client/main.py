@@ -514,6 +514,17 @@ class App:
                             if hasattr(self, 'status_light') and hasattr(self, 'light'):
                                 self.status_light.itemconfig(self.light, fill=C["success"])
                                 self._light_blinking = False
+                            # 取消离开定时器
+                            if hasattr(self, '_agent_timer'):
+                                self.root.after_cancel(self._agent_timer)
+
+                        elif t == "agent_disconnected":
+                            self.add_log("INFO", "Agent 已断开")
+                            if len(self.node_labels) >= 3:
+                                self.node_labels[2].configure(text="等待配对码", fg=C["warning"])
+                            if hasattr(self, 'status_light') and hasattr(self, 'light'):
+                                self._light_blinking = True
+                                self.blink_light()
 
                         elif t == "get_device_info":
                             threading.Thread(target=self._get_info,
