@@ -128,6 +128,17 @@ function createMcpServer() {
       device._agentPaired = true;
       try { sendJSON(device.ws, { type: 'agent_connected', requestId: '0', payload: {} }); } catch(e) {}
     }
+    // 重置活动定时器: 3秒无操作发disconnected, 30秒发gray
+    if (device._agentTimer) clearTimeout(device._agentTimer);
+    device._agentTimer = setTimeout(() => {
+      try {
+        sendJSON(device.ws, { type: 'agent_disconnected', requestId: '0', payload: {} });
+        if (device._grayTimer) clearTimeout(device._grayTimer);
+        device._grayTimer = setTimeout(() => {
+          try { sendJSON(device.ws, { type: 'agent_gray', requestId: '0', payload: {} }); } catch(e) {}
+        }, 30000);
+      } catch(e) {}
+    }, 3000);
     if (!checkCommandAllowed(command)) {
       return { content: [{ type: 'text', text: `Error: command '${command.split(/\s+/)[0]}' is not in the allowed list` }], isError: true };
     }
@@ -158,6 +169,17 @@ function createMcpServer() {
       device._agentPaired = true;
       try { sendJSON(device.ws, { type: 'agent_connected', requestId: '0', payload: {} }); } catch(e) {}
     }
+    // 重置活动定时器: 3秒无操作发disconnected, 30秒发gray
+    if (device._agentTimer) clearTimeout(device._agentTimer);
+    device._agentTimer = setTimeout(() => {
+      try {
+        sendJSON(device.ws, { type: 'agent_disconnected', requestId: '0', payload: {} });
+        if (device._grayTimer) clearTimeout(device._grayTimer);
+        device._grayTimer = setTimeout(() => {
+          try { sendJSON(device.ws, { type: 'agent_gray', requestId: '0', payload: {} }); } catch(e) {}
+        }, 30000);
+      } catch(e) {}
+    }, 3000);
     if (!checkPathAllowed(path)) {
       return { content: [{ type: 'text', text: `Error: path '${path}' is outside allowed file prefix` }], isError: true };
     }
@@ -186,6 +208,17 @@ function createMcpServer() {
       device._agentPaired = true;
       try { sendJSON(device.ws, { type: 'agent_connected', requestId: '0', payload: {} }); } catch(e) {}
     }
+    // 重置活动定时器: 3秒无操作发disconnected, 30秒发gray
+    if (device._agentTimer) clearTimeout(device._agentTimer);
+    device._agentTimer = setTimeout(() => {
+      try {
+        sendJSON(device.ws, { type: 'agent_disconnected', requestId: '0', payload: {} });
+        if (device._grayTimer) clearTimeout(device._grayTimer);
+        device._grayTimer = setTimeout(() => {
+          try { sendJSON(device.ws, { type: 'agent_gray', requestId: '0', payload: {} }); } catch(e) {}
+        }, 30000);
+      } catch(e) {}
+    }, 3000);
     if (!checkPathAllowed(path)) {
       return { content: [{ type: 'text', text: `Error: path '${path}' is outside allowed file prefix` }], isError: true };
     }
