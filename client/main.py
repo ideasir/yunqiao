@@ -60,38 +60,7 @@ def save_config():
 def gen_code():
     return str(random.randint(100000, 999999))
 
-def add_tun_route():
-    """添加中继IP直连路由绕过TUN"""
-    try:
-        import subprocess, ctypes
-        if sys.platform != "win32":
-            return False
-        # 先删旧的
-        subprocess.run(["route", "delete", "45.152.65.49"], capture_output=True, timeout=5)
-        # 找默认网关
-        r = subprocess.run(["route", "print", "0.0.0.0"], capture_output=True, text=True, timeout=5)
-        for line in r.stdout.splitlines():
-            parts = line.strip().split()
-            if len(parts) >= 5 and parts[0] == "0.0.0.0" and parts[1] == "0.0.0.0":
-                gw = parts[2]
-                result = subprocess.run(["route", "add", "45.152.65.49", "mask", "255.255.255.255", gw, "metric", "1"],
-                      capture_output=True, text=True, timeout=5)
-                if result.returncode == 0:
-                    print("[路由] 直连路由添加成功，已绕过TUN")
-                    return True
-                else:
-                    print(f"[路由] 添加失败: {result.stderr.strip()}")
-    except Exception as e:
-        print(f"[路由] 异常: {e}")
-    return False
 
-def remove_tun_route():
-    try:
-        import subprocess
-        if sys.platform == "win32":
-            subprocess.run(["route", "delete", "45.152.65.49"], capture_output=True, timeout=5)
-    except:
-        pass
 
 
 
@@ -453,10 +422,8 @@ class App:
         self.connect_btn.configure(text="断开", fg=C["danger"], bg=C["int8"])
         if state.get("directMode", True):
             os.environ["NO_PROXY"] = "*"
-            add_tun_route()
         else:
             os.environ.pop("NO_PROXY", None)
-            remove_tun_route()
         t = threading.Thread(target=self._ws_loop, daemon=True)
         t.start()
 
@@ -493,19 +460,8 @@ class App:
             try:
                 self.add_log("INFO", f"正在连接 {url}...")
                 t0 = time.time()
-                # 兼容不同websockets版本
-                ws_kwargs = {"ping_interval": 10}
-                ws_version = getattr(websockets, "__version__", "0")
-                try:
-                    major = int(ws_version.split(".")[0])
-                except:
-                    major = 0
-                if major >= 13:
-                    ws_kwargs["additional_headers"] = {"X-PSK": psk}
-                else:
-                    ws_kwargs["extra_headers"] = {"X-PSK": psk}
                 async with websockets.connect(
-                    url, **ws_kwargs,
+                    url, additional_headers={"X-PSK": psk},
                 ) as ws:
                     state["ws_client"] = ws
                     state["connected"] = True
