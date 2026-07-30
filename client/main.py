@@ -60,6 +60,34 @@ def save_config():
 def gen_code():
     return str(random.randint(100000, 999999))
 
+def get_tun_bypass_sock(host, port):
+    """创建绕过TUN的socket（Windows IP_UNICAST_IF）"""
+    try:
+        if sys.platform != "win32":
+            return None
+        import socket, ctypes, subprocess
+        # 用PowerShell Get-NetAdapter找物理网卡InterfaceIndex
+        ps = ('powershell -Command "Get-NetAdapter | '
+              'Where-Object { $_.ConnectorPresent -eq $true -and '
+              '$_.Status -eq \"Up\" } | '
+              'Select-Object -First 1 -ExpandProperty InterfaceIndex"')
+        r = subprocess.run(ps, capture_output=True, text=True, timeout=10, shell=True)
+        iface_idx = r.stdout.strip()
+        if not iface_idx or not iface_idx.isdigit():
+            return None
+        idx = int(iface_idx)
+        # 创建socket并设置IP_UNICAST_IF
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.setsockopt(socket.IPPROTO_IP, 31, ctypes.c_uint32(idx))
+        s.settimeout(5)
+        s.connect((host, port))
+        s.settimeout(None)
+        return s
+    except:
+        return None
+
+
+
 
 
 
@@ -461,6 +489,17 @@ class App:
                     ws_kwargs["additional_headers"] = {"X-PSK": psk}
                 else:
                     ws_kwargs["extra_headers"] = {"X-PSK": psk}
+                # 直连模式：创建绕过TUN的socket
+                if state.get("directMode", True):
+                    from urllib.parse import urlparse
+                    parsed = urlparse(url)
+                    bypass_sock = get_tun_bypass_sock(parsed.hostname, parsed.port or 443)
+                    if bypass_sock:
+                        orig_create = asyncio.get_event_loop().create_connection
+                        def make_tun_bypass(pf, **kw):
+                            kw["sock"] = bypass_sock
+                            return orig_create(pf, **kw)
+                        ws_kwargs["create_connection"] = make_tun_bypass
                 async with websockets.connect(
                     url, **ws_kwargs,
                 ) as ws:
