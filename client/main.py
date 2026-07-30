@@ -59,6 +59,37 @@ def save_config():
 
 def gen_code():
     return str(random.randint(100000, 999999))
+def get_physical_iface_idx():
+    """用netsh获取物理网卡接口索引"""
+    try:
+        if sys.platform != "win32":
+            return None
+        import subprocess, socket, ctypes
+        # netsh interface ip show interfaces
+        r = subprocess.run("netsh interface ip show interfaces", capture_output=True, text=True, timeout=10, shell=True)
+        for line in r.stdout.splitlines():
+            parts = line.strip().split()
+            if len(parts) >= 5 and parts[0].isdigit():
+                idx = int(parts[0])
+                name = parts[4] if len(parts) > 4 else ""
+                # 跳过TUN/TAP/VPN/Loopback
+                if any(kw in name.lower() for kw in ["loopback", "tun", "tap", "virtual", "vpn"]):
+                    continue
+                # 验证这个索引是否有效
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    s.setsockopt(socket.IPPROTO_IP, 31, ctypes.c_uint32(idx))
+                    s.close()
+                    return idx
+                except:
+                    pass
+    except:
+        pass
+    return None
+
+
+
+
 
 
 
