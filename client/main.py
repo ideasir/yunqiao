@@ -514,10 +514,7 @@ class App:
                             if hasattr(self, 'status_light') and hasattr(self, 'light'):
                                 self.status_light.itemconfig(self.light, fill=C["success"])
                                 self._light_blinking = False
-                            # 取消所有定时器
-                            for t in ['_agent_timer', '_gray_timer']:
-                                if hasattr(self, t):
-                                    self.root.after_cancel(getattr(self, t))
+
 
                         elif t == "agent_disconnected":
                             self.add_log("INFO", "Agent 已断开")
@@ -526,10 +523,7 @@ class App:
                             if hasattr(self, 'status_light') and hasattr(self, 'light'):
                                 self._light_blinking = True
                                 self.blink_light()
-                            # 30秒后变灰
-                            if hasattr(self, '_gray_timer'):
-                                self.root.after_cancel(self._gray_timer)
-                            self._gray_timer = self.root.after(30000, self._agent_gray)
+
 
                         elif t == "get_device_info":
                             threading.Thread(target=self._get_info,
@@ -572,18 +566,6 @@ class App:
                 self.status_light.itemconfig(self.light, fill=C["text3"])
                 self._light_blinking = False
 
-    def _agent_gray(self):
-        """Agent断开超过30秒，变灰"""
-        if hasattr(self, 'status_light') and hasattr(self, 'light'):
-            self.status_light.itemconfig(self.light, fill=C["text3"])
-            self._light_blinking = False
-
-    def _agent_gone(self):
-        """Agent 10秒无命令，设为离开状态"""
-        if hasattr(self, 'status_light') and hasattr(self, 'light'):
-            self._light_blinking = True
-            self.blink_light()
-
     def blink_light(self):
         """Agent活动状态灯闪烁"""
         self._light_blinking = True
@@ -609,10 +591,7 @@ class App:
             self.node_labels[0].configure(text="已连接 ✅", fg=C["success"])
             self.node_labels[1].configure(text="已连接 ✅", fg=C["success"])
             self.node_labels[2].configure(text="等待配对码", fg=C["warning"])
-        # 重置Agent状态灯为灰色（等待Agent配对）
-        if hasattr(self, 'status_light') and hasattr(self, 'light'):
-            self.status_light.itemconfig(self.light, fill=C["text3"])
-            self._light_blinking = False
+
         # 配对码状态
         self.pair_badge.configure(text="", bg=C["card"])
 
