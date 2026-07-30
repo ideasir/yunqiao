@@ -537,6 +537,13 @@ class App:
         self.status_dot.itemconfig(self.dot, fill=color)
         self.status_label.configure(text=label)
         self.status_badge.configure(text=label, bg=color, fg="white")
+        # 更新Agent活动状态灯
+        if hasattr(self, 'status_light') and hasattr(self, 'light'):
+            self.status_light.itemconfig(self.light, fill=color)
+            if status in ("connecting", "reconnecting"):
+                self.blink_light()
+            else:
+                self._light_blinking = False
 
     def set_connected(self, latency):
         self.set_status("connected", "已连接")
