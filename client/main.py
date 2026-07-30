@@ -59,33 +59,42 @@ def save_config():
 
 def gen_code():
     return str(random.randint(100000, 999999))
-def get_physical_iface_idx():
-    """用netsh获取物理网卡接口索引"""
+def add_tun_route():
+    """添加路由绕过TUN（需管理员权限）"""
     try:
+        import subprocess
         if sys.platform != "win32":
-            return None
-        import subprocess, socket, ctypes
-        # netsh interface ip show interfaces
-        r = subprocess.run("netsh interface ip show interfaces", capture_output=True, text=True, timeout=10, shell=True)
+            return False
+        # 检查是否管理员
+        import ctypes
+        is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
+        if not is_admin:
+            return False
+        # 找默认网关
+        r = subprocess.run(["route", "print", "0.0.0.0"], capture_output=True, text=True, timeout=5)
         for line in r.stdout.splitlines():
             parts = line.strip().split()
-            if len(parts) >= 5 and parts[0].isdigit():
-                idx = int(parts[0])
-                name = parts[4] if len(parts) > 4 else ""
-                # 跳过TUN/TAP/VPN/Loopback
-                if any(kw in name.lower() for kw in ["loopback", "tun", "tap", "virtual", "vpn"]):
-                    continue
-                # 验证这个索引是否有效
-                try:
-                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                    s.setsockopt(socket.IPPROTO_IP, 31, ctypes.c_uint32(idx))
-                    s.close()
-                    return idx
-                except:
-                    pass
+            if len(parts) >= 5 and parts[0] == "0.0.0.0" and parts[1] == "0.0.0.0":
+                gw = parts[2]
+                # 先删再添加（避免重复）
+                subprocess.run(["route", "delete", "45.152.65.49"], capture_output=True, timeout=5)
+                subprocess.run(["route", "add", "45.152.65.49", "mask", "255.255.255.255", gw, "metric", "1"],
+                              capture_output=True, timeout=5)
+                return True
     except:
         pass
-    return None
+    return False
+
+def remove_tun_route():
+    """移除直连路由"""
+    try:
+        import subprocess
+        if sys.platform == "win32":
+            subprocess.run(["route", "delete", "45.152.65.49"], capture_output=True, timeout=5)
+    except:
+        pass
+
+
 
 
 
@@ -434,11 +443,13 @@ class App:
     def start_connect(self):
         self.set_status("connecting", "连接中...")
         self.connect_btn.configure(text="断开", fg=C["danger"], bg=C["int8"])
-        # 直连模式：绕过系统代理
+        # 直连模式：绕过系统代理 + 添加路由绕过TUN
         if state.get("directMode", True):
             os.environ["NO_PROXY"] = "*"
+            add_tun_route()
         else:
             os.environ.pop("NO_PROXY", None)
+            remove_tun_route()
         t = threading.Thread(target=self._ws_loop, daemon=True)
         t.start()
 
@@ -486,23 +497,6 @@ class App:
                     ws_kwargs["additional_headers"] = {"X-PSK": psk}
                 else:
                     ws_kwargs["extra_headers"] = {"X-PSK": psk}
-                # 直连模式：用IP_UNICAST_IF绕过TUN
-                if state.get("directMode", True):
-                    iface_idx = get_physical_iface_idx()
-                    if iface_idx and sys.platform == "win32":
-                        import socket as sock_mod, ctypes
-                        from urllib.parse import urlparse
-                        bypass_sock = sock_mod.socket(sock_mod.AF_INET, sock_mod.SOCK_STREAM)
-                        bypass_sock.setsockopt(sock_mod.IPPROTO_IP, 31, ctypes.c_uint32(iface_idx))
-                        bypass_sock.settimeout(5)
-                        parsed = urlparse(url)
-                        bypass_sock.connect((parsed.hostname, parsed.port or 443))
-                        bypass_sock.settimeout(None)
-                        orig_create = asyncio.get_event_loop().create_connection
-                        def make_tun_bypass(pf, **kw):
-                            kw["sock"] = bypass_sock
-                            return orig_create(pf, **kw)
-                        ws_kwargs["create_connection"] = make_tun_bypass
                 async with websockets.connect(
                     url, **ws_kwargs,
                 ) as ws:
