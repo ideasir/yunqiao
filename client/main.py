@@ -507,6 +507,14 @@ class App:
                             threading.Thread(target=self._write_file,
                                 args=(ws, rid, path, content), daemon=True).start()
 
+                        elif t == "agent_connected":
+                            self.add_log("INFO", "Agent 已配对接入")
+                            if len(self.node_labels) >= 3:
+                                self.node_labels[2].configure(text="已接入", fg=C["success"])
+                            if hasattr(self, 'status_light') and hasattr(self, 'light'):
+                                self.status_light.itemconfig(self.light, fill=C["success"])
+                                self._light_blinking = False
+
                         elif t == "get_device_info":
                             threading.Thread(target=self._get_info,
                                 args=(ws, rid), daemon=True).start()
