@@ -549,11 +549,6 @@ class App:
                 self.status_light.itemconfig(self.light, fill=C["text3"])
                 self._light_blinking = False
 
-    def _agent_timeout(self):
-        """Agent长时间无命令，指示灯变黄"""
-        if hasattr(self, 'status_light') and hasattr(self, 'light'):
-            self.status_light.itemconfig(self.light, fill=C["warning"])
-
     def blink_light(self):
         """Agent活动状态灯闪烁"""
         self._light_blinking = True
@@ -604,10 +599,7 @@ class App:
             if hasattr(self, 'status_light') and hasattr(self, 'light'):
                 self.status_light.itemconfig(self.light, fill=C["success"])
                 self._light_blinking = False
-            # 启动Agent心跳超时检测（30秒无命令变黄）
-            if hasattr(self, '_agent_timer'):
-                self.root.after_cancel(self._agent_timer)
-            self._agent_timer = self.root.after(30000, self._agent_timeout)
+
         elif "完成" in msg or "退出码" in msg:
             if hasattr(self, 'agent_last'):
                 self.agent_last = time.time()
