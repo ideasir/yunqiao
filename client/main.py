@@ -60,34 +60,44 @@ def save_config():
 def gen_code():
     return str(random.randint(100000, 999999))
 
-def add_tun_route():
-    """添加直连路由绕过TUN（需管理员权限）"""
+def get_physical_iface_idx():
+    """获取物理网卡接口索引（绕过TUN虚拟网卡）"""
     try:
         import subprocess
         if sys.platform != "win32":
-            return
-        relay_host = "45.152.65.49"
-        r = subprocess.run(["route", "print", "0.0.0.0"], capture_output=True, text=True, timeout=5)
+            return None
+        # route print输出示例：
+        # IPv4 路由表
+        # =======
+        # 活动路由:
+        # 网络目标        网络掩码          网关       接口   跃点数
+        # 0.0.0.0          0.0.0.0      192.168.1.1  192.168.1.100  25
+        r = subprocess.run(["route", "print", "0.0.0.0"],
+                          capture_output=True, text=True, timeout=5)
         for line in r.stdout.splitlines():
             parts = line.strip().split()
-            if len(parts) >= 5 and parts[0] == "0.0.0.0" and parts[1] == "0.0.0.0":
-                gw = parts[2]
-                subprocess.run(["route", "add", relay_host, "mask", "255.255.255.255", gw, "metric", "1"],
-                              capture_output=True, timeout=5)
-                return True
+            if len(parts) >= 4 and parts[0] == "0.0.0.0" and parts[1] == "0.0.0.0":
+                # 默认路由的"接口"列就是本机IP
+                local_ip = parts[3]
+                # 用socket找到对应接口索引
+                import socket
+                import ctypes
+                # 枚举所有接口找匹配IP的
+                for idx in range(1, 100):
+                    try:
+                        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                        s.bind((local_ip, 0))
+                        # 如果bind成功，这个接口就是物理网卡
+                        s.close()
+                        return idx
+                    except:
+                        pass
+                return None
     except:
         pass
-    return False
+    return None
 
 
-def remove_tun_route():
-    """移除直连路由"""
-    try:
-        import subprocess
-        if sys.platform == "win32":
-            subprocess.run(["route", "delete", "45.152.65.49"], capture_output=True, timeout=5)
-    except:
-        pass
 
 
 
@@ -426,13 +436,11 @@ class App:
     def start_connect(self):
         self.set_status("connecting", "连接中...")
         self.connect_btn.configure(text="断开", fg=C["danger"], bg=C["int8"])
-        # 直连模式：绕过系统代理 + TUN
+        # 直连模式：绕过系统代理
         if state.get("directMode", True):
             os.environ["NO_PROXY"] = "*"
-            add_tun_route()
         else:
             os.environ.pop("NO_PROXY", None)
-            remove_tun_route()
         t = threading.Thread(target=self._ws_loop, daemon=True)
         t.start()
 
