@@ -415,8 +415,19 @@ class App:
             try:
                 self.add_log("INFO", f"正在连接 {url}...")
                 t0 = time.time()
+                # 兼容不同websockets版本
+                ws_kwargs = {"ping_interval": 10}
+                ws_version = getattr(websockets, "__version__", "0")
+                try:
+                    major = int(ws_version.split(".")[0])
+                except:
+                    major = 0
+                if major >= 13:
+                    ws_kwargs["additional_headers"] = {"X-PSK": psk}
+                else:
+                    ws_kwargs["extra_headers"] = {"X-PSK": psk}
                 async with websockets.connect(
-                    url, additional_headers={"X-PSK": psk}, ping_interval=10,
+                    url, **ws_kwargs,
                 ) as ws:
                     state["ws_client"] = ws
                     state["connected"] = True
