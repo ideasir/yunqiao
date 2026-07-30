@@ -61,36 +61,24 @@ def gen_code():
     return str(random.randint(100000, 999999))
 
 def add_tun_route():
-    """添加中转服务器的路由绕过TUN（需管理员权限）"""
+    """添加直连路由绕过TUN（需管理员权限）"""
     try:
-        import subprocess, socket, re
+        import subprocess
         if sys.platform != "win32":
             return
-        # 获取中继IP
-        import urllib.parse
         relay_host = "45.152.65.49"
-        # 用route print找物理网卡的网关和接口
         r = subprocess.run(["route", "print", "0.0.0.0"], capture_output=True, text=True, timeout=5)
-        gw = None
-        iface_idx = None
-        for line in r.stdout.split("\n"):
+        for line in r.stdout.splitlines():
             parts = line.strip().split()
             if len(parts) >= 5 and parts[0] == "0.0.0.0" and parts[1] == "0.0.0.0":
                 gw = parts[2]
-                iface_idx = parts[4]
-                iface_ip = parts[3]
-                # 跳过TUN（10.x或100.x）
-                if iface_ip.startswith("10.") or iface_ip.startswith("100."):
-                    continue
-                break
-        if gw:
-            # 添加直连路由
-            subprocess.run(["route", "add", relay_host, "mask", "255.255.255.255", gw, "metric", "1"],
-                          capture_output=True, timeout=5)
-            return True
+                subprocess.run(["route", "add", relay_host, "mask", "255.255.255.255", gw, "metric", "1"],
+                              capture_output=True, timeout=5)
+                return True
     except:
         pass
     return False
+
 
 def remove_tun_route():
     """移除直连路由"""
@@ -100,6 +88,7 @@ def remove_tun_route():
             subprocess.run(["route", "delete", "45.152.65.49"], capture_output=True, timeout=5)
     except:
         pass
+
 
 
 # ─── 主窗口 ──────────────────────────────────
