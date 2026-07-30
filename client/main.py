@@ -79,7 +79,7 @@ def get_tun_bypass_sock(host, port):
                 idx = parts[2].strip()
                 if atype == "0" and idx.isdigit():
                     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    s.setsockopt(socket.IPPROTO_IP, 31, ctypes.c_uint32(int(idx)))
+                    s.setsockopt(socket.IPPROTO_IP, 31, int(idx).to_bytes(4, "big"))
                     s.settimeout(5)
                     s.connect((host, port))
                     s.settimeout(None)
@@ -90,7 +90,7 @@ def get_tun_bypass_sock(host, port):
         for idx in range(1, 51):
             try:
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.setsockopt(socket.IPPROTO_IP, 31, ctypes.c_uint32(idx))
+                s.setsockopt(socket.IPPROTO_IP, 31, idx.to_bytes(4, "big"))
                 s.settimeout(3)
                 s.connect((host, port))
                 s.settimeout(None)
