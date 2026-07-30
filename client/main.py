@@ -567,6 +567,12 @@ class App:
                 self.status_light.itemconfig(self.light, fill=C["text3"])
                 self._light_blinking = False
 
+    def _agent_gone(self):
+        """Agent 10秒无命令，设为离开状态"""
+        if hasattr(self, 'status_light') and hasattr(self, 'light'):
+            self._light_blinking = True
+            self.blink_light()
+
     def blink_light(self):
         """Agent活动状态灯闪烁"""
         self._light_blinking = True
