@@ -69,6 +69,7 @@ def add_tun_route():
         import ctypes
         is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
         if not is_admin:
+            print("需要管理员权限才能绕过TUN")
             return False
         # 找默认网关
         r = subprocess.run(["route", "print", "0.0.0.0"], capture_output=True, text=True, timeout=5)
@@ -78,9 +79,13 @@ def add_tun_route():
                 gw = parts[2]
                 # 先删再添加（避免重复）
                 subprocess.run(["route", "delete", "45.152.65.49"], capture_output=True, timeout=5)
-                subprocess.run(["route", "add", "45.152.65.49", "mask", "255.255.255.255", gw, "metric", "1"],
+                result = subprocess.run(["route", "add", "45.152.65.49", "mask", "255.255.255.255", gw, "metric", "1"],
                               capture_output=True, timeout=5)
-                return True
+                if result.returncode == 0:
+                    print("路由添加成功，已绕过TUN")
+                else:
+                    print(f"路由添加失败: {result.stderr.decode()[:100]}")
+                return result.returncode == 0
     except:
         pass
     return False
@@ -461,7 +466,7 @@ class App:
             state["connected"] = False
             ws = state["ws_client"]
             state["ws_client"] = None
-            try: ws.close()
+            try: asyncio.run(ws.close())
             except: pass
             self.set_status("disconnected", "未连接")
             self.connect_btn.configure(text="连接", fg=C["success"], bg=C["int8"])
