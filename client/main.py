@@ -41,7 +41,7 @@ C = {
 state = {
     "connected": False, "latency": 0, "deviceId": "", "deviceName": platform.node(),
     "pairCode": "", "psk": "", "relayUrl": DEFAULT_RELAY,
-    "logs": [], "activities": [], "ws_client": None, "workDir": "",
+    "logs": [], "activities": [], "ws_client": None, "workDir": "", "directMode": True,
 }
 
 
@@ -311,6 +311,20 @@ class App:
             ("PSK 密钥", "psk", state["psk"]),
             ("设备名称", "name", state["deviceName"]),
         ]
+        # 连接模式
+        mode_frame = tk.Frame(win, bg=C["panel"])
+        mode_frame.pack(fill=tk.X, padx=12, pady=(6, 0))
+        tk.Label(mode_frame, text="连接模式", bg=C["panel"], fg=C["text2"],
+                 font=("Segoe UI", 9)).pack(anchor="w")
+        mode_btnf = tk.Frame(mode_frame, bg=C["panel"])
+        mode_btnf.pack(fill=tk.X, pady=2)
+        self.direct_var = tk.BooleanVar(value=state.get("directMode", True))
+        tk.Radiobutton(mode_btnf, text="直连", variable=self.direct_var,
+                       value=True, bg=C["panel"], fg=C["text"],
+                       font=("Segoe UI", 9), selectcolor=C["panel"]).pack(side=tk.LEFT, padx=(0, 10))
+        tk.Radiobutton(mode_btnf, text="系统代理", variable=self.direct_var,
+                       value=False, bg=C["panel"], fg=C["text"],
+                       font=("Segoe UI", 9), selectcolor=C["panel"]).pack(side=tk.LEFT)
         entries = {}
 
         def save():
@@ -323,6 +337,7 @@ class App:
             state["relayUrl"] = url
             state["psk"] = psk
             state["deviceName"] = name
+            state["directMode"] = self.direct_var.get()
             save_config()
             win.destroy()
             self.start_connect()
@@ -381,6 +396,11 @@ class App:
     def start_connect(self):
         self.set_status("connecting", "连接中...")
         self.connect_btn.configure(text="断开", fg=C["danger"], bg=C["int8"])
+        # 直连模式：绕过系统代理
+        if state.get("directMode", True):
+            os.environ["NO_PROXY"] = "*"
+        else:
+            os.environ.pop("NO_PROXY", None)
         t = threading.Thread(target=self._ws_loop, daemon=True)
         t.start()
 
