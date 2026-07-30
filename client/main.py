@@ -60,48 +60,42 @@ def save_config():
 def gen_code():
     return str(random.randint(100000, 999999))
 
-def get_tun_bypass_sock(host, port):
-    """创建绕过TUN的socket（Windows IP_UNICAST_IF）"""
+def add_tun_route():
+    """添加中继IP直连路由绕过TUN"""
     try:
+        import subprocess, ctypes
         if sys.platform != "win32":
-            return None
-        import socket, ctypes, subprocess
-        # 方法1: 用wmic找物理网卡接口索引
-        r = subprocess.run("wmic nic where NetEnabled=TRUE get InterfaceIndex,AdapterTypeID /format:csv",
-                          capture_output=True, text=True, timeout=10, shell=True)
-        print(f"[调试] wmic输出: {r.stdout[:200]}")
+            return False
+        # 先删旧的
+        subprocess.run(["route", "delete", "45.152.65.49"], capture_output=True, timeout=5)
+        # 找默认网关
+        r = subprocess.run(["route", "print", "0.0.0.0"], capture_output=True, text=True, timeout=5)
         for line in r.stdout.splitlines():
-            if "InterfaceIndex" in line:
-                continue
-            parts = line.strip().split(",")
-            if len(parts) >= 3:
-                atype = parts[1].strip()
-                idx = parts[2].strip()
-                if atype == "0" and idx.isdigit():
-                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    s.setsockopt(socket.IPPROTO_IP, 31, int(idx).to_bytes(4, "big"))
-                    s.settimeout(5)
-                    s.connect((host, port))
-                    s.settimeout(None)
-                    print(f"[调试] wmic接口{idx}绕过成功!")
-                    return s
-        # 方法2: 遍历接口索引
-        print(f"[调试] wmic失败，遍历接口1-50...")
-        for idx in range(1, 51):
-            try:
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.setsockopt(socket.IPPROTO_IP, 31, idx.to_bytes(4, "big"))
-                s.settimeout(3)
-                s.connect((host, port))
-                s.settimeout(None)
-                print(f"[调试] 接口{idx}绕过成功!")
-                return s
-            except Exception as e2:
-                if idx % 10 == 0:
-                    print(f"[调试] 接口{idx}/{e2}")
+            parts = line.strip().split()
+            if len(parts) >= 5 and parts[0] == "0.0.0.0" and parts[1] == "0.0.0.0":
+                gw = parts[2]
+                result = subprocess.run(["route", "add", "45.152.65.49", "mask", "255.255.255.255", gw, "metric", "1"],
+                      capture_output=True, text=True, timeout=5)
+                if result.returncode == 0:
+                    print("[路由] 直连路由添加成功，已绕过TUN")
+                    return True
+                else:
+                    print(f"[路由] 添加失败: {result.stderr.strip()}")
     except Exception as e:
-        print(f"[调试] TUN绕过失败: {e}")
-    return None
+        print(f"[路由] 异常: {e}")
+    return False
+
+def remove_tun_route():
+    try:
+        import subprocess
+        if sys.platform == "win32":
+            subprocess.run(["route", "delete", "45.152.65.49"], capture_output=True, timeout=5)
+    except:
+        pass
+
+
+
+
 
 
 
@@ -459,8 +453,10 @@ class App:
         self.connect_btn.configure(text="断开", fg=C["danger"], bg=C["int8"])
         if state.get("directMode", True):
             os.environ["NO_PROXY"] = "*"
+            add_tun_route()
         else:
             os.environ.pop("NO_PROXY", None)
+            remove_tun_route()
         t = threading.Thread(target=self._ws_loop, daemon=True)
         t.start()
 
@@ -508,17 +504,6 @@ class App:
                     ws_kwargs["additional_headers"] = {"X-PSK": psk}
                 else:
                     ws_kwargs["extra_headers"] = {"X-PSK": psk}
-                # 直连模式：创建绕过TUN的socket
-                if state.get("directMode", True):
-                    from urllib.parse import urlparse
-                    parsed = urlparse(url)
-                    bypass_sock = get_tun_bypass_sock(parsed.hostname, parsed.port or 443)
-                    if bypass_sock:
-                        orig_create = asyncio.get_event_loop().create_connection
-                        def make_tun_bypass(pf, **kw):
-                            kw["sock"] = bypass_sock
-                            return orig_create(pf, **kw)
-                        ws_kwargs["create_connection"] = make_tun_bypass
                 async with websockets.connect(
                     url, **ws_kwargs,
                 ) as ws:
