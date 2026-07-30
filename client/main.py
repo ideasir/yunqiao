@@ -59,45 +59,7 @@ def save_config():
 
 def gen_code():
     return str(random.randint(100000, 999999))
-def add_tun_route():
-    """添加路由绕过TUN（需管理员权限）"""
-    try:
-        import subprocess
-        if sys.platform != "win32":
-            return False
-        # 检查是否管理员
-        import ctypes
-        is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
-        if not is_admin:
-            print("需要管理员权限才能绕过TUN")
-            return False
-        # 找默认网关
-        r = subprocess.run(["route", "print", "0.0.0.0"], capture_output=True, text=True, timeout=5)
-        for line in r.stdout.splitlines():
-            parts = line.strip().split()
-            if len(parts) >= 5 and parts[0] == "0.0.0.0" and parts[1] == "0.0.0.0":
-                gw = parts[2]
-                # 先删再添加（避免重复）
-                subprocess.run(["route", "delete", "45.152.65.49"], capture_output=True, timeout=5)
-                result = subprocess.run(["route", "add", "45.152.65.49", "mask", "255.255.255.255", gw, "metric", "1"],
-                              capture_output=True, timeout=5)
-                if result.returncode == 0:
-                    print("路由添加成功，已绕过TUN")
-                else:
-                    print(f"路由添加失败: {result.stderr.decode()[:100]}")
-                return result.returncode == 0
-    except:
-        pass
-    return False
 
-def remove_tun_route():
-    """移除直连路由"""
-    try:
-        import subprocess
-        if sys.platform == "win32":
-            subprocess.run(["route", "delete", "45.152.65.49"], capture_output=True, timeout=5)
-    except:
-        pass
 
 
 
@@ -448,13 +410,10 @@ class App:
     def start_connect(self):
         self.set_status("connecting", "连接中...")
         self.connect_btn.configure(text="断开", fg=C["danger"], bg=C["int8"])
-        # 直连模式：绕过系统代理 + 添加路由绕过TUN
         if state.get("directMode", True):
             os.environ["NO_PROXY"] = "*"
-            add_tun_route()
         else:
             os.environ.pop("NO_PROXY", None)
-            remove_tun_route()
         t = threading.Thread(target=self._ws_loop, daemon=True)
         t.start()
 
