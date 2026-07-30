@@ -521,8 +521,8 @@ class App:
                             if len(self.node_labels) >= 3:
                                 self.node_labels[2].configure(text="等待配对码", fg=C["warning"])
                             if hasattr(self, 'status_light') and hasattr(self, 'light'):
-                                self._light_blinking = True
-                                self.blink_light()
+                                self.status_light.itemconfig(self.light, fill=C["warning"])
+                                self._light_blinking = False
 
                         elif t == "agent_gray":
                             self.add_log("INFO", "Agent 已离线")
