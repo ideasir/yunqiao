@@ -136,7 +136,7 @@ function createMcpServer() {
         if (device._grayTimer) clearTimeout(device._grayTimer);
         device._grayTimer = setTimeout(() => {
           try { sendJSON(device.ws, { type: 'agent_gray', requestId: '0', payload: {} }); } catch(e) {}
-        }, 30000);
+        }, 10000);
       } catch(e) {}
     }, 3000);
     if (!checkCommandAllowed(command)) {
@@ -177,7 +177,7 @@ function createMcpServer() {
         if (device._grayTimer) clearTimeout(device._grayTimer);
         device._grayTimer = setTimeout(() => {
           try { sendJSON(device.ws, { type: 'agent_gray', requestId: '0', payload: {} }); } catch(e) {}
-        }, 30000);
+        }, 10000);
       } catch(e) {}
     }, 3000);
     if (!checkPathAllowed(path)) {
@@ -216,7 +216,7 @@ function createMcpServer() {
         if (device._grayTimer) clearTimeout(device._grayTimer);
         device._grayTimer = setTimeout(() => {
           try { sendJSON(device.ws, { type: 'agent_gray', requestId: '0', payload: {} }); } catch(e) {}
-        }, 30000);
+        }, 10000);
       } catch(e) {}
     }, 3000);
     if (!checkPathAllowed(path)) {
