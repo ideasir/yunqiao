@@ -547,7 +547,6 @@ class App:
         self.status_badge.configure(text=label, bg=color, fg="white")
         # 更新Agent活动状态灯
         if hasattr(self, 'status_light') and hasattr(self, 'light'):
-            # 状态灯只反映Agent连接状态，不反映客户端连接状态
             if status == "connected":
                 pass  # 绿灯由Agent配对成功后设置
             elif status in ("connecting", "reconnecting"):
@@ -582,10 +581,14 @@ class App:
             self.node_labels[0].configure(text="已连接 ✅", fg=C["success"])
             self.node_labels[1].configure(text="已连接 ✅", fg=C["success"])
             self.node_labels[2].configure(text="等待配对码", fg=C["warning"])
-        # 重置Agent状态灯为灰色（等待配对）
+        # 重置Agent状态灯
         if hasattr(self, 'status_light') and hasattr(self, 'light'):
-            self.status_light.itemconfig(self.light, fill=C["text3"])
+            self.status_light.itemconfig(self.light, fill=C["success"])
             self._light_blinking = False
+            # 10秒后黄闪（Agent还没来）
+            if hasattr(self, '_agent_timer'):
+                self.root.after_cancel(self._agent_timer)
+            self._agent_timer = self.root.after(10000, self._agent_gone)
         # 配对码状态
         self.pair_badge.configure(text="", bg=C["card"])
 
