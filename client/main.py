@@ -61,41 +61,43 @@ def gen_code():
     return str(random.randint(100000, 999999))
 
 def get_physical_iface_idx():
-    """获取物理网卡接口索引（绕过TUN虚拟网卡）"""
+    """获取物理网卡接口索引"""
     try:
         import subprocess
         if sys.platform != "win32":
             return None
-        # route print输出示例：
-        # IPv4 路由表
-        # =======
-        # 活动路由:
-        # 网络目标        网络掩码          网关       接口   跃点数
-        # 0.0.0.0          0.0.0.0      192.168.1.1  192.168.1.100  25
-        r = subprocess.run(["route", "print", "0.0.0.0"],
-                          capture_output=True, text=True, timeout=5)
+        # wmic找物理网卡
+        r = subprocess.run("wmic nic where NetEnabled=TRUE get Index,AdapterTypeID",
+                          capture_output=True, text=True, timeout=10, shell=True)
         for line in r.stdout.splitlines():
             parts = line.strip().split()
-            if len(parts) >= 4 and parts[0] == "0.0.0.0" and parts[1] == "0.0.0.0":
-                # 默认路由的"接口"列就是本机IP
-                local_ip = parts[3]
-                # 用socket找到对应接口索引
-                import socket
-                import ctypes
-                # 枚举所有接口找匹配IP的
-                for idx in range(1, 100):
-                    try:
-                        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                        s.bind((local_ip, 0))
-                        # 如果bind成功，这个接口就是物理网卡
-                        s.close()
-                        return idx
-                    except:
-                        pass
-                return None
+            if len(parts) >= 2 and parts[0].isdigit():
+                atype = int(parts[0]); idx = int(parts[1])
+                if atype == 0:
+                    return idx
+        # 备选：route print
+        r2 = subprocess.run(["route", "print"], capture_output=True, text=True, timeout=5)
+        lines = r2.stdout.splitlines()
+        in_iface = False
+        for line in lines:
+            if "接口列表" in line or "Interface List" in line:
+                in_iface = True; continue
+            if in_iface and line.strip() and "..." in line:
+                parts = line.strip().split("...")
+                if len(parts) >= 2:
+                    idx = parts[0].strip()
+                    desc = parts[1].strip().lower()
+                    if any(kw in desc for kw in ["tun","tap","virtual","vpn"]):
+                        continue
+                    try: return int(idx)
+                    except: pass
+            if in_iface and line.startswith("="):
+                break
     except:
         pass
     return None
+
+
 
 
 
@@ -555,7 +557,7 @@ class App:
                             threading.Thread(target=self._get_info,
                                 args=(ws, rid), daemon=True).start()
 
-            except websockets.exceptions.ConnectionClosed:
+            except websockets.ConnectionClosed:
                 self.root.after(0, lambda: self.set_status("reconnecting", "重连中..."))
                 self.add_log("WARN", "连接断开，5秒后重连")
             except Exception as e:
