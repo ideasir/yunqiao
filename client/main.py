@@ -460,12 +460,11 @@ class App:
             try:
                 self.add_log("INFO", f"正在连接 {url}...")
                 t0 = time.time()
-                                # 将PSK加入URL（绕过additional_headers的websockets 16.0 bug）
-                from urllib.parse import urlparse, urlunparse
-                parsed = urlparse(url)
-                ws_url = f"{parsed.scheme}://{parsed.hostname}{parsed.path}?psk={psk}"
+                                # 用自定义请求头传递PSK
+                import websockets.client as ws_client
+                ws_headers = {"X-PSK": psk}
                 async with websockets.connect(
-                    ws_url,
+                    url, additional_headers=ws_headers,
                 ) as ws:
                     state["ws_client"] = ws
                     state["connected"] = True
