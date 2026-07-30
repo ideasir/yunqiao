@@ -563,10 +563,7 @@ class App:
         if hasattr(self, 'status_light') and hasattr(self, 'light'):
             if status == "connected":
                 pass  # 绿灯由Agent配对成功后设置
-            elif status in ("connecting", "reconnecting"):
-                self.status_light.itemconfig(self.light, fill=C["warning"])
-                self.blink_light()
-            else:
+            elif status == "disconnected":
                 self.status_light.itemconfig(self.light, fill=C["text3"])
                 self._light_blinking = False
 
