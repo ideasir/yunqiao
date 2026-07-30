@@ -539,10 +539,14 @@ class App:
         self.status_badge.configure(text=label, bg=color, fg="white")
         # 更新Agent活动状态灯
         if hasattr(self, 'status_light') and hasattr(self, 'light'):
-            self.status_light.itemconfig(self.light, fill=color)
-            if status in ("connecting", "reconnecting"):
+            # 状态灯只反映Agent连接状态，不反映客户端连接状态
+            if status == "connected":
+                pass  # 绿灯由Agent配对成功后设置
+            elif status in ("connecting", "reconnecting"):
+                self.status_light.itemconfig(self.light, fill=C["warning"])
                 self.blink_light()
             else:
+                self.status_light.itemconfig(self.light, fill=C["text3"])
                 self._light_blinking = False
 
     def blink_light(self):
@@ -589,9 +593,12 @@ class App:
             if hasattr(self, 'agent_status'):
                 self.agent_status.configure(text="🤖 在线", fg=C["success"])
                 self.agent_last = time.time()
-            # Agent 配对成功，更新上游节点状态
+            # Agent 配对成功，更新上游节点状态和指示灯
             if len(self.node_labels) >= 3:
                 self.node_labels[2].configure(text="已接入", fg=C["success"])
+            if hasattr(self, 'status_light') and hasattr(self, 'light'):
+                self.status_light.itemconfig(self.light, fill=C["success"])
+                self._light_blinking = False
         elif "完成" in msg or "退出码" in msg:
             if hasattr(self, 'agent_last'):
                 self.agent_last = time.time()
