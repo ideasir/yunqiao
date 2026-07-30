@@ -66,26 +66,28 @@ def get_tun_bypass_sock(host, port):
         if sys.platform != "win32":
             return None
         import socket, ctypes, subprocess
-        # 方法1: 用PowerShell Get-NetAdapter
-        ps = ('powershell -Command "Get-NetAdapter | '
-              'Where-Object { $_.ConnectorPresent -eq $true -and '
-              '$_.Status -eq \"Up\" } | '
-              'Select-Object -First 1 -ExpandProperty InterfaceIndex"')
-        r = subprocess.run(ps, capture_output=True, text=True, timeout=10, shell=True)
-        iface_idx = r.stdout.strip()
-        print(f"[调试] Get-NetAdapter接口索引: {iface_idx}")
-        if iface_idx and iface_idx.isdigit():
-            idx = int(iface_idx)
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.setsockopt(socket.IPPROTO_IP, 31, ctypes.c_uint32(idx))
-            s.settimeout(5)
-            s.connect((host, port))
-            s.settimeout(None)
-            print(f"[调试] IP_UNICAST_IF绕过成功")
-            return s
-        # 方法2: 遍历所有接口
-        print(f"[调试] Get-NetAdapter失败，尝试遍历接口...")
-        for idx in range(1, 50):
+        # 方法1: 用wmic找物理网卡接口索引
+        r = subprocess.run("wmic nic where NetEnabled=TRUE get InterfaceIndex,AdapterTypeID /format:csv",
+                          capture_output=True, text=True, timeout=10, shell=True)
+        print(f"[调试] wmic输出: {r.stdout[:200]}")
+        for line in r.stdout.splitlines():
+            if "InterfaceIndex" in line:
+                continue
+            parts = line.strip().split(",")
+            if len(parts) >= 3:
+                atype = parts[1].strip()
+                idx = parts[2].strip()
+                if atype == "0" and idx.isdigit():
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.setsockopt(socket.IPPROTO_IP, 31, ctypes.c_uint32(int(idx)))
+                    s.settimeout(5)
+                    s.connect((host, port))
+                    s.settimeout(None)
+                    print(f"[调试] wmic接口{idx}绕过成功!")
+                    return s
+        # 方法2: 遍历接口索引
+        print(f"[调试] wmic失败，遍历接口1-50...")
+        for idx in range(1, 51):
             try:
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 s.setsockopt(socket.IPPROTO_IP, 31, ctypes.c_uint32(idx))
@@ -94,11 +96,14 @@ def get_tun_bypass_sock(host, port):
                 s.settimeout(None)
                 print(f"[调试] 接口{idx}绕过成功!")
                 return s
-            except:
-                pass
+            except Exception as e2:
+                if idx % 10 == 0:
+                    print(f"[调试] 接口{idx}/{e2}")
     except Exception as e:
         print(f"[调试] TUN绕过失败: {e}")
     return None
+
+
 
 
 
