@@ -1,24 +1,97 @@
 # 云桥 MCP · Yunqiao MCP
 
-> 通过公网中转，远程控制你的电脑 — 像调用 API 一样简单。
+> 一座桥，把你的电脑连到 AI 手里。  
+> 通过公网中转，像调用 API 一样远程控制你的电脑。
+
+<p align="center">
+  <code>AI Agent ⇄ MCP/SSE ⇄ 中转服务器 ⇄ WSS ⇄ 你的电脑</code>
+</p>
 
 ---
 
-## 目录结构
+## 目录
 
-```
-yunqiao-mcp/
-├── relay/          ← 中转服务器（部署在 VPS）
-├── client/         ← 客户机代理（部署在本地电脑）
-├── skills/         ← 智能体 Skill（给 AI Agent 用）
-└── README.md
-```
+- [快速开始](#快速开始)
+- [架构](#架构)
+- [部署](#部署)
+  - [1. 中转服务器](#1-中转服务器)
+  - [2. 客户机代理](#2-客户机代理)
+  - [3. 智能体 Skill](#3-智能体-skill)
+- [工具参考](#工具参考)
+- [安全](#安全)
+- [开发](#开发)
 
 ---
 
-## 快速部署
+## 快速开始
 
-### 1️⃣ 中转服务器 → `relay/`
+### 30 秒跑通
+
+**1. 在中转服务器上**
+
+```bash
+# 已部署到 yunqiao.very.im，直接用
+```
+
+**2. 在你电脑上**
+
+```bash
+cd client
+pip install -r requirements.txt
+python main.py
+```
+
+打开设置（⚙），填入中继地址和 PSK，点击「保存并连接」。
+
+**3. 在 AI Agent 端**
+
+```bash
+node skills/mcp-client.mjs <配对码> list
+```
+
+看到设备列表，搞定。
+
+---
+
+## 架构
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                     AI Agent (沙箱)                       │
+│  node skills/mcp-client.mjs <配对码> call <工具> <参数>  │
+└──────────────┬──────────────────────────────────────────┘
+               │ MCP/SSE (HTTPS)
+               ▼
+┌─────────────────────────────────────────────────────────┐
+│                  中转服务器 (VPS)                         │
+│  yunqiao.very.im:443                                     │
+│  ├─ /mcp    → MCP Server (SSE)                           │
+│  └─ /device → WebSocket Relay (WSS)                      │
+└──────────────┬──────────────────────────────────────────┘
+               │ WebSocket (WSS)
+               ▼
+┌─────────────────────────────────────────────────────────┐
+│                  你的电脑 (Windows/Linux/macOS)           │
+│  python main.py                                          │
+│  ┌─────────────────────────────────────────────────┐     │
+│  │ 配对码: 984979                                   │     │
+│  │ [📋 复制并发送给 Agent]                          │     │
+│  └─────────────────────────────────────────────────┘     │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 工作流程
+
+1. **客户机**启动 → 连接中继服务器 → 生成 **6 位配对码**
+2. **把配对码发给 AI Agent**（复制按钮自动复制 `云桥 配对码 984979`）
+3. **AI Agent** 用配对码通过 MCP 协议连接中继 → 找到你的设备
+4. **配对完成** → Agent 可以远程执行命令、读写文件、查系统信息
+
+---
+
+## 部署
+
+### 1. 中转服务器
 
 部署到一台有公网 IP 的 VPS 上。
 
@@ -26,62 +99,190 @@ yunqiao-mcp/
 cd relay
 npm install
 
-# 配置密钥
-export RELAY_PSK="your-secure-random-key"
-
-# 启动（建议用 Nginx 反代 HTTPS）
+# 首次启动自动生成 PSK
+export PORT=9876
 node server.js
 ```
 
-建议配合 Nginx + Let's Encrypt 配置 HTTPS，WebSocket 路径为 `/device`。
+建议用 Nginx 反代 + Let's Encrypt 配置 HTTPS：
 
-### 2️⃣ 客户机代理 → `client/`
+```nginx
+# /etc/nginx/sites-available/yunqiao
+server {
+    listen 443 ssl;
+    server_name yunqiao.very.im;
+
+    ssl_certificate /etc/letsencrypt/live/yunqiao.very.im/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/yunqiao.very.im/privkey.pem;
+
+    # MCP 端点（SSE）
+    location /mcp {
+        proxy_pass http://127.0.0.1:9876;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_buffering off;
+    }
+
+    # WebSocket 中继
+    location /device {
+        proxy_pass http://127.0.0.1:9876;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_read_timeout 86400s;
+    }
+}
+```
+
+> **生产环境已部署**：`wss://yunqiao.very.im/device`
+
+---
+
+### 2. 客户机代理
 
 在你需要远程控制的电脑上运行。
 
+#### 桌面客户端（推荐）
+
 ```bash
 cd client
-pip install websockets
-
-# 连接中转服务器
-set RELAY_PSK=your-secure-random-key
-set RELAY_URL=wss://your-domain.com/device
-python desktop_monitor.py
+pip install -r requirements.txt
+python main.py
 ```
 
-- `desktop_monitor.py` — 桌面监控面板（推荐）
-- `agent.py` — 轻量后台版（无界面）
+打开后会看到一个窗口：
 
-### 3️⃣ 智能体 Skill → `skills/`
+| 区域 | 说明 |
+|------|------|
+| **连接状态** | 顶部状态灯 + 延迟显示 |
+| **当前连接** | 本地客户端 → 中转服务器 → 上游 Agent 拓扑 |
+| **Agent 活动** | 工具网格（执行中的工具绿色闪烁，完成的变灰） |
+| **配对码** | 6 位数字，右键复制 |
+| **日志** | 实时显示连接和操作日志 |
 
-给 AI Agent（OpenClaw / Codex 等）使用的 MCP 客户端。
+**首次使用**：点击 ⚙ 设置，填入中继地址和 PSK。
+
+#### 轻量后台版（无界面）
 
 ```bash
-node skills/mcp-client.mjs list
-node skills/mcp-client.mjs call list_devices '{}'
+set RELAY_PSK=your-psk
+set RELAY_URL=wss://yunqiao.very.im/device
+python agent.py
+```
+
+#### 打包 exe
+
+```bash
+pip install pyinstaller
+pyinstaller --onefile --windowed --name "云桥MCP" main.py
 ```
 
 ---
 
-## 可用工具
+### 3. 智能体 Skill
 
-| 工具 | 说明 |
-|------|------|
-| `list_devices` | 列出已连接的设备 |
-| `execute_command` | 远程执行命令 |
-| `read_file` | 读取文件 |
-| `write_file` | 写入文件 |
-| `get_device_info` | 获取系统信息 |
+给 AI Agent 使用的 MCP 客户端。
+
+```bash
+# 列出工具
+node skills/mcp-client.mjs <配对码> list
+
+# 列出设备
+node skills/mcp-client.mjs <配对码> call list_devices '{}'
+
+# 远程执行命令
+node skills/mcp-client.mjs <配对码> call execute_command '{"deviceId":"xxx","command":"dir"}'
+
+# 读取文件
+node skills/mcp-client.mjs <配对码> call read_file '{"deviceId":"xxx","path":"C:\\path\\to\\file.txt"}'
+
+# 写入文件
+node skills/mcp-client.mjs <配对码> call write_file '{"deviceId":"xxx","path":"C:\\path\\to\\file.txt","content":"hello"}'
+
+# 获取系统信息
+node skills/mcp-client.mjs <配对码> call get_device_info '{"deviceId":"xxx"}'
+```
+
+也支持通过环境变量设置配对码：
+
+```bash
+export MCP_AUTH_CODE=984979
+node skills/mcp-client.mjs list
+```
+
+---
+
+## 工具参考
+
+### MCP 工具
+
+| 工具 | 说明 | 参数 |
+|------|------|------|
+| `list_devices` | 列出所有已连接设备（含配对状态） | 无 |
+| `execute_command` | 远程执行 shell 命令 | deviceId, command, timeout? |
+| `read_file` | 读取远程文件 | deviceId, path |
+| `write_file` | 写入远程文件 | deviceId, path, content |
+| `get_device_info` | 获取系统信息（OS、CPU、内存等） | deviceId |
+
+### 配对码
+
+- 6 位随机数字
+- 客户机断开后自动失效
+- 支持重新生成
+- 复制按钮自动生成 `云桥 配对码 xxxxxx` 格式，方便直接发给 AI Agent
 
 ---
 
 ## 安全
 
-- PSK 预共享密钥认证
-- 支持命令白名单（`ALLOWED_COMMANDS`）
-- 支持文件路径白名单（`ALLOWED_FILE_PREFIX`）
-- 建议使用 HTTPS/WSS 加密通信
+| 机制 | 说明 |
+|------|------|
+| **PSK 预共享密钥** | 中继服务器和客户机双向认证 |
+| **设备配对码** | 临时 6 位数字，一次连接有效 |
+| **命令白名单** | `ALLOWED_COMMANDS` 环境变量配置 |
+| **文件路径白名单** | `ALLOWED_FILE_PREFIX` 限制读写范围 |
+| **HTTPS/WSS** | 全链路加密通信 |
 
 ---
 
-MIT License · 开源 · 自由使用
+## 开发
+
+### 项目结构
+
+```
+yunqiao-mcp/
+├── relay/              ← 中转服务器（Node.js）
+│   ├── server.js       ← 主服务（HTTP + WebSocket + MCP）
+│   └── package.json
+├── client/             ← 客户机代理（Python）
+│   ├── main.py         ← 桌面客户端（tkinter）
+│   ├── ui.html         ← HTML 前端（pywebview）
+│   ├── desktop_monitor.py  ← 旧版桌面面板
+│   └── agent.py        ← 轻量后台版
+├── skills/             ← 智能体 Skill
+│   ├── mcp-client.mjs  ← MCP 客户端（Node.js）
+│   └── references/     ← 参考源码
+└── README.md
+```
+
+### 本地开发
+
+```bash
+# 中继服务器
+cd relay && npm install && node server.js
+
+# 客户机（另一个终端）
+cd client && pip install -r requirements.txt && python main.py
+
+# 测试连接（第三个终端）
+node skills/mcp-client.mjs list
+```
+
+---
+
+<p align="center">
+  <sub>MIT License · 开源 · 自由使用</sub>
+</p>
