@@ -299,8 +299,9 @@ window.__push = function(cmd, data){
 // ─── 配对码 ──────────────────────────────────
 function copyCode(){
   const code = document.getElementById('codeDisplay').textContent;
+  const text = '云桥 配对码 ' + code;
   if(navigator.clipboard){
-    navigator.clipboard.writeText(code).catch(()=>{});
+    navigator.clipboard.writeText(text).catch(()=>{});
   }
   document.getElementById('pairState').textContent = '已复制';
   document.getElementById('pairState').className = 'badge green';

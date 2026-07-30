@@ -21,23 +21,36 @@ const AUTH_CODE = process.env.MCP_AUTH_CODE || '';
 const SERVER_URL = process.env.MCP_SERVER_URL || 'https://yunqiao.very.im/mcp';
 
 async function main() {
-  const [action, toolName, argsStr] = process.argv.slice(2);
+  const args = process.argv.slice(2);
+  // 支持两种格式:
+  //   node mcp-client.mjs <配对码> list
+  //   node mcp-client.mjs list
+  let authCode = AUTH_CODE;
+  let action, toolName, argsStr;
+  if (args.length >= 2 && /^\d{6}$/.test(args[0])) {
+    // 第一个参数是配对码
+    authCode = args[0];
+    [action, toolName, ...argsStr] = args.slice(1);
+    argsStr = argsStr ? argsStr.join(' ') : '';
+  } else {
+    [action, toolName, argsStr] = args;
+  }
 
   if (!action) {
     console.log(`用法:
-  node mcp-client.mjs list                          # 列出工具
-  node mcp-client.mjs call <工具名> <JSON参数>       # 调用工具
-
-环境变量:
-  MCP_SERVER_URL  MCP Server 地址（默认: ${SERVER_URL}）
+  node mcp-client.mjs <配对码> list                   # 列出工具
+  node mcp-client.mjs <配对码> call <工具名> <JSON>    # 调用工具
+  node mcp-client.mjs list                            # 列出工具（用环境变量 MCP_AUTH_CODE）
 
 示例:
-  node mcp-client.mjs list
-  node mcp-client.mjs call list_devices '{}'
-  node mcp-client.mjs call get_device_info '{"deviceId":"xxx"}'
+  node mcp-client.mjs 880083 list
+  node mcp-client.mjs 880083 call execute_command '{"deviceId":"xxx","command":"dir"}'
 `);
     process.exit(0);
   }
+
+  // 用 CLI 传入的 authCode 覆盖环境变量
+  const code = authCode;
 
   const transport = new SSEClientTransport(new URL(SERVER_URL));
   const client = new Client({ name: 'cloud-mcp-client', version: '1.0.0' });
@@ -70,9 +83,9 @@ async function main() {
           process.exit(1);
         }
       }
-      // 自动注入验证码（如果设了 MCP_AUTH_CODE 且工具需要 code 参数）
-      if (AUTH_CODE && !args.code) {
-        args.code = AUTH_CODE;
+      // 自动注入验证码（优先用 CLI 传入的，再用环境变量）
+      if (code && !args.code) {
+        args.code = code;
       }
       const result = await client.callTool({ name: toolName, arguments: args });
       for (const content of result.content) {

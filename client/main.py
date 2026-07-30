@@ -287,10 +287,9 @@ class App:
 
     # ─── 配对码 ────────────────────────────
     def copy_code(self):
-        code = state["pairCode"]
-        cmd = f"> mcp-client {code}"
+        text = f"云桥 配对码 {state['pairCode']}"
         self.root.clipboard_clear()
-        self.root.clipboard_append(cmd)
+        self.root.clipboard_append(text)
         self.pair_badge.configure(text="已复制", bg=C["success"], fg="white")
         self.copy_btn.configure(text="✅ 已复制，请发给Agent")
         self.root.after(2000, lambda: (
