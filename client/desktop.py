@@ -239,6 +239,24 @@ def start_ws():
     _loop.run_until_complete(ws_connect())
 
 
+class Api:
+    """pywebview JS API 桥接"""
+    def send_command(self, command):
+        return api_send_command(command)
+
+    def send_message(self, text):
+        return api_send_message(text)
+
+    def get_sessions(self):
+        return api_get_sessions()
+
+    def get_status(self):
+        return api_get_status()
+
+    def get_logs(self):
+        return api_get_logs()
+
+
 def main():
     import webview
 
@@ -252,7 +270,7 @@ def main():
     # 获取 ui.html 路径
     ui_path = os.path.join(os.path.dirname(__file__), "ui.html")
 
-    # 创建窗口
+    # 创建窗口（带 JS API）
     webview.create_window(
         "云桥 MCP v2.0",
         ui_path,
@@ -260,7 +278,7 @@ def main():
         height=720,
         min_size=(900, 600),
         resizable=True,
-        js_api=None,  # 通过 evaluate_js 通信
+        js_api=Api(),
     )
     webview.start(debug=True)
 
