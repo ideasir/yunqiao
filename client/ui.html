@@ -182,6 +182,37 @@ function createSession() {
   renderSessions(); update状态();
   addLog('info', '会话已创建: ' + name + ' (' + id + ')');
 }
+function connectRelay() {
+  // 尝试连接中转服务器
+  var url = document.getElementById('relayUrl').textContent;
+  addLog('status', '正在连接中转服务器: ' + url);
+  // 通过 WebSocket 重新连接
+  if (state.ws) {
+    try { state.ws.close(); } catch(e) {}
+  }
+  state.ws = new WebSocket('wss://' + url + '/device');
+  state.ws.onopen = function() {
+    addLog('done', '中转服务器连接成功');
+    document.getElementById('relayStatus').textContent = '已连接';
+    document.getElementById('relayDot').className = 'w-2 h-2 rounded-full bg-green-400';
+  };
+  state.ws.onclose = function() {
+    addLog('info', '中转服务器连接断开');
+    document.getElementById('relayStatus').textContent = '未连接';
+    document.getElementById('relayDot').className = 'w-2 h-2 rounded-full bg-white/20';
+  };
+  state.ws.onerror = function() {
+    addLog('err', '中转服务器连接失败');
+  };
+}
+function configRelay() {
+  var currentUrl = document.getElementById('relayUrl').textContent;
+  var url = prompt('中转服务器地址:', currentUrl);
+  if (url && url.trim()) {
+    document.getElementById('relayUrl').textContent = url.trim();
+    addLog('info', '中转服务器地址已更新: ' + url.trim());
+  }
+}
 function refreshSessions() { addLog('info', '会话列表已刷新'); }
 function renderSessions() {
   var list = document.getElementById('sessionList');
