@@ -105,7 +105,7 @@ tailwind.config = {
       </div>
       <div class="flex gap-1.5 px-3 py-2 border-t border-[#1f1f1f]">
         <button class="flex-1 text-xs py-1 rounded-lg bg-[#222] text-[#ededed] hover:bg-[#2a2a2a] transition-all font-medium" onclick="copyPairCode()" title="复制配对码发送给你的智能体">复制</button>
-        <button class="text-xs py-1 px-2 rounded-lg bg-[#1a1a1a] text-[#777] hover:text-[#ededed] transition-all" onclick="refreshPairCode()">刷新</button>
+        <button class="text-xs py-1 px-2 rounded-lg bg-[#1a1a1a] text-[#777] hover:text-[#ededed] transition-all" onclick="refreshPairCode()" title="刷新配对码">刷新</button>
       </div>
     </div>
 
@@ -129,8 +129,8 @@ tailwind.config = {
         <div class="flex justify-between"><span class="text-[#666]">连接</span><span class="text-[#bbb]" id="relayStatus">未连接</span></div>
       </div>
       <div class="flex gap-1.5 px-3 py-2 border-t border-[#1f1f1f]">
-        <button class="flex-1 text-xs py-1 rounded-lg bg-[#222] text-[#ededed] hover:bg-[#2a2a2a] transition-all font-medium" onclick="toggleConnect()" id="connectBtn">连接</button>
-        <button class="text-xs py-1 px-2 rounded-lg bg-[#1a1a1a] text-[#777] hover:text-[#ededed] transition-all" onclick="configRelay()">配置</button>
+        <button class="flex-1 text-xs py-1 rounded-lg bg-[#222] text-[#ededed] hover:bg-[#2a2a2a] transition-all font-medium" onclick="toggleConnect()" id="connectBtn" title="连接或断开中继服务器">连接</button>
+        <button class="text-xs py-1 px-2 rounded-lg bg-[#1a1a1a] text-[#777] hover:text-[#ededed] transition-all" onclick="configRelay()" title="配置中继服务器">配置</button>
       </div>
     </div>
 
@@ -154,11 +154,11 @@ tailwind.config = {
       <div class="px-3 py-2 border-t border-[#1f1f1f]">
         <div class="text-[11px] font-medium text-[#777] mb-2">权限模式</div>
         <div class="flex gap-1.5">
-          <div class="flex-1 flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer transition-all bg-[#222] border border-[#333]" id="permSuper" onclick="setPermission('super')">
+          <div class="flex-1 flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer transition-all bg-[#222] border border-[#333]" id="permSuper" onclick="setPermission('super')" title="超级模式是授权智能体拥有所有权限">
             <div class="w-1.5 h-1.5 rounded-full bg-[#ededed]"></div>
             <div class="text-[11px] font-medium text-[#ededed]">超级模式</div>
           </div>
-          <div class="flex-1 flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer transition-all bg-[#1a1a1a] border border-[#222]" id="permWorkspace" onclick="setPermission('workspace')">
+          <div class="flex-1 flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer transition-all bg-[#1a1a1a] border border-[#222]" id="permWorkspace" onclick="setPermission('workspace')" title="工作区模式是限制智能体仅在工作区活动">
             <div class="w-1.5 h-1.5 rounded-full bg-[#444]"></div>
             <div class="text-[11px] font-medium text-[#666]">工作区模式</div>
           </div>
@@ -736,11 +736,10 @@ function saveConfigModal() {
       </div>
     </div>
     <div class="flex gap-2 px-4 py-3 border-t border-[#222]">
-      <button class="flex-1 text-xs py-2 rounded-lg bg-[#333] text-[#aaa] hover:bg-[#444] hover:text-[#ededed] transition-all font-medium" onclick="closeConfigModal()">取消</button>
-      <button class="flex-1 text-xs py-2 rounded-lg bg-[#ededed] text-[#0a0a0a] hover:bg-white transition-all font-medium" onclick="saveConfigModal()">确定</button>
+      <button class="flex-1 text-xs py-2 rounded-lg bg-[#333] text-[#aaa] hover:bg-[#444] hover:text-[#ededed] transition-all font-medium" onclick="closeConfigModal()" title="取消中继服务器配置">取消</button>
+      <button class="flex-1 text-xs py-2 rounded-lg bg-[#ededed] text-[#0a0a0a] hover:bg-white transition-all font-medium" onclick="saveConfigModal()" title="保存中继服务器配置">确定</button>
     </div>
   </div>
-</div>  </div>
 </div>
 
 <!-- 新建会话弹窗 -->
@@ -758,13 +757,13 @@ function saveConfigModal() {
         <label class="text-xs text-[#888] block mb-1">工作目录</label>
         <div class="flex gap-2">
           <input type="text" id="modalSessionDir" class="flex-1 bg-[#0d0d0d] border border-[#333] rounded-lg px-3 py-2 text-xs text-[#ededed] outline-none font-mono transition-colors focus:border-[#555]" placeholder="C:\Users\Administrator" />
-          <button class="text-xs px-3 py-2 rounded-lg bg-[#333] text-[#aaa] hover:bg-[#444] hover:text-[#ededed] transition-all" onclick="browseSessionDir(event)">浏览</button>
+          <button class="text-xs px-3 py-2 rounded-lg bg-[#333] text-[#aaa] hover:bg-[#444] hover:text-[#ededed] transition-all" onclick="browseSessionDir(event)" title="选择工作目录">浏览</button>
         </div>
       </div>
     </div>
     <div class="flex gap-2 px-4 py-3 border-t border-[#222]">
-      <button class="flex-1 text-xs py-2 rounded-lg bg-[#333] text-[#aaa] hover:bg-[#444] hover:text-[#ededed] transition-all font-medium" onclick="closeSessionModal()">取消</button>
-      <button class="flex-1 text-xs py-2 rounded-lg bg-[#ededed] text-[#0a0a0a] hover:bg-white transition-all font-medium" onclick="saveSessionModal()">确定</button>
+      <button class="flex-1 text-xs py-2 rounded-lg bg-[#333] text-[#aaa] hover:bg-[#444] hover:text-[#ededed] transition-all font-medium" onclick="closeSessionModal()" title="取消新建工作区">取消</button>
+      <button class="flex-1 text-xs py-2 rounded-lg bg-[#ededed] text-[#0a0a0a] hover:bg-white transition-all font-medium" onclick="saveSessionModal()" title="保存工作区">确定</button>
     </div>
   </div>
 </div>
