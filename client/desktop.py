@@ -338,6 +338,23 @@ class Api:
     def get_settings(self):
         return {"psk": RELAY_PSK, "relayUrl": RELAY_URL, "deviceName": DEVICE_NAME}
 
+    def refresh_pair_code(self):
+        """前端刷新配对码时调用，同步到后端和中继"""
+        global pair_code, WS, loop
+        import random
+        pair_code = str(random.randint(100000, 999999))
+        # 通知中继更新配对码
+        if WS and loop:
+            import asyncio
+            asyncio.run_coroutine_threadsafe(
+                WS.send(json.dumps({
+                    "type": "update_code", "requestId": "refresh_" + str(int(time.time() * 1000)),
+                    "authCode": pair_code,
+                })),
+                loop
+            )
+        return {"pairCode": pair_code}
+
     def browse_folder(self):
         """原生文件夹选择器"""
         import tkinter as tk
