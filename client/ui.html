@@ -373,6 +373,33 @@ function setConn状态(status) {
       <button class="flex-1 text-xs py-2 rounded-lg bg-[#ededed] text-[#0a0a0a] hover:bg-white transition-all font-medium" onclick="saveConfigModal()">确定</button>
     </div>
   </div>
+</div>  </div>
+</div>
+
+<!-- 新建会话弹窗 -->
+<div id="sessionModal" class="fixed inset-0 flex items-center justify-center z-50 transition-all duration-300" style="background: rgba(0,0,0,0.6); opacity: 0; pointer-events: none; backdrop-filter: blur(4px);">
+  <div id="sessionModalContent" class="rounded-xl bg-[#1a1a1a] border border-[#333] shadow-2xl w-80 transition-all duration-300" style="transform: scale(0.9) translateY(20px); opacity: 0;">
+    <div class="px-4 py-3 border-b border-[#222]">
+      <span class="text-sm font-medium text-[#ededed]">新建工作区</span>
+    </div>
+    <div class="px-4 py-3 space-y-3">
+      <div>
+        <label class="text-xs text-[#888] block mb-1">工作区名称</label>
+        <input type="text" id="modalSessionName" class="w-full bg-[#0d0d0d] border border-[#333] rounded-lg px-3 py-2 text-xs text-[#ededed] outline-none font-mono transition-colors focus:border-[#555]" placeholder="输入名称" />
+      </div>
+      <div>
+        <label class="text-xs text-[#888] block mb-1">工作目录</label>
+        <div class="flex gap-2">
+          <input type="text" id="modalSessionDir" class="flex-1 bg-[#0d0d0d] border border-[#333] rounded-lg px-3 py-2 text-xs text-[#ededed] outline-none font-mono transition-colors focus:border-[#555]" placeholder="C:\Users\Administrator" />
+          <button class="text-xs px-3 py-2 rounded-lg bg-[#333] text-[#aaa] hover:bg-[#444] hover:text-[#ededed] transition-all" onclick="browseSessionDir()">浏览</button>
+        </div>
+      </div>
+    </div>
+    <div class="flex gap-2 px-4 py-3 border-t border-[#222]">
+      <button class="flex-1 text-xs py-2 rounded-lg bg-[#333] text-[#aaa] hover:bg-[#444] hover:text-[#ededed] transition-all font-medium" onclick="var o=document.getElementById('sessionModal'),c=document.getElementById('sessionModalContent');c.style.transform='scale(0.9) translateY(20px)';c.style.opacity='0';setTimeout(function(){o.style.opacity='0';o.style.pointerEvents='none';},200);">取消</button>
+      <button class="flex-1 text-xs py-2 rounded-lg bg-[#ededed] text-[#0a0a0a] hover:bg-white transition-all font-medium" onclick="saveSessionModal()">确定</button>
+    </div>
+  </div>
 </div>
 
 
