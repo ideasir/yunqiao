@@ -323,6 +323,68 @@ function setConn状态(status) {
 })();
 
 
+
+function connectRelay() {
+  var url = document.getElementById('relayUrl').textContent;
+  addLog('status', '正在连接中转服务器: ' + url);
+  if (state.ws) {
+    try { state.ws.close(); } catch(e) {}
+  }
+  state.ws = new WebSocket('wss://' + url + '/device');
+  state.ws.onopen = function() {
+    addLog('done', '中转服务器连接成功');
+    document.getElementById('relayStatus').textContent = '已连接';
+    document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
+    var clientDots = document.querySelectorAll('.rounded-xl.bg-\[\#141414\] .w-1\.5\.h-1\.5\.rounded-full');
+    if (clientDots.length > 0) {
+      clientDots[clientDots.length - 1].className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80]';
+    }
+    state.ws.send(JSON.stringify({
+      type: 'register', deviceName: 'web-ui', os: 'web', arch: 'web',
+      hostname: location.hostname, authCode: state.pairCode
+    }));
+  };
+  state.ws.onmessage = function(e) {
+    try {
+      var msg = JSON.parse(e.data);
+      if (msg.type === 'agent_connected') {
+        addLog('status', 'Agent 已配对');
+        document.getElementById('agent状态').textContent = '已配对';
+        document.getElementById('agent状态').style.color = '#4ade80';
+        var dots = document.querySelectorAll('.w-1\.5\.h-1\.5\.rounded-full');
+        if (dots.length > 0) dots[0].className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
+      } else if (msg.type === 'agent_disconnected') {
+        document.getElementById('agent状态').textContent = '已断开';
+        document.getElementById('agent状态').style.color = '#bbb';
+        var dots = document.querySelectorAll('.w-1\.5\.h-1\.5\.rounded-full');
+        if (dots.length > 0) dots[0].className = 'w-1.5 h-1.5 rounded-full bg-[#666]';
+      } else if (msg.type === 'command_result' || msg.type === 'session_op_result') {
+        trafficFlash();
+      }
+    } catch(e) {}
+  };
+  state.ws.onclose = function() {
+    addLog('info', '中转服务器连接断开');
+    document.getElementById('relayStatus').textContent = '未连接';
+    document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
+    var clientDots = document.querySelectorAll('.rounded-xl.bg-\[\#141414\] .w-1\.5\.h-1\.5\.rounded-full');
+    if (clientDots.length > 0) {
+      clientDots[clientDots.length - 1].className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
+    }
+  };
+  state.ws.onerror = function() {
+    addLog('err', '中转服务器连接失败');
+  };
+}
+var trafficTimer = null;
+function trafficFlash() {
+  var relayDot = document.getElementById('relayDot');
+  if (trafficTimer) clearTimeout(trafficTimer);
+  relayDot.className = 'w-1.5 h-1.5 rounded-full bg-[#22d3ee]';
+  trafficTimer = setTimeout(function() {
+    relayDot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
+  }, 500);
+}
 function configRelay() {
   document.getElementById('modalRelayUrl').value = document.getElementById('relayUrl').textContent;
   document.getElementById('modalRelayKey').value = state.relayKey || '';
