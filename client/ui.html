@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22><text y=%2214%22 font-size=%2214%22>~</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22><text y=%2214%22 font-size=%2214%22 fill=%22%23888%22>~</text></svg>">
 <title>云桥 MCP v2.0</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
@@ -11,7 +11,7 @@ tailwind.config = {
   theme: {
     extend: {
       colors: {
-        glass: { 50: 'rgba(255,255,255,0.9)', 100: 'rgba(255,255,255,0.8)', 200: 'rgba(255,255,255,0.6)', 300: 'rgba(255,255,255,0.4)', 400: 'rgba(255,255,255,0.2)', 500: 'rgba(255,255,255,0.1)', 600: 'rgba(255,255,255,0.05)', 700: 'rgba(255,255,255,0.03)', 800: 'rgba(0,0,0,0.2)', 900: 'rgba(0,0,0,0.4)', 950: 'rgba(0,0,0,0.6)' },
+        dark: { 950: '#0a0a0a', 900: '#111111', 800: '#171717', 700: '#222222', 600: '#2a2a2a', 500: '#333333' }
       }
     }
   }
@@ -21,121 +21,124 @@ tailwind.config = {
 <link href="https://fonts.loli.net/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Inter', 'Noto Sans SC', sans-serif; }
+  body { font-family: 'Inter', 'Noto Sans SC', sans-serif; background: #0a0a0a; color: #ededed; }
   .font-mono { font-family: 'JetBrains Mono', 'Consolas', monospace; }
-  ::-webkit-scrollbar { width: 0px; }
-  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+  ::-webkit-scrollbar { width: 3px; height: 3px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #262626; border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: #333333; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
   @keyframes slide-up { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
   .animate-pulse { animation: pulse 2s ease-in-out infinite; }
   .animate-slide-up { animation: slide-up 0.2s ease; }
 </style>
 </head>
-<body class="h-screen flex flex-col overflow-hidden" style="overflow:hidden" style="background: linear-gradient(145deg, #0a0a0a 0%, #1a1a1a 100%);">
+<body class="h-screen flex flex-col overflow-hidden bg-[#0a0a0a]">
 
 <!-- ─── 标题栏 ─── -->
-<header class="flex items-center gap-3 px-5 py-2.5 flex-shrink-0" style="background: rgba(255,255,255,0.08); border-bottom: 1px solid rgba(255,255,255,0.06);">
-  <div class="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold text-white/90 flex-shrink-0" style="background: linear-gradient(135deg, #666666, white);">~</div>
-  <span class="text-sm font-semibold text-white/90/90">云桥 MCP</span>
-  <span class="text-xs text-white/90/30 font-medium">v2.0</span>
+<header class="flex items-center gap-3 px-5 py-2.5 flex-shrink-0 select-none bg-[#111111] border-b border-[#222222]">
+  <div class="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold text-black bg-[#ededed] flex-shrink-0 shadow-sm">~</div>
+  <span class="text-sm font-medium text-[#ededed]">云桥 MCP</span>
+  <span class="text-xs text-[#666] font-mono">v2.0</span>
   <div class="flex-1"></div>
-  <div class="w-2 h-2 rounded-full bg-white/20" id="conn状态"></div>
-  <button class="text-white/90/30 hover:text-white/90/70 text-sm px-1 py-0.5 rounded transition-colors" onclick="openSettings()">⚙</button>
+  <div class="w-2 h-2 rounded-full bg-[#444]" id="conn状态"></div>
+  <button class="text-[#666] hover:text-[#ededed] text-sm px-1.5 py-0.5 rounded transition-colors" onclick="openSettings()">⚙</button>
 </header>
 
 <!-- ─── 主体 ─── -->
 <div class="flex flex-1 overflow-hidden gap-0">
 
   <!-- 左侧侧边栏 -->
-  <div class="flex flex-col items-center gap-1 py-2 px-1 flex-shrink-0" style="background: rgba(255,255,255,0.05); border-right: 1px solid rgba(255,255,255,0.04);">
-    <div class="w-7 h-7 flex items-center justify-center rounded-xl cursor-pointer text-base font-bold transition-all" style="color: rgba(255,255,255,0.9);" onclick="createSession()" onmouseover="this.style.background='rgba(255,255,255,0.08)'" onmouseout="this.style.background='transparent'" title="新建会话">+</div>
-    <div class="w-5 h-px mb-1" style="background: rgba(255,255,255,0.06);"></div>
+  <div class="flex flex-col items-center gap-1.5 py-2.5 px-1.5 flex-shrink-0 select-none bg-[#0d0d0d] border-r border-[#1a1a1a]">
+    <div class="w-7 h-7 flex items-center justify-center rounded-lg cursor-pointer text-base font-semibold text-[#888] transition-all hover:bg-[#1a1a1a] hover:text-[#ededed]" onclick="createSession()" title="新建会话">+</div>
+    <div class="w-4 h-px my-0.5 bg-[#222]"></div>
     <div class="flex flex-col gap-1 items-center flex-1 overflow-y-auto w-full px-0.5" id="sidebarList"></div>
   </div>
 
   <!-- 左侧：对话/日志 -->
-  <div class="flex-1 flex flex-col min-w-0" style="background: rgba(255,255,255,0.03);">
+  <div class="flex-1 flex flex-col min-w-0 bg-[#0a0a0a]">
 
     <!-- 路径栏 -->
-    <div class="flex items-center gap-2 px-5 py-2 flex-shrink-0" style="border-bottom: 1px solid rgba(255,255,255,0.04);">
-      <span class="text-white/90 text-sm font-bold">❯</span>
-      <span class="text-xs font-mono text-white/90/35 flex-1 truncate" id="currentCwd">~</span>
+    <div class="flex items-center gap-2 px-5 py-2 flex-shrink-0 select-none bg-[#0e0e0e] border-b border-[#1a1a1a]">
+      <span class="text-[#666] text-sm font-bold">❯</span>
+      <span class="text-xs font-mono text-[#666] flex-1 truncate" id="currentCwd">~</span>
     </div>
 
     <!-- 日志区 -->
-    <div class="flex-1 overflow-y-auto px-5 py-3 font-mono text-sm leading-relaxed" id="sessionLog">
-      <div class="entry info flex gap-2.5 py-0.5 animate-slide-up"><span class="text-white/90/20 flex-shrink-0 text-xs min-w-[56px]">--:--:--</span><span class="text-white/90/40">云桥 MCP v2.0</span></div>
-      <div class="entry info flex gap-2.5 py-0.5 animate-slide-up"><span class="text-white/90/20 flex-shrink-0 text-xs min-w-[56px]">--:--:--</span><span class="text-white/90/40">输入命令开始操作</span></div>
+    <div class="flex-1 overflow-y-auto px-5 py-3 font-mono text-xs leading-relaxed" id="sessionLog">
+      <div class="entry info flex gap-3 py-1 animate-slide-up"><span class="text-[#444] flex-shrink-0 min-w-[60px]">--:--:--</span><span class="text-[#666]">云桥 MCP v2.0 运行中</span></div>
+      <div class="entry info flex gap-3 py-1 animate-slide-up"><span class="text-[#444] flex-shrink-0 min-w-[60px]">--:--:--</span><span class="text-[#555]">输入命令开始操作</span></div>
     </div>
 
     <!-- 输入区 -->
-    <div class="flex items-stretch flex-shrink-0" style="border-top: 1px solid rgba(255,255,255,0.06);">
-      <span class="flex items-center pl-5 pr-0 text-white/90 text-sm font-bold select-none">❯</span>
-      <input type="text" id="cmdInput" class="flex-1 bg-transparent border-none text-white/90/80 px-3 py-2.5 font-mono text-sm outline-none placeholder-white/20" placeholder="输入命令..." spellcheck="false" onkeydown="if(event.key==='Enter')sendCommand()" />
+    <div class="flex items-stretch flex-shrink-0 bg-[#111111] border-t border-[#222222]">
+      <span class="flex items-center pl-5 pr-1 text-[#888] text-sm font-bold select-none">❯</span>
+      <input type="text" id="cmdInput" class="flex-1 bg-transparent border-none text-[#ededed] px-3 py-3 font-mono text-xs outline-none placeholder-[#444]" placeholder="输入命令..." spellcheck="false" onkeydown="if(event.key==='Enter')sendCommand()" />
     </div>
   </div>
 
   <!-- 右侧：状态面板 -->
-  <aside class="w-64 flex flex-col gap-3 p-3 overflow-y-auto flex-shrink-0">
+  <aside class="w-64 flex flex-col gap-3 p-3 overflow-y-auto flex-shrink-0 select-none bg-[#0d0d0d] border-l border-[#1a1a1a]">
 
     <!-- Agent 卡片 -->
-    <div class="rounded-2xl p-4" style="background: rgba(255,255,255,0.06); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08);">
-      <div class="flex items-center gap-2 mb-3">
-        <div class="w-2 h-2 rounded-full bg-white/30 animate-pulse-dot"></div>
-        <span class="text-xs font-semibold text-white/90/60 uppercase tracking-wider">上游 Agent</span>
+    <div class="rounded-xl p-3.5 bg-[#141414] border border-[#222222]">
+      <div class="flex items-center gap-2 mb-2.5">
+        <div class="w-1.5 h-1.5 rounded-full bg-[#666] animate-pulse"></div>
+        <span class="text-[11px] font-medium text-[#777] uppercase tracking-wider">上游 Agent</span>
       </div>
-      <div class="space-y-1.5 text-sm">
-        <div class="flex justify-between items-center"><span class="text-white/90/35">状态</span><span class="text-white/90/70" id="agent状态">待接入</span></div>
-        <div class="flex justify-between items-center"><span class="text-white/90/35">配对码</span><span class="font-mono text-white/90 font-bold tracking-wider text-base" id="pairCode">------</span></div>
-        <div class="flex justify-between items-center"><span class="text-white/90/35">设备</span><span class="text-white/90/70 truncate max-w-[130px]" id="deviceName">-</span></div>
+      <div class="space-y-1.5 text-xs">
+        <div class="flex justify-between items-center"><span class="text-[#666]">状态</span><span class="text-[#bbb]" id="agent状态">待接入</span></div>
+        <div class="flex justify-between items-center"><span class="text-[#666]">配对码</span><span class="font-mono text-[#ededed] font-semibold tracking-wider bg-[#1a1a1a] px-1.5 py-0.5 rounded text-xs" id="pairCode">------</span></div>
+        <div class="flex justify-between items-center"><span class="text-[#666]">设备</span><span class="text-[#bbb] truncate max-w-[120px]" id="deviceName">-</span></div>
       </div>
-      <div class="flex gap-2 mt-3 pt-3" style="border-top: 1px solid rgba(255,255,255,0.06);">
-        <button class="text-xs px-3 py-1.5 rounded-xl transition-all" style="background: rgba(255,255,255,0.08); color: white;" onclick="copyPairCode()" onmouseover="this.style.background='rgba(255,255,255,0.12)'" onmouseout="this.style.background='rgba(255,255,255,0.08)'">复制</button>
-        <button class="text-xs px-3 py-1.5 rounded-xl transition-all text-white/90/40 hover:text-white/90/70" style="background: rgba(255,255,255,0.05);" onclick="refreshPairCode()" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">刷新</button>
+      <div class="flex gap-1.5 mt-3 pt-2.5 border-t border-[#1f1f1f]">
+        <button class="flex-1 text-xs px-2.5 py-1 rounded-lg bg-[#222] text-[#ededed] hover:bg-[#2a2a2a] transition-all font-medium" onclick="copyPairCode()">复制</button>
+        <button class="text-xs px-2.5 py-1 rounded-lg bg-[#1a1a1a] text-[#777] hover:text-[#ededed] transition-all" onclick="refreshPairCode()">刷新</button>
       </div>
     </div>
 
     <!-- Relay 卡片 -->
-    <div class="rounded-2xl p-4" style="background: rgba(255,255,255,0.06); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08);">
-      <div class="flex items-center gap-2 mb-3">
-        <div class="w-2 h-2 rounded-full bg-white/30" id="relayDot"></div>
-        <span class="text-xs font-semibold text-white/90/60 uppercase tracking-wider">中转服务器</span>
+    <div class="rounded-xl p-3.5 bg-[#141414] border border-[#222222]">
+      <div class="flex items-center gap-2 mb-2.5">
+        <div class="w-1.5 h-1.5 rounded-full bg-[#666]" id="relayDot"></div>
+        <span class="text-[11px] font-medium text-[#777] uppercase tracking-wider">中转服务器</span>
       </div>
-      <div class="space-y-1.5 text-sm">
-        <div class="flex justify-between items-center"><span class="text-white/90/35">地址</span><span class="text-white/90/70 font-mono text-xs truncate max-w-[150px]" id="relayUrl">yunqiao.very.im</span></div>
-        <div class="flex justify-between items-center"><span class="text-white/90/35">延迟</span><span class="text-white/90/70 font-mono" id="relayLatency">-- ms</span></div>
-        <div class="flex justify-between items-center"><span class="text-white/90/35">连接</span><span class="text-white/90/70" id="relayStatus">已连接</span></div>
+      <div class="space-y-1.5 text-xs">
+        <div class="flex justify-between items-center"><span class="text-[#666]">地址</span><span class="text-[#bbb] font-mono text-[11px] truncate max-w-[140px]" id="relayUrl">yunqiao.very.im</span></div>
+        <div class="flex justify-between items-center"><span class="text-[#666]">延迟</span><span class="text-[#bbb] font-mono" id="relayLatency">-- ms</span></div>
+        <div class="flex justify-between items-center"><span class="text-[#666]">连接</span><span class="text-[#bbb]" id="relayStatus">已连接</span></div>
       </div>
-      <div class="flex gap-2 mt-3 pt-3" style="border-top: 1px solid rgba(255,255,255,0.06);">
-        <button class="text-xs px-3 py-1.5 rounded-xl transition-all" style="background: rgba(255,255,255,0.08); color: white;" onclick="connectRelay()" onmouseover="this.style.background='rgba(255,255,255,0.12)'" onmouseout="this.style.background='rgba(255,255,255,0.08)'">连接</button>
-        <button class="text-xs px-3 py-1.5 rounded-xl transition-all text-white/90/40 hover:text-white/90/70" style="background: rgba(255,255,255,0.05);" onclick="configRelay()" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">配置</button>
+      <div class="flex gap-1.5 mt-3 pt-2.5 border-t border-[#1f1f1f]">
+        <button class="flex-1 text-xs px-2.5 py-1 rounded-lg bg-[#222] text-[#ededed] hover:bg-[#2a2a2a] transition-all font-medium" onclick="connectRelay()">连接</button>
+        <button class="text-xs px-2.5 py-1 rounded-lg bg-[#1a1a1a] text-[#777] hover:text-[#ededed] transition-all" onclick="configRelay()">配置</button>
       </div>
     </div>
 
     <!-- Client 卡片 -->
-    <div class="rounded-2xl p-4 flex-1" style="background: rgba(255,255,255,0.06); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08);">
-      <div class="flex items-center gap-2 mb-3">
-        <div class="w-2 h-2 rounded-full bg-white/20"></div>
-        <span class="text-xs font-semibold text-white/90/60 uppercase tracking-wider">客户端（本地电脑）</span>
+    <div class="rounded-xl p-3.5 flex-1 bg-[#141414] border border-[#222222]">
+      <div class="flex items-center gap-2 mb-2.5">
+        <div class="w-1.5 h-1.5 rounded-full bg-[#666]"></div>
+        <span class="text-[11px] font-medium text-[#777] uppercase tracking-wider">客户端（本地电脑）</span>
       </div>
-      <div class="space-y-1.5 text-sm">
-        <div class="flex justify-between items-center"><span class="text-white/90/35">工作目录</span><span class="text-white/90/70 font-mono text-xs truncate max-w-[140px]" id="workDir">未设置</span></div>
-        <div class="flex justify-between items-center"><span class="text-white/90/35">平台</span><span class="text-white/90/70" id="client平台">-</span></div>
-        <div class="flex justify-between items-center"><span class="text-white/90/35">主机名</span><span class="text-white/90/70 truncate max-w-[130px]" id="client主机名">-</span></div>
+      <div class="space-y-1.5 text-xs">
+        <div class="flex justify-between items-center"><span class="text-[#666]">工作目录</span><span class="text-[#bbb] font-mono text-[11px] truncate max-w-[130px]" id="workDir">未设置</span></div>
+        <div class="flex justify-between items-center"><span class="text-[#666]">平台</span><span class="text-[#bbb]" id="client平台">-</span></div>
+        <div class="flex justify-between items-center"><span class="text-[#666]">主机名</span><span class="text-[#bbb] truncate max-w-[120px]" id="client主机名">-</span></div>
       </div>
-      <div class="mt-3 pt-3" style="border-top: 1px solid rgba(255,255,255,0.06);">
-        <div class="text-xs font-semibold text-white/90/50 mb-2">权限模式</div>
+      <div class="mt-3 pt-2.5 border-t border-[#1f1f1f]">
+        <div class="text-[11px] font-medium text-[#777] mb-2">权限模式</div>
         <div class="flex gap-1.5">
-          <div class="flex-1 flex items-center gap-1.5 px-2 py-1.5 rounded-xl cursor-pointer transition-all" id="permSuper" onclick="setPermission('super')" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);">
-            <div class="w-2 h-2 rounded-full" style="background:white"></div>
-            <div class="text-xs font-medium text-white/90/80">超级权限</div>
+          <div class="flex-1 flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer transition-all bg-[#222] border border-[#333]" id="permSuper" onclick="setPermission('super')">
+            <div class="w-1.5 h-1.5 rounded-full bg-[#ededed]"></div>
+            <div class="text-[11px] font-medium text-[#ededed]">超级</div>
           </div>
-          <div class="flex-1 flex items-center gap-1.5 px-2 py-1.5 rounded-xl cursor-pointer transition-all" id="permWorkspace" onclick="setPermission('workspace')" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);">
-            <div class="w-2 h-2 rounded-full" style="background:rgba(255,255,255,0.2)"></div>
-            <div class="text-xs font-medium text-white/90/50">工作区权限</div>
+          <div class="flex-1 flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer transition-all bg-[#1a1a1a] border border-[#222]" id="permWorkspace" onclick="setPermission('workspace')">
+            <div class="w-1.5 h-1.5 rounded-full bg-[#444]"></div>
+            <div class="text-[11px] font-medium text-[#666]">工作区</div>
           </div>
         </div>
       </div>
-      <div class="mt-2 pt-2 text-xs text-white/90/20" style="border-top: 1px solid rgba(255,255,255,0.04);">会话在左侧边栏管理</div>
+      <div class="mt-3 pt-2 text-[10px] text-[#444] text-center border-t border-[#1a1a1a]">会话在左侧边栏管理</div>
     </div>
   </aside>
 </div>
@@ -146,15 +149,15 @@ const state = { connected: false, pairCode: '------', ws: null, sessions: [], cu
 function addLog(type, text) {
   const log = document.getElementById('sessionLog');
   const entry = document.createElement('div');
-  entry.className = 'entry ' + type + ' flex gap-2.5 py-0.5 animate-slide-up';
+  entry.className = 'entry ' + type + ' flex gap-3 py-1 animate-slide-up';
   const now = new Date();
   const time = now.toTimeString().slice(0, 8);
-  const colors = {cmd:'text-white/90',out:'text-white/90',err:'text-white/90',info:'text-white/90/40',done:'text-white/90',file:'text-white/90',code:'text-white/90',status:'text-white/90'};
-  const c = colors[type] || 'text-white/90/70';
+  const colors = {cmd:'text-[#ededed] font-medium',out:'text-[#cccccc]',err:'text-[#ff6b6b]',info:'text-[#777777]',done:'text-[#ededed] font-medium',file:'text-[#cccccc]',code:'text-[#cccccc]',status:'text-[#aaaaaa]'};
+  const c = colors[type] || 'text-[#cccccc]';
   if (type === 'file' || type === 'code') {
-    entry.innerHTML = '<span class="text-white/90/20 flex-shrink-0 text-xs min-w-[56px]">' + time + '</span><span class="' + c + '"><pre style="margin:0;font-family:inherit;white-space:pre-wrap">' + esc(text) + '</pre></span>';
+    entry.innerHTML = '<span class="text-[#444] flex-shrink-0 min-w-[60px]">' + time + '</span><span class="' + c + '"><pre style="margin:0;font-family:inherit;white-space:pre-wrap">' + esc(text) + '</pre></span>';
   } else {
-    entry.innerHTML = '<span class="text-white/90/20 flex-shrink-0 text-xs min-w-[56px]">' + time + '</span><span class="' + c + '">' + esc(text) + '</span>';
+    entry.innerHTML = '<span class="text-[#444] flex-shrink-0 min-w-[60px]">' + time + '</span><span class="' + c + '">' + esc(text) + '</span>';
   }
   log.appendChild(entry);
   log.scrollTop = log.scrollHeight;
@@ -197,10 +200,8 @@ function createSession() {
   addLog('info', '会话已创建: ' + name + ' (' + id + ')');
 }
 function connectRelay() {
-  // 尝试连接中转服务器
   var url = document.getElementById('relayUrl').textContent;
   addLog('status', '正在连接中转服务器: ' + url);
-  // 通过 WebSocket 重新连接
   if (state.ws) {
     try { state.ws.close(); } catch(e) {}
   }
@@ -208,12 +209,12 @@ function connectRelay() {
   state.ws.onopen = function() {
     addLog('done', '中转服务器连接成功');
     document.getElementById('relayStatus').textContent = '已连接';
-    document.getElementById('relayDot').className = 'w-2 h-2 rounded-full bg-white/30';
+    document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#ededed]';
   };
   state.ws.onclose = function() {
     addLog('info', '中转服务器连接断开');
     document.getElementById('relayStatus').textContent = '未连接';
-    document.getElementById('relayDot').className = 'w-2 h-2 rounded-full bg-white/20';
+    document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
   };
   state.ws.onerror = function() {
     addLog('err', '中转服务器连接失败');
@@ -238,27 +239,56 @@ function renderSidebar() {
   list.innerHTML = '';
   state.sessions.forEach(function(s) {
     var item = document.createElement('div');
-    item.className = 'flex items-center justify-center rounded-xl cursor-pointer text-xs font-bold transition-all';
-    item.style.cssText = (s.id === state.currentSessionId ? 'background:rgba(255,255,255,0.08);color:white;width:26px;height:26px;' : 'color:rgba(255,255,255,0.3);width:26px;height:26px;');
+    var active = s.id === state.currentSessionId;
+    item.className = 'flex items-center justify-center rounded-lg cursor-pointer text-xs font-semibold transition-all';
+    item.style.cssText = active ? 'background:#222;color:#ededed;width:26px;height:26px;border:1px solid #333;' : 'color:#666;width:26px;height:26px;background:transparent;';
     item.title = (s.name || 'unnamed') + ' - ' + (s.workDir || '');
     item.textContent = (s.name || '?').slice(0, 1);
-    item.onmouseover = function() { if (s.id !== state.currentSessionId) this.style.background = 'rgba(255,255,255,0.05)'; };
-    item.onmouseout = function() { if (s.id !== state.currentSessionId) this.style.background = 'transparent'; };
+    item.onmouseover = function() { if (!active) { this.style.background = '#1a1a1a'; this.style.color = '#aaa'; } };
+    item.onmouseout = function() { if (!active) { this.style.background = 'transparent'; this.style.color = '#666'; } };
     item.onclick = function() { switchSession(s.id); };
     list.appendChild(item);
   });
 }
 
-function renderSessions() {
-  // 会话列表在左侧侧边栏
-}
+function renderSessions() {}
 
-function switchSession(id) { state.currentSessionId = id; renderSidebar(); renderSessions(); addLog('info', '已切换到会话: ' + id); }
+function switchSession(id) { 
+  state.currentSessionId = id; 
+  renderSidebar(); 
+  renderSessions(); 
+  addLog('info', '已切换到会话: ' + id); 
+}
 function closeSession(id) {
   if (!confirm('确定关闭此会话?')) return;
   state.sessions = state.sessions.filter(function(s) { return s.id !== id; });
   if (state.currentSessionId === id) { state.currentSessionId = state.sessions.length > 0 ? state.sessions[0].id : null; }
   renderSidebar(); renderSessions(); addLog('info', '会话已关闭: ' + id);
+}
+
+function setPermission(type) {
+  state.permission = type;
+  var superEl = document.getElementById('permSuper');
+  var workspaceEl = document.getElementById('permWorkspace');
+  if (type === 'super') {
+    superEl.style.cssText = 'background: #222; border: 1px solid #333;';
+    superEl.querySelector('div:first-child').className = 'w-1.5 h-1.5 rounded-full bg-[#ededed]';
+    superEl.querySelector('div:last-child').className = 'text-[11px] font-medium text-[#ededed]';
+    
+    workspaceEl.style.cssText = 'background: #1a1a1a; border: 1px solid #222;';
+    workspaceEl.querySelector('div:first-child').className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
+    workspaceEl.querySelector('div:last-child').className = 'text-[11px] font-medium text-[#666]';
+    addLog('info', '权限模式: 超级');
+  } else {
+    workspaceEl.style.cssText = 'background: #222; border: 1px solid #333;';
+    workspaceEl.querySelector('div:first-child').className = 'w-1.5 h-1.5 rounded-full bg-[#ededed]';
+    workspaceEl.querySelector('div:last-child').className = 'text-[11px] font-medium text-[#ededed]';
+    
+    superEl.style.cssText = 'background: #1a1a1a; border: 1px solid #222;';
+    superEl.querySelector('div:first-child').className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
+    superEl.querySelector('div:last-child').className = 'text-[11px] font-medium text-[#666]';
+    addLog('info', '权限模式: 工作区');
+  }
 }
 
 function updateStatus() {
@@ -272,7 +302,7 @@ function updateStatus() {
 }
 function setConn状态(status) {
   var dot = document.getElementById('conn状态');
-  dot.className = 'w-2 h-2 rounded-full ' + (status === 'connected' ? 'bg-white/30 animate-pulse-dot' : 'bg-white/20');
+  dot.className = 'w-2 h-2 rounded-full ' + (status === 'connected' ? 'bg-[#ededed]' : 'bg-[#444]');
 }
 
 (function() {
