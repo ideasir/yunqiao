@@ -11,10 +11,10 @@ tailwind.config = {
   theme: {
     extend: {
       colors: {
-        surface: { 50: '#f5f5f0', 100: '#e8e8e0', 200: '#ccccbf', 300: '#a8a89a', 400: '#808072', 500: '#66665a', 600: '#4d4d44', 700: '#36362e', 800: '#24241e', 900: '#141410', 950: '#0a0a08' },
-        stone: { 400: '#c8a87c', 500: '#b8946a', 600: '#a08058' },
-        moss: { 400: '#8bc48a', 500: '#72ad70' },
-        clay: { 400: '#c48a8a', 500: '#ad7070' },
+        ink: { 50: '#f0ede8', 100: '#e0d9d0', 200: '#c0b5a5', 300: '#a0907a', 400: '#807060', 500: '#605550', 600: '#4a4038', 700: '#352e28', 800: '#221e1a', 900: '#14110e', 950: '#0a0806' },
+        amber: { 400: '#d4a86a', 500: '#c49454', 600: '#b08040' },
+        sage: { 400: '#8ab88a', 500: '#6ea06e' },
+        rose: { 400: '#c48a8a', 500: '#a86a6a' },
       }
     }
   }
@@ -36,11 +36,11 @@ tailwind.config = {
   .animate-slide-up { animation: slide-up 0.2s ease; }
 </style>
 </head>
-<body class="h-screen flex flex-col overflow-hidden" style="overflow:hidden" style="background: #0a0a08;">
+<body class="h-screen flex flex-col overflow-hidden" style="overflow:hidden" style="background: #0a0806;">
 
 <!-- ─── 标题栏 ─── -->
 <header class="flex items-center gap-3 px-5 py-2.5 flex-shrink-0" style="background: rgba(15,16,26,0.8); border-bottom: 1px solid rgba(255,255,255,0.06);">
-  <div class="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0" style="background: linear-gradient(135deg, #666666, #c8a87c);">~</div>
+  <div class="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0" style="background: linear-gradient(135deg, #666666, amber-400);">~</div>
   <span class="text-sm font-semibold text-white/90">云桥 MCP</span>
   <span class="text-xs text-white/30 font-medium">v2.0</span>
   <div class="flex-1"></div>
@@ -53,7 +53,7 @@ tailwind.config = {
 
   <!-- 左侧侧边栏 -->
   <div class="flex flex-col items-center gap-1 py-2 px-1 flex-shrink-0" style="background: rgba(15,16,26,0.6); border-right: 1px solid rgba(255,255,255,0.04);">
-    <div class="w-7 h-7 flex items-center justify-center rounded-lg cursor-pointer text-base font-bold transition-all" style="color: rgba(200,168,124,0.9);" onclick="createSession()" onmouseover="this.style.background='rgba(200,168,124,0.15)'" onmouseout="this.style.background='transparent'" title="新建会话">+</div>
+    <div class="w-7 h-7 flex items-center justify-center rounded-lg cursor-pointer text-base font-bold transition-all" style="color: rgba(212,168,106,0.9);" onclick="createSession()" onmouseover="this.style.background='rgba(212,168,106,0.15)'" onmouseout="this.style.background='transparent'" title="新建会话">+</div>
     <div class="w-5 h-px mb-1" style="background: rgba(255,255,255,0.06);"></div>
     <div class="flex flex-col gap-1 items-center flex-1 overflow-y-auto w-full px-0.5" id="sidebarList"></div>
   </div>
@@ -63,7 +63,7 @@ tailwind.config = {
 
     <!-- 路径栏 -->
     <div class="flex items-center gap-2 px-5 py-2 flex-shrink-0" style="border-bottom: 1px solid rgba(255,255,255,0.04);">
-      <span class="text-[#c8a87c] text-sm font-bold">❯</span>
+      <span class="text-amber-400 text-sm font-bold">❯</span>
       <span class="text-xs font-mono text-white/35 flex-1 truncate" id="currentCwd">~</span>
     </div>
 
@@ -75,7 +75,7 @@ tailwind.config = {
 
     <!-- 输入区 -->
     <div class="flex items-stretch flex-shrink-0" style="border-top: 1px solid rgba(255,255,255,0.06);">
-      <span class="flex items-center pl-5 pr-0 text-[#c8a87c] text-sm font-bold select-none">❯</span>
+      <span class="flex items-center pl-5 pr-0 text-amber-400 text-sm font-bold select-none">❯</span>
       <input type="text" id="cmdInput" class="flex-1 bg-transparent border-none text-white/80 px-3 py-2.5 font-mono text-sm outline-none placeholder-white/20" placeholder="输入命令..." spellcheck="false" onkeydown="if(event.key==='Enter')sendCommand()" />
     </div>
   </div>
@@ -86,16 +86,16 @@ tailwind.config = {
     <!-- Agent 卡片 -->
     <div class="rounded-xl p-4" style="background: rgba(26,28,42,0.8); border: 1px solid rgba(255,255,255,0.06);">
       <div class="flex items-center gap-2 mb-3">
-        <div class="w-2 h-2 rounded-full bg-[#a8a89a] animate-pulse-dot"></div>
+        <div class="w-2 h-2 rounded-full bg-ink-300 animate-pulse-dot"></div>
         <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">上游 Agent</span>
       </div>
       <div class="space-y-1.5 text-sm">
         <div class="flex justify-between items-center"><span class="text-white/35">状态</span><span class="text-white/70" id="agent状态">待接入</span></div>
-        <div class="flex justify-between items-center"><span class="text-white/35">配对码</span><span class="font-mono text-[#c8a87c] font-bold tracking-wider text-base" id="pairCode">------</span></div>
+        <div class="flex justify-between items-center"><span class="text-white/35">配对码</span><span class="font-mono text-amber-400 font-bold tracking-wider text-base" id="pairCode">------</span></div>
         <div class="flex justify-between items-center"><span class="text-white/35">设备</span><span class="text-white/70 truncate max-w-[130px]" id="deviceName">-</span></div>
       </div>
       <div class="flex gap-2 mt-3 pt-3" style="border-top: 1px solid rgba(255,255,255,0.06);">
-        <button class="text-xs px-3 py-1.5 rounded-lg transition-all" style="background: rgba(200,168,124,0.15); color: #c8a87c;" onclick="copyPairCode()" onmouseover="this.style.background='rgba(200,168,124,0.25)'" onmouseout="this.style.background='rgba(200,168,124,0.15)'">复制</button>
+        <button class="text-xs px-3 py-1.5 rounded-lg transition-all" style="background: rgba(212,168,106,0.15); color: amber-400;" onclick="copyPairCode()" onmouseover="this.style.background='rgba(212,168,106,0.25)'" onmouseout="this.style.background='rgba(212,168,106,0.15)'">复制</button>
         <button class="text-xs px-3 py-1.5 rounded-lg transition-all text-white/40 hover:text-white/70" style="background: rgba(255,255,255,0.05);" onclick="refreshPairCode()" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">刷新</button>
       </div>
     </div>
@@ -103,7 +103,7 @@ tailwind.config = {
     <!-- Relay 卡片 -->
     <div class="rounded-xl p-4" style="background: rgba(26,28,42,0.8); border: 1px solid rgba(255,255,255,0.06);">
       <div class="flex items-center gap-2 mb-3">
-        <div class="w-2 h-2 rounded-full bg-[#a8a89a]" id="relayDot"></div>
+        <div class="w-2 h-2 rounded-full bg-ink-300" id="relayDot"></div>
         <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">中转服务器</span>
       </div>
       <div class="space-y-1.5 text-sm">
@@ -112,7 +112,7 @@ tailwind.config = {
         <div class="flex justify-between items-center"><span class="text-white/35">连接</span><span class="text-white/70" id="relayStatus">已连接</span></div>
       </div>
       <div class="flex gap-2 mt-3 pt-3" style="border-top: 1px solid rgba(255,255,255,0.06);">
-        <button class="text-xs px-3 py-1.5 rounded-lg transition-all" style="background: rgba(200,168,124,0.15); color: #c8a87c;" onclick="connectRelay()" onmouseover="this.style.background='rgba(200,168,124,0.25)'" onmouseout="this.style.background='rgba(200,168,124,0.15)'">连接</button>
+        <button class="text-xs px-3 py-1.5 rounded-lg transition-all" style="background: rgba(212,168,106,0.15); color: amber-400;" onclick="connectRelay()" onmouseover="this.style.background='rgba(212,168,106,0.25)'" onmouseout="this.style.background='rgba(212,168,106,0.15)'">连接</button>
         <button class="text-xs px-3 py-1.5 rounded-lg transition-all text-white/40 hover:text-white/70" style="background: rgba(255,255,255,0.05);" onclick="configRelay()" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">配置</button>
       </div>
     </div>
@@ -131,8 +131,8 @@ tailwind.config = {
       <div class="mt-3 pt-3" style="border-top: 1px solid rgba(255,255,255,0.06);">
         <div class="text-xs font-semibold text-white/50 mb-2">权限模式</div>
         <div class="flex gap-1.5">
-          <div class="flex-1 flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer transition-all" id="permSuper" onclick="setPermission('super')" style="background: rgba(200,168,124,0.15); border: 1px solid rgba(200,168,124,0.3);">
-            <div class="w-2 h-2 rounded-full" style="background:#c8a87c"></div>
+          <div class="flex-1 flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer transition-all" id="permSuper" onclick="setPermission('super')" style="background: rgba(212,168,106,0.15); border: 1px solid rgba(212,168,106,0.3);">
+            <div class="w-2 h-2 rounded-full" style="background:amber-400"></div>
             <div class="text-xs font-medium text-white/80">超级权限</div>
           </div>
           <div class="flex-1 flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer transition-all" id="permWorkspace" onclick="setPermission('workspace')" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);">
@@ -155,7 +155,7 @@ function addLog(type, text) {
   entry.className = 'entry ' + type + ' flex gap-2.5 py-0.5 animate-slide-up';
   const now = new Date();
   const time = now.toTimeString().slice(0, 8);
-  const colors = {cmd:'text-[#c8a87c]',out:'text-[#c8a87c]',err:'text-[#c8a87c]',info:'text-white/40',done:'text-[#c8a87c]',file:'text-[#c8a87c]',code:'text-[#c8a87c]',status:'text-[#c8a87c]'};
+  const colors = {cmd:'text-amber-400',out:'text-amber-400',err:'text-amber-400',info:'text-white/40',done:'text-amber-400',file:'text-amber-400',code:'text-amber-400',status:'text-amber-400'};
   const c = colors[type] || 'text-white/70';
   if (type === 'file' || type === 'code') {
     entry.innerHTML = '<span class="text-white/20 flex-shrink-0 text-xs min-w-[56px]">' + time + '</span><span class="' + c + '"><pre style="margin:0;font-family:inherit;white-space:pre-wrap">' + esc(text) + '</pre></span>';
@@ -214,7 +214,7 @@ function connectRelay() {
   state.ws.onopen = function() {
     addLog('done', '中转服务器连接成功');
     document.getElementById('relayStatus').textContent = '已连接';
-    document.getElementById('relayDot').className = 'w-2 h-2 rounded-full bg-[#a8a89a]';
+    document.getElementById('relayDot').className = 'w-2 h-2 rounded-full bg-ink-300';
   };
   state.ws.onclose = function() {
     addLog('info', '中转服务器连接断开');
@@ -245,7 +245,7 @@ function renderSidebar() {
   state.sessions.forEach(function(s) {
     var item = document.createElement('div');
     item.className = 'flex items-center justify-center rounded-lg cursor-pointer text-xs font-bold transition-all';
-    item.style.cssText = (s.id === state.currentSessionId ? 'background:rgba(200,168,124,0.15);color:#c8a87c;width:26px;height:26px;' : 'color:rgba(255,255,255,0.3);width:26px;height:26px;');
+    item.style.cssText = (s.id === state.currentSessionId ? 'background:rgba(212,168,106,0.15);color:amber-400;width:26px;height:26px;' : 'color:rgba(255,255,255,0.3);width:26px;height:26px;');
     item.title = (s.name || 'unnamed') + ' - ' + (s.workDir || '');
     item.textContent = (s.name || '?').slice(0, 1);
     item.onmouseover = function() { if (s.id !== state.currentSessionId) this.style.background = 'rgba(255,255,255,0.05)'; };
@@ -278,7 +278,7 @@ function updateStatus() {
 }
 function setConn状态(status) {
   var dot = document.getElementById('conn状态');
-  dot.className = 'w-2 h-2 rounded-full ' + (status === 'connected' ? 'bg-[#a8a89a] animate-pulse-dot' : 'bg-white/20');
+  dot.className = 'w-2 h-2 rounded-full ' + (status === 'connected' ? 'bg-ink-300 animate-pulse-dot' : 'bg-white/20');
 }
 
 (function() {
