@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
-import { randomUUID, randomInt, randomBytes } from 'node:crypto';
+import { randomUUID, randomBytes } from 'node:crypto';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
@@ -13,7 +13,7 @@ const COMMAND_TIMEOUT = parseInt(process.env.COMMAND_TIMEOUT || '60000');
 const MCP_PATH = '/mcp';
 const MCP_MESSAGE_PATH = '/mcp/message';
 
-// 自动管理 PSK：第一次启动生成，之后从文件读取
+// 自动管理 PSK
 let PSK = '';
 if (existsSync(PSK_FILE)) {
   PSK = readFileSync(PSK_FILE, 'utf-8').trim();
@@ -24,8 +24,6 @@ if (existsSync(PSK_FILE)) {
   console.error(`[server] 🔑 新 PSK 已生成并保存到 ${PSK_FILE}`);
   console.error(`[server] 📋 PSK: ${PSK}`);
 }
-
-// 也可通过环境变量覆盖
 if (process.env.RELAY_PSK) {
   PSK = process.env.RELAY_PSK;
   console.error('[server] 🔑 使用环境变量 RELAY_PSK 覆盖');
@@ -71,6 +69,12 @@ function rejectDeviceRequests(deviceId, reason) {
   }
 }
 
+// 获取默认设备（第一个连接的设备，如果有多个则需要指定 deviceId）
+function getDefaultDevice() {
+  if (devices.size === 0) return null;
+  return devices.values().next().value;
+}
+
 function checkCommandAllowed(command) {
   if (ALLOWED_COMMANDS.length === 0) return true;
   const cmdName = command.trim().split(/\s+/)[0];
@@ -85,38 +89,26 @@ function checkPathAllowed(filePath) {
     || filePath.startsWith(ALLOWED_FILE_PREFIX.replace(/\\/g, '\\').replace(/\\$/, '') + '\\');
 }
 
-function resetActivityTimer(device) {
-  // Mark agent as paired and reset the 3s/30s activity timer
-  if (!device._agentPaired) {
-    device._agentPaired = true;
-    try { sendJSON(device.ws, { type: 'agent_connected', requestId: '0', payload: {} }); } catch(e) {}
-  }
-  if (device._agentTimer) clearTimeout(device._agentTimer);
-  if (device._grayTimer) clearTimeout(device._grayTimer);
-  device._agentTimer = setTimeout(() => {
-    try {
-      sendJSON(device.ws, { type: 'agent_disconnected', requestId: '0', payload: {} });
-      device._grayTimer = setTimeout(() => {
-        try { sendJSON(device.ws, { type: 'agent_gray', requestId: '0', payload: {} }); } catch(e) {}
-      }, 10000);
-    } catch(e) {}
-  }, 3000);
+// ─── 会话管理工具 ─────────────────────────────
+
+async function handleSessionOp(op, payload, deviceId) {
+  return await sendAndWait('session_op', { op, ...payload }, deviceId);
 }
+
+// ─── MCP 服务 ────────────────────────────────
 
 function createMcpServer() {
   const server = new McpServer({
     name: 'cloud-collaborative-mcp',
-    version: '1.0.0',
+    version: '2.0.0',
   });
 
+  // ═══ 旧工具（保留兼容） ═══════════════════
+
   server.registerTool('list_devices', {
-    description: '列出所有已连接到中转的私人电脑设备（含验证码状态）',
+    description: '列出所有已连接到中转的私人电脑设备',
     inputSchema: z.object({}),
   }, async () => {
-    // Mark all connected devices as agent-paired
-    for (const d of devices.values()) {
-      resetActivityTimer(d);
-    }
     const list = Array.from(devices.values()).map(d => ({
       id: d.id, name: d.name, os: d.os, arch: d.arch,
       hostname: d.hostname, connectedAt: d.connectedAt,
@@ -131,109 +123,255 @@ function createMcpServer() {
     return { content: [{ type: 'text', text }] };
   });
 
-  server.registerTool('execute_command', {
-    description: '在指定的私人电脑上执行 shell 命令并返回结果',
+  // ═══ 会话管理工具（新） ═══════════════════
+
+  server.registerTool('create_session', {
+    description: '在远程电脑上创建一个新的工作会话，并设为当前默认会话',
     inputSchema: z.object({
-      deviceId: z.string().describe('目标设备 ID'),
+      workDir: z.string().describe('工作目录（绝对路径）'),
+      name: z.string().optional().describe('会话名称，不传则自动生成'),
       code: z.string().describe('客户端显示的验证码'),
-      command: z.string().describe('要执行的 shell 命令'),
-      timeout: z.number().optional().describe('命令超时时间（毫秒），默认 30000'),
     }),
-  }, async ({ deviceId, code, command, timeout }) => {
-    const device = devices.get(deviceId);
-    if (!device) return { content: [{ type: 'text', text: 'Error: device not found' }], isError: true };
+  }, async ({ workDir, name, code }) => {
+    const device = getDefaultDevice();
+    if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
     if (device.authCode !== code) {
-      return { content: [{ type: 'text', text: 'Error: 验证码错误，请在客户端查看最新验证码' }], isError: true };
+      return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
     }
-    // 通知设备：Agent已配对成功
-    resetActivityTimer(device);
+    const result = await handleSessionOp('create', { workDir, name }, device.id);
+    const session = result.payload;
+    return { content: [{ type: 'text', text: `会话已创建: ${session.name} (${session.id})\n工作目录: ${session.workDir}\n当前路径: ${session.cwd}` }] };
+  });
+
+  server.registerTool('exec', {
+    description: '在当前默认会话中执行 shell 命令，保持工作目录和环境变量',
+    inputSchema: z.object({
+      command: z.string().describe('要执行的命令'),
+      timeout: z.number().optional().describe('超时时间（毫秒），默认 30000'),
+      code: z.string().describe('客户端显示的验证码'),
+    }),
+  }, async ({ command, timeout, code }) => {
+    const device = getDefaultDevice();
+    if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
+    if (device.authCode !== code) {
+      return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
+    }
     if (!checkCommandAllowed(command)) {
-      return { content: [{ type: 'text', text: `Error: command '${command.split(/\s+/)[0]}' is not in the allowed list` }], isError: true };
+      return { content: [{ type: 'text', text: `Error: command '${command.split(/\s+/)[0]}' is not allowed` }], isError: true };
     }
-    const output = await executeCommand(deviceId, command, timeout);
+    const result = await handleSessionOp('exec', { command, timeout }, device.id);
+    const o = result.payload;
     const text = [
-      `Exit Code: ${output.exitCode}`,
-      output.stdout ? `\nSTDOUT:\n${output.stdout}` : '',
-      output.stderr ? `\nSTDERR:\n${output.stderr}` : '',
-      output.killed ? '\n[Process was killed due to timeout]' : '',
+      `Exit Code: ${o.exitCode}`,
+      o.stdout ? `\nSTDOUT:\n${o.stdout}` : '',
+      o.stderr ? `\nSTDERR:\n${o.stderr}` : '',
+      o.killed ? '\n[Process was killed due to timeout]' : '',
     ].join('');
     return { content: [{ type: 'text', text }] };
   });
 
   server.registerTool('read_file', {
-    description: '读取私人电脑上的文件内容',
+    description: '在当前默认会话中读取文件（支持相对路径，基于会话工作目录）',
     inputSchema: z.object({
-      deviceId: z.string().describe('目标设备 ID'),
+      path: z.string().describe('文件路径（相对路径基于会话 cwd）'),
+      code: z.string().describe('客户端显示的验证码'),
+    }),
+  }, async ({ path, code }) => {
+    const device = getDefaultDevice();
+    if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
+    if (device.authCode !== code) {
+      return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
+    }
+    const result = await handleSessionOp('read_file', { path }, device.id);
+    const o = result.payload;
+    if (o.success) {
+      return { content: [{ type: 'text', text: o.content }] };
+    }
+    return { content: [{ type: 'text', text: `Error: ${o.error}` }], isError: true };
+  });
+
+  server.registerTool('write_file', {
+    description: '在当前默认会话中写入文件（支持相对路径，基于会话工作目录）',
+    inputSchema: z.object({
+      path: z.string().describe('文件路径（相对路径基于会话 cwd）'),
+      content: z.string().describe('要写入的文件内容'),
+      code: z.string().describe('客户端显示的验证码'),
+    }),
+  }, async ({ path, content, code }) => {
+    const device = getDefaultDevice();
+    if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
+    if (device.authCode !== code) {
+      return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
+    }
+    const result = await handleSessionOp('write_file', { path, content }, device.id);
+    const o = result.payload;
+    if (o.success) {
+      return { content: [{ type: 'text', text: `文件已写入: ${o.path}` }] };
+    }
+    return { content: [{ type: 'text', text: `Error: ${o.error}` }], isError: true };
+  });
+
+  server.registerTool('close_session', {
+    description: '关闭当前默认会话，清理持久进程和缓存',
+    inputSchema: z.object({
+      code: z.string().describe('客户端显示的验证码'),
+    }),
+  }, async ({ code }) => {
+    const device = getDefaultDevice();
+    if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
+    if (device.authCode !== code) {
+      return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
+    }
+    const result = await handleSessionOp('close', {}, device.id);
+    const o = result.payload;
+    if (o.success) {
+      return { content: [{ type: 'text', text: `会话已关闭` }] };
+    }
+    return { content: [{ type: 'text', text: `Error: ${o.error}` }], isError: true };
+  });
+
+  server.registerTool('list_sessions', {
+    description: '列出远程电脑上所有已创建的工作会话',
+    inputSchema: z.object({
+      code: z.string().describe('客户端显示的验证码'),
+    }),
+  }, async ({ code }) => {
+    const device = getDefaultDevice();
+    if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
+    if (device.authCode !== code) {
+      return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
+    }
+    const result = await handleSessionOp('list', {}, device.id);
+    const sessions = result.payload.sessions || [];
+    if (sessions.length === 0) {
+      return { content: [{ type: 'text', text: '当前没有会话。使用 create_session 创建新会话。' }] };
+    }
+    const text = sessions.map(s =>
+      `${s.isDefault ? '👉' : '  '} ${s.name} (${s.id})\n` +
+      `    工作目录: ${s.workDir}\n` +
+      `    当前路径: ${s.cwd}\n` +
+      `    活跃: ${s.alive ? '✅' : '❌'}\n` +
+      `    最后活动: ${new Date(s.lastActive * 1000).toLocaleString()}`
+    ).join('\n\n');
+    return { content: [{ type: 'text', text }] };
+  });
+
+  server.registerTool('switch_session', {
+    description: '切换到指定的会话，后续操作将在该会话中执行',
+    inputSchema: z.object({
+      sessionId: z.string().describe('目标会话 ID'),
+      code: z.string().describe('客户端显示的验证码'),
+    }),
+  }, async ({ sessionId, code }) => {
+    const device = getDefaultDevice();
+    if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
+    if (device.authCode !== code) {
+      return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
+    }
+    const result = await handleSessionOp('switch', { sessionId }, device.id);
+    const o = result.payload;
+    if (o.success) {
+      return { content: [{ type: 'text', text: `已切换到会话: ${o.name} (${o.sessionId})\n工作目录: ${o.workDir}` }] };
+    }
+    return { content: [{ type: 'text', text: `Error: ${o.error}` }], isError: true };
+  });
+
+  // ═══ 保留旧工具（兼容旧版智能体） ═════════
+
+  server.registerTool('execute_command', {
+    description: '[旧版] 在指定的私人电脑上执行 shell 命令（建议使用 exec + 会话管理）',
+    inputSchema: z.object({
+      deviceId: z.string().optional().describe('目标设备 ID（不传则自动选择）'),
+      code: z.string().describe('客户端显示的验证码'),
+      command: z.string().describe('要执行的 shell 命令'),
+      timeout: z.number().optional().describe('超时时间（毫秒），默认 30000'),
+    }),
+  }, async ({ deviceId, code, command, timeout }) => {
+    const device = deviceId ? devices.get(deviceId) : getDefaultDevice();
+    if (!device) return { content: [{ type: 'text', text: 'Error: device not found' }], isError: true };
+    if (device.authCode !== code) {
+      return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
+    }
+    if (!checkCommandAllowed(command)) {
+      return { content: [{ type: 'text', text: `Error: command not allowed` }], isError: true };
+    }
+    const output = await sendAndWait('execute_command', { command, timeout }, device.id);
+    const o = output.payload;
+    const text = [
+      `Exit Code: ${o.exitCode}`,
+      o.stdout ? `\nSTDOUT:\n${o.stdout}` : '',
+      o.stderr ? `\nSTDERR:\n${o.stderr}` : '',
+      o.killed ? '\n[Process was killed due to timeout]' : '',
+    ].join('');
+    return { content: [{ type: 'text', text }] };
+  });
+
+  server.registerTool('read_file_old', {
+    description: '[旧版] 读取私人电脑上的文件（建议使用 read_file + 会话管理）',
+    inputSchema: z.object({
+      deviceId: z.string().optional().describe('目标设备 ID（不传则自动选择）'),
       code: z.string().describe('客户端显示的验证码'),
       path: z.string().describe('文件绝对路径'),
     }),
   }, async ({ deviceId, code, path }) => {
-    const device = devices.get(deviceId);
+    const device = deviceId ? devices.get(deviceId) : getDefaultDevice();
     if (!device) return { content: [{ type: 'text', text: 'Error: device not found' }], isError: true };
     if (device.authCode !== code) {
-      return { content: [{ type: 'text', text: 'Error: 验证码错误，请在客户端查看最新验证码' }], isError: true };
+      return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
     }
-    resetActivityTimer(device);
     if (!checkPathAllowed(path)) {
-      return { content: [{ type: 'text', text: `Error: path '${path}' is outside allowed file prefix` }], isError: true };
+      return { content: [{ type: 'text', text: 'Error: path outside allowed prefix' }], isError: true };
     }
-    const output = await readFile(deviceId, path);
-    if (output.success) {
-      return { content: [{ type: 'text', text: output.content }] };
-    }
-    return { content: [{ type: 'text', text: `Error: ${output.error}` }], isError: true };
+    const output = await sendAndWait('read_file', { path }, device.id);
+    const o = output.payload;
+    if (o.success) return { content: [{ type: 'text', text: o.content }] };
+    return { content: [{ type: 'text', text: `Error: ${o.error}` }], isError: true };
   });
 
-  server.registerTool('write_file', {
-    description: '将内容写入私人电脑上的文件',
+  server.registerTool('write_file_old', {
+    description: '[旧版] 写入私人电脑上的文件（建议使用 write_file + 会话管理）',
     inputSchema: z.object({
-      deviceId: z.string().describe('目标设备 ID'),
+      deviceId: z.string().optional().describe('目标设备 ID（不传则自动选择）'),
       code: z.string().describe('客户端显示的验证码'),
       path: z.string().describe('文件绝对路径'),
       content: z.string().describe('要写入的文件内容'),
     }),
   }, async ({ deviceId, code, path, content }) => {
-    const device = devices.get(deviceId);
+    const device = deviceId ? devices.get(deviceId) : getDefaultDevice();
     if (!device) return { content: [{ type: 'text', text: 'Error: device not found' }], isError: true };
     if (device.authCode !== code) {
-      return { content: [{ type: 'text', text: 'Error: 验证码错误，请在客户端查看最新验证码' }], isError: true };
+      return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
     }
-    resetActivityTimer(device);
     if (!checkPathAllowed(path)) {
-      return { content: [{ type: 'text', text: `Error: path '${path}' is outside allowed file prefix` }], isError: true };
+      return { content: [{ type: 'text', text: 'Error: path outside allowed prefix' }], isError: true };
     }
-    const output = await writeFile(deviceId, path, content);
-    if (output.success) {
-      return { content: [{ type: 'text', text: `File written successfully: ${path}` }] };
-    }
-    return { content: [{ type: 'text', text: `Error: ${output.error}` }], isError: true };
+    const output = await sendAndWait('write_file', { path, content }, device.id);
+    const o = output.payload;
+    if (o.success) return { content: [{ type: 'text', text: `File written: ${path}` }] };
+    return { content: [{ type: 'text', text: `Error: ${o.error}` }], isError: true };
   });
 
   server.registerTool('get_device_info', {
-    description: '获取私人电脑的系统信息（OS、CPU、内存等）',
+    description: '获取远程电脑的系统信息（OS、CPU、内存等）',
     inputSchema: z.object({
-      deviceId: z.string().describe('目标设备 ID'),
       code: z.string().describe('客户端显示的验证码'),
     }),
-  }, async ({ deviceId, code }) => {
-    const device = devices.get(deviceId);
-    if (!device) return { content: [{ type: 'text', text: 'Error: device not found' }], isError: true };
+  }, async ({ code }) => {
+    const device = getDefaultDevice();
+    if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
     if (device.authCode !== code) {
-      return { content: [{ type: 'text', text: 'Error: 验证码错误，请在客户端查看最新验证码' }], isError: true };
+      return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
     }
-        resetActivityTimer(device);
-    const info = await getDeviceInfo(deviceId);
-    const gb = (b) => (b / 1024 / 1024 / 1024).toFixed(1) + ' GB';
+    const result = await sendAndWait('get_device_info', {}, device.id);
+    const info = result.payload;
     const text = [
       `Hostname: ${info.hostname}`,
       `Platform: ${info.platform}`,
       `Architecture: ${info.arch}`,
       `CPU Cores: ${info.cpus}`,
-      `Total Memory: ${gb(info.totalMem)}`,
-      `Free Memory: ${gb(info.freeMem)}`,
       `Uptime: ${(info.uptime / 3600).toFixed(1)} hours`,
       `Home Directory: ${info.homedir}`,
-      `User: ${info.userInfo.username}`,
+      `User: ${info.userInfo?.username || 'unknown'}`,
     ].join('\n');
     return { content: [{ type: 'text', text }] };
   });
@@ -241,27 +379,7 @@ function createMcpServer() {
   return server;
 }
 
-async function executeCommand(deviceId, command, timeout) {
-  const result = await sendAndWait('execute_command', { command, timeout }, deviceId);
-  return result.payload;
-}
-
-async function readFile(deviceId, path) {
-  const result = await sendAndWait('read_file', { path }, deviceId);
-  return result.payload;
-}
-
-async function writeFile(deviceId, path, content) {
-  const result = await sendAndWait('write_file', { path, content }, deviceId);
-  return result.payload;
-}
-
-async function getDeviceInfo(deviceId) {
-  const result = await sendAndWait('get_device_info', {}, deviceId);
-  return result.payload;
-}
-
-// --- 启动 ---
+// ─── HTTP + WebSocket 服务 ──────────────────
 
 const httpServer = createServer(async (req, res) => {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
@@ -315,7 +433,6 @@ httpServer.on('upgrade', (req, socket, head) => {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
 
   if (url.pathname === '/device') {
-    // 仅通过 Header 传 PSK，不用 URL 参数（避免记录到日志）
     const psk = req.headers['x-psk'];
     if (psk !== PSK) {
       socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
@@ -347,14 +464,11 @@ wss.on('connection', (ws, req) => {
     if (type === 'register') {
       const { deviceName, os, arch, hostname, authCode } = msg;
       const name = deviceName || 'unknown';
-      
-      // 设备名白名单检查
       if (ALLOWED_DEVICES.length > 0 && !ALLOWED_DEVICES.includes(name)) {
-        console.error(`[device] rejected: ${name} (不在白名单中)`);
+        console.error(`[device] rejected: ${name}`);
         sendJSON(ws, { type: 'register_result', requestId, success: false, error: 'device not allowed' });
         return;
       }
-      
       devices.set(deviceId, {
         id: deviceId, name, os: os || 'unknown', arch: arch || 'unknown',
         hostname: hostname || 'unknown', ws,
@@ -366,7 +480,6 @@ wss.on('connection', (ws, req) => {
       return;
     }
 
-    // 更新验证码
     if (type === 'update_code') {
       const device = devices.get(deviceId);
       if (device) {
@@ -407,9 +520,8 @@ httpServer.listen(PORT, () => {
   console.error(`[server] listening on http://0.0.0.0:${PORT}`);
   console.error(`[server] MCP endpoint: http://0.0.0.0:${PORT}${MCP_PATH}`);
   console.error(`[server] Device WS: ws://0.0.0.0:${PORT}/device`);
-  console.error(`[server] 注意: PSK 仅通过 Header 传递，URL 参数已禁用`);
+  console.error(`[server] Session management enabled`);
   if (ALLOWED_COMMANDS.length) console.error(`[server] allowed commands: ${ALLOWED_COMMANDS.join(', ')}`);
-  if (ALLOWED_FILE_PREFIX) console.error(`[server] allowed file prefix: ${ALLOWED_FILE_PREFIX}`);
 });
 
 process.on('SIGINT', () => {
@@ -418,5 +530,3 @@ process.on('SIGINT', () => {
   httpServer.close();
   process.exit(0);
 });
-
-

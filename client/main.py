@@ -25,6 +25,9 @@ from tkinter import ttk, messagebox
 CONFIG_DIR = Path(os.environ.get("YUNQIAO_CONFIG", str(Path.home() / ".yunqiao")))
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 CONFIG_FILE = CONFIG_DIR / "config.json"
+SESSIONS_DIR = CONFIG_DIR / "sessions"
+SESSIONS_INDEX = CONFIG_DIR / "sessions.json"
+SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
 DEFAULT_RELAY = "wss://yunqiao.very.im/device"
 
 # ─── 配色 ────────────────────────────────────
@@ -116,6 +119,8 @@ class App:
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
         if not state["psk"]:
             self.root.after(500, self.open_settings)
+        # 加载会话
+        self.root.after(200, self.refresh_sessions)
 
     # ─── UI 构建 ────────────────────────────
     def build_ui(self):
@@ -266,6 +271,23 @@ class App:
                   font=("Segoe UI", 10), padx=10, pady=3,
                   cursor="hand2", command=self.refresh_code).pack(fill=tk.X)
 
+        # ─── 会话管理面板 ────────────────────
+        sess_card = self.make_card(content, "工作区管理")
+        self.sess_info = tk.Label(sess_card, text="加载中...", bg=C["card"], fg=C["text2"],
+                                   font=("Segoe UI", 10))
+        self.sess_info.pack(fill=tk.X, pady=2)
+        sess_btn = tk.Frame(sess_card, bg=C["card"])
+        sess_btn.pack(fill=tk.X)
+        tk.Button(sess_btn, text="➕ 新建会话", bg=C["primary"], fg="white", bd=0,
+                  font=("Segoe UI", 9), padx=8, pady=2,
+                  command=self.create_session_dialog).pack(side=tk.LEFT, padx=(0, 4))
+        tk.Button(sess_btn, text="🔄 刷新", bg=C["int8"], fg=C["text"], bd=0,
+                  font=("Segoe UI", 9), padx=8, pady=2,
+                  command=self.refresh_sessions).pack(side=tk.LEFT, padx=(0, 4))
+        tk.Button(sess_btn, text="❌ 关闭当前", bg=C["danger"], fg="white", bd=0,
+                  font=("Segoe UI", 9), padx=8, pady=2,
+                  command=self.close_session).pack(side=tk.LEFT)
+
         # 日志
         log_frame = tk.Frame(content, bg=C["log_bg"], padx=6, pady=4)
         log_frame.pack(fill=tk.BOTH, expand=True, pady=(2, 0))
@@ -278,8 +300,11 @@ class App:
         self.log_text.insert("1.0", "等待连接...")
 
         # 版本
-        tk.Label(content, text="云桥 MCP v1.0.0", bg=C["bg"], fg=C["text3"],
+        tk.Label(content, text="云桥 MCP v2.0.0（会话管理）", bg=C["bg"], fg=C["text3"],
                  font=("Segoe UI", 9)).pack(pady=(2, 0))
+
+        # 加载会话列表
+        self.root.after(100, self.refresh_sessions)
 
     def make_card(self, parent, title):
         card = tk.Frame(parent, bg=C["card"], padx=6, pady=3)
@@ -323,6 +348,113 @@ class App:
     def refresh_code(self):
         state["pairCode"] = gen_code()
         self.code_label.configure(text=state["pairCode"])
+
+    # ─── 会话管理 ──────────────────────────
+    def _load_sessions(self):
+        """从磁盘加载会话列表"""
+        sessions = []
+        if SESSIONS_INDEX.exists():
+            try:
+                data = json.loads(SESSIONS_INDEX.read_text("utf-8"))
+                default_id = data.get("defaultSessionId")
+                for sid in data.get("sessions", []):
+                    sfile = SESSIONS_DIR / f"{sid}.json"
+                    if sfile.exists():
+                        sd = json.loads(sfile.read_text("utf-8"))
+                        sd["isDefault"] = sd["id"] == default_id
+                        sessions.append(sd)
+            except:
+                pass
+        return sessions
+
+    def refresh_sessions(self):
+        """刷新会话列表显示"""
+        sessions = self._load_sessions()
+        if not sessions:
+            self.sess_info.configure(text="没有会话。点击「新建会话」创建。")
+            return
+        lines = []
+        for s in sessions:
+            prefix = "👉" if s.get("isDefault") else "  "
+            lines.append(f"{prefix} {s.get('name', 'unnamed')} ({s['id']})")
+            lines.append(f"  目录: {s.get('workDir', '?')}")
+        self.sess_info.configure(text="\n".join(lines))
+
+    def create_session_dialog(self):
+        """新建会话弹窗"""
+        win = tk.Toplevel(self.root)
+        win.title("新建工作区")
+        win.resizable(False, False)
+        win.configure(bg=C["panel"])
+        win.transient(self.root)
+        win.grab_set()
+        sw = self.root.winfo_screenwidth()
+        sh = self.root.winfo_screenheight()
+        win.geometry(f"320x180+{(sw-320)//2}+{(sh-180)//2}")
+
+        tk.Label(win, text="工作目录", bg=C["panel"], fg=C["text"],
+                 font=("Segoe UI", 10)).pack(pady=(10, 2), anchor="w", padx=10)
+        dir_entry = tk.Entry(win, font=("Segoe UI", 10))
+        dir_entry.insert(0, state.get("workDir", "C:\\Users\\Administrator"))
+        dir_entry.pack(fill=tk.X, padx=10, pady=2)
+
+        tk.Label(win, text="会话名称（可选）", bg=C["panel"], fg=C["text"],
+                 font=("Segoe UI", 10)).pack(pady=(2, 2), anchor="w", padx=10)
+        name_entry = tk.Entry(win, font=("Segoe UI", 10))
+        name_entry.pack(fill=tk.X, padx=10, pady=2)
+
+        def do_create():
+            work_dir = dir_entry.get().strip()
+            name = name_entry.get().strip() or None
+            if not work_dir:
+                return
+            # 本地创建会话文件
+            sid = str(random.randint(10000000, 99999999))
+            sdata = {
+                "id": sid,
+                "name": name or f"workspace_{sid[:4]}",
+                "workDir": work_dir,
+                "cwd": work_dir,
+                "createdAt": time.time(),
+                "lastActive": time.time(),
+            }
+            sfile = SESSIONS_DIR / f"{sid}.json"
+            sfile.write_text(json.dumps(sdata, indent=2), "utf-8")
+            # 更新索引
+            idx = {"defaultSessionId": sid, "sessions": [sid]}
+            if SESSIONS_INDEX.exists():
+                try:
+                    old = json.loads(SESSIONS_INDEX.read_text("utf-8"))
+                    old["sessions"].append(sid)
+                    old["defaultSessionId"] = sid
+                    idx = old
+                except:
+                    pass
+            SESSIONS_INDEX.write_text(json.dumps(idx, indent=2), "utf-8")
+            win.destroy()
+            self.refresh_sessions()
+
+        tk.Button(win, text="创建", bg=C["primary"], fg="white", bd=0,
+                  font=("Segoe UI", 10), padx=20, pady=3,
+                  command=do_create).pack(pady=10)
+
+    def close_session(self):
+        """关闭当前默认会话"""
+        if not SESSIONS_INDEX.exists():
+            return
+        try:
+            data = json.loads(SESSIONS_INDEX.read_text("utf-8"))
+            default_id = data.get("defaultSessionId")
+            if default_id and default_id in data.get("sessions", []):
+                sfile = SESSIONS_DIR / f"{default_id}.json"
+                if sfile.exists():
+                    sfile.unlink()
+                data["sessions"] = [s for s in data["sessions"] if s != default_id]
+                data["defaultSessionId"] = data["sessions"][0] if data["sessions"] else None
+                SESSIONS_INDEX.write_text(json.dumps(data, indent=2), "utf-8")
+                self.refresh_sessions()
+        except:
+            pass
 
     # ─── 设置弹窗 ──────────────────────────
     def open_settings(self):
