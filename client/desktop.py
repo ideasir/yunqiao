@@ -61,12 +61,12 @@ async def _ws_connect_headers():
     return {'extra_headers': {"X-PSK": RELAY_PSK}}
 
 async def ws_connect():
-    global WS, device_id
+    global WS, device_id, SHOULD_RECONNECT
     import websockets
     url = RELAY_URL
     ws_kwargs = await _ws_connect_headers()
     ws_kwargs['ping_interval'] = 30
-    while True:
+    while SHOULD_RECONNECT:
         try:
             async with websockets.connect(url, **ws_kwargs) as ws:
                 WS = ws
