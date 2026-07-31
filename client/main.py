@@ -373,16 +373,13 @@ class App:
         self.msg_entry.delete(0, tk.END)
         self.add_log("INFO", f"发送给智能体: {text[:50]}")
         # 通过 WSS 发送
-        import asyncio
-        async def send():
-            if state.get("ws_client"):
-                await state["ws_client"].send(json.dumps({
-                    "type": "agent_message", "requestId": "msg_" + str(int(time.time())),
-                    "text": text,
-                }))
-        try:
-            asyncio.run(send())
-        except:
+        ws = state.get("ws_client")
+        if ws:
+            self._send(ws, {
+                "type": "agent_message", "requestId": "msg_" + str(int(time.time())),
+                "text": text,
+            })
+        else:
             self.add_log("ERROR", "发送失败：未连接")
 
     def refresh_code(self):
@@ -604,6 +601,7 @@ class App:
 
 
     def start_connect(self):
+        self._loop = None
         self.set_status("connecting", "连接中...")
         self.connect_btn.configure(text="断开", fg=C["danger"], bg=C["int8"])
         if state.get("directMode", True):
@@ -613,6 +611,17 @@ class App:
         t = threading.Thread(target=self._ws_loop, daemon=True)
         t.start()
 
+
+    def _send(self, ws, data):
+        """线程安全地通过 ws 发送数据（ws 属于主事件循环）"""
+        try:
+            loop = self._loop
+            if loop is None:
+                return
+            asyncio.run_coroutine_threadsafe(ws.send(json.dumps(data)), loop)
+        except Exception as e:
+            self.add_log("ERROR", f"发送失败: {e}")
+
     def toggle_connect(self):
         """切换连接/断开"""
         if state["ws_client"] and state["connected"]:
@@ -621,7 +630,11 @@ class App:
             state["connected"] = False
             ws = state["ws_client"]
             state["ws_client"] = None
-            try: asyncio.run(ws.close())
+            try:
+                if self._loop:
+                    asyncio.run_coroutine_threadsafe(ws.close(), self._loop)
+                else:
+                    asyncio.run(ws.close())
             except: pass
             self.set_status("disconnected", "未连接")
             self.connect_btn.configure(text="连接", fg=C["success"], bg=C["int8"])
@@ -646,9 +659,10 @@ class App:
             try:
                 self.add_log("INFO", f"正在连接 {url}...")
                 t0 = time.time()
-                                # 用自定义请求头传递PSK
+                self._loop = asyncio.get_running_loop()
+                # 用自定义请求头传递PSK
                 async with websockets.connect(
-                    url, extra_headers={"X-PSK": psk},
+                    url, additional_headers={"X-PSK": psk},
                 ) as ws:
                     state["ws_client"] = ws
                     state["connected"] = True
@@ -929,10 +943,7 @@ class App:
                 proc.kill()
                 stdout, stderr = proc.communicate()
                 ec = 1; killed = True
-            import asyncio
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(ws.send(json.dumps({
+            self._send(ws, {
                 "type": "command_result" if rid != "0" else "session_op_result",
                 "requestId": rid,
                 "payload": {
@@ -941,17 +952,14 @@ class App:
                     "stderr": (stderr or b"").decode("utf-8", errors="replace"),
                     "killed": killed,
                 },
-            })))
+            })
             self.add_log("INFO", f"完成, 退出码: {ec}")
         except Exception as e:
-            import asyncio
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(ws.send(json.dumps({
+            self._send(ws, {
                 "type": "command_result" if rid != "0" else "session_op_result",
                 "requestId": rid,
                 "payload": {"exitCode": 1, "stdout": "", "stderr": str(e), "killed": False},
-            })))
+            })
             self.add_log("ERROR", f"执行失败: {e}")
 
     def _ensure_shell(self):
@@ -986,45 +994,39 @@ class App:
             stdout_lines.append(decoded)
         return {"exitCode": 0, "stdout": "\n".join(stdout_lines), "stderr": "", "killed": False}
     def _read_file(self, ws, rid, path):
-        import asyncio
-        async def run():
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    content = f.read()
-                await ws.send(json.dumps({
-                    "type": "file_result", "requestId": rid,
-                    "payload": {"success": True, "content": content, "path": path},
-                }))
-                self.add_log("INFO", f"读取文件: {path}")
-            except Exception as e:
-                await ws.send(json.dumps({
-                    "type": "file_result", "requestId": rid,
-                    "payload": {"success": False, "error": str(e), "path": path},
-                }))
-                self.add_log("ERROR", f"读取失败: {e}")
-        asyncio.run(run())
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                content = f.read()
+            self._send(ws, {
+                "type": "file_result", "requestId": rid,
+                "payload": {"success": True, "content": content, "path": path},
+            })
+            self.add_log("INFO", f"读取文件: {path}")
+        except Exception as e:
+            self._send(ws, {
+                "type": "file_result", "requestId": rid,
+                "payload": {"success": False, "error": str(e), "path": path},
+            })
+            self.add_log("ERROR", f"读取失败: {e}")
 
     def _write_file(self, ws, rid, path, content):
-        import asyncio
-        async def run():
-            try:
-                dirpath = os.path.dirname(path)
-                if dirpath:
-                    os.makedirs(dirpath, exist_ok=True)
-                with open(path, "w", encoding="utf-8") as f:
-                    f.write(content)
-                await ws.send(json.dumps({
-                    "type": "file_result", "requestId": rid,
-                    "payload": {"success": True, "path": path},
-                }))
-                self.add_log("INFO", f"写入文件: {path}")
-            except Exception as e:
-                await ws.send(json.dumps({
-                    "type": "file_result", "requestId": rid,
-                    "payload": {"success": False, "error": str(e), "path": path},
-                }))
-                self.add_log("ERROR", f"写入失败: {e}")
-        asyncio.run(run())
+        try:
+            dirpath = os.path.dirname(path)
+            if dirpath:
+                os.makedirs(dirpath, exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(content)
+            self._send(ws, {
+                "type": "file_result", "requestId": rid,
+                "payload": {"success": True, "path": path},
+            })
+            self.add_log("INFO", f"写入文件: {path}")
+        except Exception as e:
+            self._send(ws, {
+                "type": "file_result", "requestId": rid,
+                "payload": {"success": False, "error": str(e), "path": path},
+            })
+            self.add_log("ERROR", f"写入失败: {e}")
 
     def _handle_session_op(self, ws, rid, payload):
         """处理会话管理操作"""
@@ -1053,13 +1055,10 @@ class App:
                                     break
                     except: pass
                 if existing:
-                    import asyncio
-                    newloop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(newloop)
-                    newloop.run_until_complete(ws.send(json.dumps({
+                    self._send(ws, {
                         "type": "session_op_result", "requestId": rid,
                         "payload": existing,
-                    })))
+                    })
                     self.add_log("INFO", f"复用会话: {existing['name']} ({existing['id']})")
                     return
                 # 新建会话
@@ -1085,13 +1084,10 @@ class App:
                         idx = old
                     except: pass
                 idx_file.write_text(json.dumps(idx, indent=2), "utf-8")
-                import asyncio
-                newloop = asyncio.new_event_loop()
-                asyncio.set_event_loop(newloop)
-                newloop.run_until_complete(ws.send(json.dumps({
+                self._send(ws, {
                     "type": "session_op_result", "requestId": rid,
                     "payload": sdata,
-                })))
+                })
                 self.add_log("INFO", f"会话已创建: {sdata['name']} ({sid})")
 
             elif op == "exec":
@@ -1138,13 +1134,10 @@ class App:
                                 sd["isDefault"] = sd["id"] == default_id
                                 sessions.append(sd)
                     except: pass
-                import asyncio
-                newloop = asyncio.new_event_loop()
-                asyncio.set_event_loop(newloop)
-                newloop.run_until_complete(ws.send(json.dumps({
+                self._send(ws, {
                     "type": "session_op_result", "requestId": rid,
                     "payload": {"sessions": sessions},
-                })))
+                })
 
             elif op == "close":
                 import os
@@ -1164,13 +1157,10 @@ class App:
                         data["sessions"] = [s for s in data["sessions"] if s != sid]
                         data["defaultSessionId"] = data["sessions"][0] if data["sessions"] else None
                         idx_file.write_text(json.dumps(data, indent=2), "utf-8")
-                import asyncio
-                newloop = asyncio.new_event_loop()
-                asyncio.set_event_loop(newloop)
-                newloop.run_until_complete(ws.send(json.dumps({
+                self._send(ws, {
                     "type": "session_op_result", "requestId": rid,
                     "payload": {"success": True},
-                })))
+                })
                 self.add_log("INFO", "会话已关闭")
 
             elif op == "switch":
@@ -1185,68 +1175,40 @@ class App:
                         sd = {}
                         if sfile.exists():
                             sd = json.loads(sfile.read_text("utf-8"))
-                        import asyncio
-                        newloop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(newloop)
-                        newloop.run_until_complete(ws.send(json.dumps({
+                        self._send(ws, {
                             "type": "session_op_result", "requestId": rid,
                             "payload": {"success": True, "sessionId": sid, "name": sd.get("name", ""), "workDir": sd.get("workDir", "")},
-                        })))
+                        })
                         self.add_log("INFO", f"已切换到会话: {sid}")
                         return
-                import asyncio
-                newloop = asyncio.new_event_loop()
-                asyncio.set_event_loop(newloop)
-                newloop.run_until_complete(ws.send(json.dumps({
+                self._send(ws, {
                     "type": "session_op_result", "requestId": rid,
                     "payload": {"success": False, "error": f"会话 {sid} 不存在"},
-                })))
+                })
 
             else:
-                import asyncio
-                newloop = asyncio.new_event_loop()
-                asyncio.set_event_loop(newloop)
-                newloop.run_until_complete(ws.send(json.dumps({
+                self._send(ws, {
                     "type": "session_op_result", "requestId": rid,
                     "payload": {"success": False, "error": f"未知操作: {op}"},
-                })))
+                })
         except Exception as e:
-            import asyncio
-            newloop = asyncio.new_event_loop()
-            asyncio.set_event_loop(newloop)
-            newloop.run_until_complete(ws.send(json.dumps({
+            self._send(ws, {
                 "type": "session_op_result", "requestId": rid,
                 "payload": {"success": False, "error": str(e)},
-            })))
+            })
 
     def _get_info(self, ws, rid):
         """获取设备信息"""
-        import asyncio
-        async def run():
-            await ws.send(json.dumps({
-                "type": "device_info", "requestId": rid,
-                "payload": {
-                    "hostname": platform.node(), "platform": sys.platform,
-                    "arch": platform.machine(), "cpus": os.cpu_count() or 0,
-                    "uptime": time.time(), "homedir": str(Path.home()),
-                    "userInfo": {"username": os.getlogin()},
-                },
-            }))
-            self.add_log("INFO", "已返回系统信息")
-        asyncio.run(run())
-        import asyncio
-        async def run():
-            await ws.send(json.dumps({
-                "type": "device_info", "requestId": rid,
-                "payload": {
-                    "hostname": platform.node(), "platform": sys.platform,
-                    "arch": platform.machine(), "cpus": os.cpu_count() or 0,
-                    "uptime": time.time(), "homedir": str(Path.home()),
-                    "userInfo": {"username": os.getlogin()},
-                },
-            }))
-            self.add_log("INFO", "已返回系统信息")
-        asyncio.run(run())
+        self._send(ws, {
+            "type": "device_info", "requestId": rid,
+            "payload": {
+                "hostname": platform.node(), "platform": sys.platform,
+                "arch": platform.machine(), "cpus": os.cpu_count() or 0,
+                "uptime": time.time(), "homedir": str(Path.home()),
+                "userInfo": {"username": os.getlogin()},
+            },
+        })
+        self.add_log("INFO", "已返回系统信息")
 
     def browse_workdir(self):
         from tkinter import filedialog
@@ -1260,7 +1222,10 @@ class App:
         if state["ws_client"]:
             try:
                 import asyncio
-                asyncio.run(state["ws_client"].close())
+                if self._loop:
+                    asyncio.run_coroutine_threadsafe(state["ws_client"].close(), self._loop)
+                else:
+                    asyncio.run(state["ws_client"].close())
             except: pass
         self.root.destroy()
 

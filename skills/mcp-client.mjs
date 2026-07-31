@@ -13,14 +13,30 @@
  *   node mcp-client.mjs call get_device_info '{"deviceId":"xxx"}'
  */
 
-import { Client } from '/opt/node-v24.11.1-linux-x64/lib/node_modules/mcporter/node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js';
-import { SSEClientTransport } from '/opt/node-v24.11.1-linux-x64/lib/node_modules/mcporter/node_modules/@modelcontextprotocol/sdk/dist/esm/client/sse.js';
+// 可移植加载 MCP SDK：优先标准 npm 包，回退到 mcporter 全局安装路径
+let Client, SSEClientTransport;
+async function loadSdk() {
+  try {
+    ({ Client } = await import('@modelcontextprotocol/sdk/client/index.js'));
+    ({ SSEClientTransport } = await import('@modelcontextprotocol/sdk/client/sse.js'));
+  } catch {
+    try {
+      const base = '/opt/node-v24.11.1-linux-x64/lib/node_modules/mcporter/node_modules/@modelcontextprotocol/sdk/dist/esm';
+      ({ Client } = await import(base + '/client/index.js'));
+      ({ SSEClientTransport } = await import(base + '/client/sse.js'));
+    } catch (e) {
+      console.error('无法加载 @modelcontextprotocol/sdk，请安装: npm install @modelcontextprotocol/sdk');
+      process.exit(1);
+    }
+  }
+}
 
 // 从全局环境变量读取验证码
 const AUTH_CODE = process.env.MCP_AUTH_CODE || '';
 const SERVER_URL = process.env.MCP_SERVER_URL || 'https://yunqiao.very.im/mcp';
 
 async function main() {
+  await loadSdk();
   const args = process.argv.slice(2);
   // 支持两种格式:
   //   node mcp-client.mjs <配对码> list

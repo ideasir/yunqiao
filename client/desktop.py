@@ -50,10 +50,10 @@ device_id = ""
 async def ws_connect():
     global WS, device_id
     import websockets
-    url = f"{RELAY_URL}?psk={RELAY_PSK}"
+    url = RELAY_URL
     while True:
         try:
-            async with websockets.connect(url, ping_interval=30) as ws:
+            async with websockets.connect(url, ping_interval=30, additional_headers={"X-PSK": RELAY_PSK}) as ws:
                 WS = ws
                 notify_ui("log", {"text": "已连接到中转服务器"})
                 notify_ui("relay_status", {"status": "connected"})

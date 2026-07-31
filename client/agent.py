@@ -162,7 +162,7 @@ class Session:
         sfile = SESSIONS_DIR / f"{self.id}.json"
         sfile.write_text(json.dumps(self.to_dict(), indent=2), "utf-8")
 
-        async def exec(self, command, timeout=30000):
+    async def exec(self, command, timeout=30000):
         """在会话中执行命令，保持 cwd"""
         self.lastActive = time.time()
 
@@ -246,51 +246,6 @@ class Session:
         except asyncio.TimeoutError:
             return {"exitCode": 1, "stdout": '\n'.join(stdout_lines), "stderr": "", "killed": True}
         stdout = '\n'.join(stdout_lines)
-        self._save()
-        return {"exitCode": 0, "stdout": stdout, "stderr": "", "killed": False}
-    async def _ensure_shell(self):
-        """确保持久 shell 进程在运行"""
-        if self.shell is not None and self.shell.returncode is None:
-            return
-        self.shell = await asyncio.create_subprocess_exec(
-            'powershell', '-NoExit', '-Command', '-',
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-            cwd=self.cwd,
-        )
-        # 等待 shell 启动
-        await asyncio.sleep(0.5)
-
-    async def _exec_persistent(self, command, timeout=30000):
-        """在持久 shell 中执行命令"""
-        await self._ensure_shell()
-
-        # 生成唯一标记，用于分隔命令输出
-        marker = f'__CMD_DONE_{int(time.time() * 1000000)}__'
-        # 写入命令 + 标记行
-        full_cmd = f'{command}
-Write-Host "{marker}"
-'
-        self.shell.stdin.write(full_cmd.encode('utf-8'))
-        await self.shell.stdin.drain()
-
-        # 读取输出直到标记
-        stdout_lines = []
-        try:
-            while True:
-                line = await asyncio.wait_for(
-                    self.shell.stdout.readline(),
-                    timeout=timeout / 1000
-                )
-                decoded = line.decode('utf-8', errors='replace').rstrip('\r\n')
-                if marker in decoded:
-                    break
-                stdout_lines.append(decoded)
-        except asyncio.TimeoutError:
-            return {"exitCode": 1, "stdout": "\n".join(stdout_lines), "stderr": "", "killed": True}
-
-        stdout = "\n".join(stdout_lines)
         self._save()
         return {"exitCode": 0, "stdout": stdout, "stderr": "", "killed": False}
 
@@ -617,12 +572,12 @@ async def handle_command(ws, msg_type, request_id, payload):
 
 # ─── 连接管理 ────────────────────────────────
 async def connect():
-    url = f"{RELAY_URL}?psk={RELAY_PSK}"
+    url = RELAY_URL
     print(f"[agent] connecting to {RELAY_URL}...")
 
     while True:
         try:
-            async with websockets.connect(url, ping_interval=30) as ws:
+            async with websockets.connect(url, ping_interval=30, additional_headers={"X-PSK": RELAY_PSK}) as ws:
                 print(f"[agent] connected!")
                 await ws.send(
                     json.dumps(

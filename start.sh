@@ -48,7 +48,7 @@ start_server() {
     echo "[server] allowed file prefix: $ALLOWED_FILE_PREFIX" >&2
   fi
   echo "[server] starting on port ${PORT:-9876}..." >&2
-  exec node "$SCRIPT_DIR/server/src/index.js"
+  exec node "$SCRIPT_DIR/relay/server.js"
 }
 
 start_agent() {
@@ -57,8 +57,9 @@ start_agent() {
     exit 1
   fi
   check_env
+  PYTHON_BIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
   echo "[agent] connecting to $RELAY_URL..." >&2
-  exec node "$SCRIPT_DIR/local-agent/src/index.js"
+  exec "$PYTHON_BIN" "$SCRIPT_DIR/client/agent.py"
 }
 
 case "${1:-}" in

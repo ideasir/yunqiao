@@ -77,13 +77,13 @@ def refresh_code():
 
 
 async def ws_client():
-    url = f"{RELAY_URL}?psk={RELAY_PSK}"
+    url = RELAY_URL
     add_activity("system", f"正在连接服务器 {RELAY_URL}...")
 
     while True:
         try:
             t_start = time.time()
-            async with websockets.connect(url, ping_interval=10) as ws:
+            async with websockets.connect(url, ping_interval=10, additional_headers={"X-PSK": RELAY_PSK}) as ws:
                 latency = (time.time() - t_start) * 1000
                 server_status["connected"] = True
                 server_status["latency"] = round(latency, 1)
@@ -394,7 +394,7 @@ def build_ui():
         elif uptime < 3600:
             uptime_label.config(text=f"运行时间: {int(uptime//60)}m {int(uptime%60)}s")
         else:
-            uptime_label.config(text=f"运行时间: {int(uptime//3600)}h {int(uptime%60//60)}m")
+            uptime_label.config(text=f"运行时间: {int(uptime//3600)}h {int(uptime%3600//60)}m")
 
         # 处理队列中的刷新
         try:

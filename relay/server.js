@@ -1,7 +1,8 @@
 import { createServer } from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { randomUUID, randomBytes } from 'node:crypto';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { z } from 'zod/v4';
@@ -20,6 +21,7 @@ if (existsSync(PSK_FILE)) {
   console.error(`[server] 🔑 PSK 已从 ${PSK_FILE} 读取`);
 } else {
   PSK = randomBytes(32).toString('hex');
+  mkdirSync(dirname(PSK_FILE), { recursive: true });
   writeFileSync(PSK_FILE, PSK, 'utf-8');
   console.error(`[server] 🔑 新 PSK 已生成并保存到 ${PSK_FILE}`);
   console.error(`[server] 📋 PSK: ${PSK}`);
@@ -504,6 +506,7 @@ wss.on('connection', (ws, req) => {
           deviceName: device.name,
           time: new Date().toISOString(),
         });
+        if (agentMessages.length > 200) agentMessages.shift();
         console.error(`[message] from ${device.name}: ${(msg.text || '').slice(0, 50)}`);
         sendJSON(ws, { type: 'agent_message_result', requestId, success: true });
       }
