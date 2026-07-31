@@ -102,13 +102,19 @@ def handle_message(data):
     p = data.get("payload", {})
     rid = data.get("requestId", "")
     if t == "register_result" and data.get("success"):
-        global device_id
+        global device_id, WS
         device_id = data.get("deviceId", "")
         notify_ui("log", {"text": "注册成功"})
-    elif t == "agent_connected":
-        notify_ui("agent_status", {"status": "connected"})
-    elif t == "agent_disconnected":
-        notify_ui("agent_status", {"status": "disconnected"})
+        # 请求 Agent 状态快照
+        if WS:
+            import asyncio
+            asyncio.run_coroutine_threadsafe(
+                WS.send(json.dumps({"type": "get_agent_status", "requestId": "init_status"})),
+                loop
+            )
+    elif t == "agent_status":
+        is_online = data.get("status") == "online"
+        notify_ui("agent_status", {"status": "connected" if is_online else "disconnected"})
     elif t == "command_result" or t == "session_op_result":
         notify_ui("command_result", {"payload": p})
     elif t == "agent_message":
