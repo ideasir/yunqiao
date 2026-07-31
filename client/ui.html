@@ -34,6 +34,10 @@ tailwind.config = {
 @keyframes slide-up { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
   .animate-pulse { animation: pulse 2s ease-in-out infinite; }
   .animate-slide-up { animation: slide-up 0.2s ease; }
+  @keyframes border-breathe { 0%,100% { border-color: #22c55e; } 50% { border-color: #166534; } }
+  .border-breathe { animation: border-breathe 2s ease-in-out infinite; }
+  @keyframes border-bottom-breathe { 0%,100% { border-bottom-color: #22c55e; } 50% { border-bottom-color: #166534; } }
+  .border-bottom-breathe { animation: border-bottom-breathe 2s ease-in-out infinite; }
 </style>
 
 </head>
@@ -91,7 +95,7 @@ tailwind.config = {
   <aside class="w-64 flex flex-col gap-0 p-0 overflow-y-auto flex-shrink-0 select-none bg-[#0d0d0d] " style="padding: 12px;">
 
     <!-- Agent 节点 -->
-    <div class="rounded-xl bg-[#141414] border border-[#222222]">
+    <div class="rounded-xl bg-[#141414] border border-[#222222]" id="agentCard">
       <div class="flex items-center gap-2 px-3 py-2.5 border-b border-[#1f1f1f]">
         <div class="w-1.5 h-1.5 rounded-full bg-[#666] animate-pulse" id="agentDot"></div>
         <span class="text-xs font-medium text-[#aaa]">上游 Agent</span>
@@ -115,7 +119,7 @@ tailwind.config = {
     </div>
 
     <!-- Relay 节点 -->
-    <div class="rounded-xl bg-[#141414] border border-[#222222]">
+    <div class="rounded-xl bg-[#141414] border border-[#222222]" id="relayCard">
       <div class="flex items-center gap-2 px-3 py-2.5 border-b border-[#1f1f1f]">
         <div class="w-1.5 h-1.5 rounded-full bg-[#666]" id="relayDot"></div>
         <span class="text-xs font-medium text-[#aaa]">中转服务器</span>
@@ -139,7 +143,7 @@ tailwind.config = {
     </div>
 
     <!-- Client 节点 -->
-    <div class="rounded-xl bg-[#141414] border border-[#222222]">
+    <div class="rounded-xl bg-[#141414] border border-[#222222]" id="clientCard">
       <div class="flex items-center gap-2 px-3 py-2.5 border-b border-[#1f1f1f]">
         <div class="w-1.5 h-1.5 rounded-full bg-[#666]" id="clientDot"></div>
         <span class="text-xs font-medium text-[#aaa]">客户端（本地电脑）</span>
@@ -458,13 +462,29 @@ function handleBridge(action, data) {
   }
   else if (action === 'agent_status') {
     var s = document.getElementById('agent状态');
-    if (data.status === 'connected') { s.textContent = '已配对'; s.style.color = '#4ade80'; }
-    else { s.textContent = '待接入'; s.style.color = '#bbb'; }
+    if (data.status === 'connected') {
+      s.textContent = '已配对'; s.style.color = '#4ade80';
+      setCardBorder('relayCard', true);
+      setCardBorder('agentCard', true);
+    } else {
+      s.textContent = '待接入'; s.style.color = '#bbb';
+      setCardBorder('relayCard', false);
+      setCardBorder('agentCard', false);
+      setCardBottomBorder('relayCard', true);
+    }
   }
   else if (action === 'relay_status') {
     var dot = document.getElementById('relayDot');
-    if (data.status === 'connected') { dot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse'; }
-    else { dot.className = 'w-1.5 h-1.5 rounded-full bg-[#444]'; }
+    if (data.status === 'connected') {
+      dot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
+      setCardBorder('clientCard', true);
+      setCardBottomBorder('relayCard', true);
+    } else {
+      dot.className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
+      setCardBorder('clientCard', false);
+      setCardBorder('relayCard', false);
+      setCardBorder('agentCard', false);
+    }
   }
 }
 function setConn状态(status) {
@@ -480,6 +500,27 @@ function setConn状态(status) {
 })();
 
 
+
+function setCardBorder(cardId, connected) {
+  var card = document.getElementById(cardId);
+  if (!card) return;
+  card.classList.remove('border-breathe', 'border-bottom-breathe', 'border-[#222222]');
+  if (connected) {
+    card.classList.add('border-breathe');
+  } else {
+    card.classList.add('border-[#222222]');
+  }
+}
+function setCardBottomBorder(cardId, connected) {
+  var card = document.getElementById(cardId);
+  if (!card) return;
+  card.classList.remove('border-breathe', 'border-bottom-breathe', 'border-[#222222]');
+  if (connected) {
+    card.classList.add('border-bottom-breathe');
+  } else {
+    card.classList.add('border-[#222222]');
+  }
+}
 
 function connectRelay() {
   var url = document.getElementById('relayUrl').textContent;
@@ -498,6 +539,9 @@ function connectRelay() {
     if (clientDot) {
       clientDot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80]';
     }
+    // 客户端连上中转 → client 边框呼吸绿 + relay 下边框呼吸绿
+    setCardBorder('clientCard', true);
+    setCardBottomBorder('relayCard', true);
     state.ws.send(JSON.stringify({
       type: 'register', deviceName: 'web-ui', os: 'web', arch: 'web',
       hostname: location.hostname, authCode: state.pairCode
@@ -512,11 +556,19 @@ function connectRelay() {
         document.getElementById('agent状态').style.color = '#4ade80';
         var agentDot = document.getElementById('agentDot');
         if (agentDot) agentDot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
+        // Agent 连上 → relay 边框呼吸绿 + agent 边框呼吸绿
+        setCardBorder('relayCard', true);
+        setCardBorder('agentCard', true);
       } else if (msg.type === 'agent_disconnected') {
         document.getElementById('agent状态').textContent = '已断开';
         document.getElementById('agent状态').style.color = '#bbb';
         var agentDot = document.getElementById('agentDot');
         if (agentDot) agentDot.className = 'w-1.5 h-1.5 rounded-full bg-[#666]';
+        // Agent 断开 → relay 恢复下边框呼吸绿 + agent 边框取消
+        setCardBorder('relayCard', false);
+        setCardBorder('agentCard', false);
+        // 如果客户端还在连接，relay 保持下边框呼吸绿
+        setCardBottomBorder('relayCard', true);
       } else if (msg.type === 'command_result' || msg.type === 'session_op_result') {
         trafficFlash();
       }
@@ -530,6 +582,10 @@ function connectRelay() {
     if (clientDot) {
       clientDot.className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
     }
+    // 断开连接 → 全部恢复默认边框
+    setCardBorder('clientCard', false);
+    setCardBorder('relayCard', false);
+    setCardBorder('agentCard', false);
   };
   state.ws.onerror = function() {
     addLog('err', '中转服务器连接失败');
