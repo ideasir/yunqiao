@@ -242,19 +242,9 @@ function renderSidebar() {
 }
 
 function renderSessions() {
-  var list = document.getElementById('sessionList');
-  list.innerHTML = '';
-  state.sessions.forEach(function(s) {
-    var item = document.createElement('div');
-    item.className = 'flex items-center gap-1 py-1 px-1.5 rounded-lg cursor-pointer text-xs transition-all';
-    item.style.cssText = (s.id === state.currentSessionId ? 'background:rgba(85,112,232,0.1);color:#6c8cff;' : 'color:rgba(255,255,255,0.4);');
-    item.onmouseover = function() { if (s.id !== state.currentSessionId) this.style.background = 'rgba(255,255,255,0.05)'; };
-    item.onmouseout = function() { if (s.id !== state.currentSessionId) this.style.background = 'transparent'; };
-    item.innerHTML = '<span class="flex-1 truncate">' + esc(s.name || 'unnamed') + '</span><span class="text-white/20 hover:text-red-400 cursor-pointer" onclick="event.stopPropagation();closeSession(\'' + s.id + '\')">✕</span>';
-    item.onclick = function() { switchSession(s.id); };
-    list.appendChild(item);
-  });
+  // 会话列表在左侧侧边栏
 }
+
 function switchSession(id) { state.currentSessionId = id; renderSidebar(); renderSessions(); addLog('info', '已切换到会话: ' + id); }
 function closeSession(id) {
   if (!confirm('确定关闭此会话?')) return;
