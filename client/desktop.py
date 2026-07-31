@@ -44,6 +44,8 @@ if not RELAY_PSK:
 UI = None  # pywebview 窗口引用
 WS = None
 SHOULD_RECONNECT = True
+CONNECT_THREAD = None
+CONNECT_LOCK = threading.Lock()
 pair_code = str(100000 + int(time.time() * 1000) % 900000)
 device_id = ""
 
@@ -69,7 +71,8 @@ async def ws_connect():
     while SHOULD_RECONNECT:
         try:
             async with websockets.connect(url, **ws_kwargs) as ws:
-                WS = ws
+                with CONNECT_LOCK:
+                    WS = ws
                 notify_ui("log", {"text": "已连接到中转服务器"})
                 notify_ui("relay_status", {"status": "connected"})
                 await ws.send(json.dumps({
@@ -340,26 +343,33 @@ class Api:
         return {"psk": RELAY_PSK, "relayUrl": RELAY_URL, "deviceName": DEVICE_NAME}
 
     def toggle_connect(self):
-        """连接/断开切换"""
-        global WS, SHOULD_RECONNECT
-        if WS:
-            # 断开
-            SHOULD_RECONNECT = False
-            import asyncio
-            try:
-                asyncio.run_coroutine_threadsafe(WS.close(), loop)
-            except:
-                pass
-            WS = None
-            notify_ui("relay_status", {"status": "disconnected"})
-            notify_ui("log", {"text": "已断开连接"})
-            return {"connected": False}
-        else:
-            # 连接
-            SHOULD_RECONNECT = True
-            threading.Thread(target=start_ws, daemon=True).start()
-            notify_ui("log", {"text": "正在连接..."})
-            return {"connected": True}
+        """连接/断开切换（线程安全）"""
+        global WS, SHOULD_RECONNECT, CONNECT_THREAD, CONNECT_LOCK
+        with CONNECT_LOCK:
+            if WS:
+                # 断开
+                SHOULD_RECONNECT = False
+                import asyncio
+                try:
+                    asyncio.run_coroutine_threadsafe(WS.close(), loop)
+                except:
+                    pass
+                WS = None
+                CONNECT_THREAD = None
+                notify_ui("relay_status", {"status": "disconnected"})
+                notify_ui("log", {"text": "已断开连接"})
+                return {"connected": False}
+            elif CONNECT_THREAD and CONNECT_THREAD.is_alive():
+                # 正在连接中，忽略重复点击
+                notify_ui("log", {"text": "正在连接中..."})
+                return {"connected": False}
+            else:
+                # 连接
+                SHOULD_RECONNECT = True
+                CONNECT_THREAD = threading.Thread(target=start_ws, daemon=True)
+                CONNECT_THREAD.start()
+                notify_ui("log", {"text": "正在连接..."})
+                return {"connected": True}
 
     def refresh_pair_code(self):
         """前端刷新配对码时调用，同步到后端和中继"""
