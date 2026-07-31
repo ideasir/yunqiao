@@ -82,6 +82,13 @@ function getDefaultDevice() {
   return devices.values().next().value;
 }
 
+function findDeviceByCode(code) {
+  for (const device of devices.values()) {
+    if (device.authCode === code) return device;
+  }
+  return null;
+}
+
 function checkCommandAllowed(command) {
   if (ALLOWED_COMMANDS.length === 0) return true;
   const cmdName = command.trim().split(/\s+/)[0];
@@ -140,11 +147,12 @@ function createMcpServer() {
       code: z.string().describe('客户端显示的验证码'),
     }),
   }, async ({ workDir, name, code }) => {
-    const device = getDefaultDevice();
+    const device = findDeviceByCode(code) || getDefaultDevice();
     if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
     if (device.authCode !== code) {
       return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
     }
+    sendAgentConnected(device);
     const result = await handleSessionOp('create', { workDir, name }, device.id);
     const session = result.payload;
     return { content: [{ type: 'text', text: `会话已创建: ${session.name} (${session.id})\n工作目录: ${session.workDir}\n当前路径: ${session.cwd}` }] };
@@ -158,7 +166,7 @@ function createMcpServer() {
       code: z.string().describe('客户端显示的验证码'),
     }),
   }, async ({ command, timeout, code }) => {
-    const device = getDefaultDevice();
+    const device = findDeviceByCode(code) || getDefaultDevice();
     if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
     if (device.authCode !== code) {
       return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
@@ -166,6 +174,7 @@ function createMcpServer() {
     if (!checkCommandAllowed(command)) {
       return { content: [{ type: 'text', text: `Error: command '${command.split(/\s+/)[0]}' is not allowed` }], isError: true };
     }
+    sendAgentConnected(device);
     const result = await handleSessionOp('exec', { command, timeout }, device.id);
     const o = result.payload;
     const text = [
@@ -184,11 +193,12 @@ function createMcpServer() {
       code: z.string().describe('客户端显示的验证码'),
     }),
   }, async ({ path, code }) => {
-    const device = getDefaultDevice();
+    const device = findDeviceByCode(code) || getDefaultDevice();
     if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
     if (device.authCode !== code) {
       return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
     }
+    sendAgentConnected(device);
     const result = await handleSessionOp('read_file', { path }, device.id);
     const o = result.payload;
     if (o.success) {
@@ -205,11 +215,12 @@ function createMcpServer() {
       code: z.string().describe('客户端显示的验证码'),
     }),
   }, async ({ path, content, code }) => {
-    const device = getDefaultDevice();
+    const device = findDeviceByCode(code) || getDefaultDevice();
     if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
     if (device.authCode !== code) {
       return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
     }
+    sendAgentConnected(device);
     const result = await handleSessionOp('write_file', { path, content }, device.id);
     const o = result.payload;
     if (o.success) {
@@ -224,11 +235,12 @@ function createMcpServer() {
       code: z.string().describe('客户端显示的验证码'),
     }),
   }, async ({ code }) => {
-    const device = getDefaultDevice();
+    const device = findDeviceByCode(code) || getDefaultDevice();
     if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
     if (device.authCode !== code) {
       return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
     }
+    sendAgentConnected(device);
     const result = await handleSessionOp('close', {}, device.id);
     const o = result.payload;
     if (o.success) {
@@ -243,11 +255,12 @@ function createMcpServer() {
       code: z.string().describe('客户端显示的验证码'),
     }),
   }, async ({ code }) => {
-    const device = getDefaultDevice();
+    const device = findDeviceByCode(code) || getDefaultDevice();
     if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
     if (device.authCode !== code) {
       return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
     }
+    sendAgentConnected(device);
     const result = await handleSessionOp('list', {}, device.id);
     const sessions = result.payload.sessions || [];
     if (sessions.length === 0) {
@@ -270,11 +283,12 @@ function createMcpServer() {
       code: z.string().describe('客户端显示的验证码'),
     }),
   }, async ({ sessionId, code }) => {
-    const device = getDefaultDevice();
+    const device = findDeviceByCode(code) || getDefaultDevice();
     if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
     if (device.authCode !== code) {
       return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
     }
+    sendAgentConnected(device);
     const result = await handleSessionOp('switch', { sessionId }, device.id);
     const o = result.payload;
     if (o.success) {
@@ -302,6 +316,7 @@ function createMcpServer() {
     if (!checkCommandAllowed(command)) {
       return { content: [{ type: 'text', text: `Error: command not allowed` }], isError: true };
     }
+    sendAgentConnected(device);
     const output = await sendAndWait('execute_command', { command, timeout }, device.id);
     const o = output.payload;
     const text = [
@@ -329,6 +344,7 @@ function createMcpServer() {
     if (!checkPathAllowed(path)) {
       return { content: [{ type: 'text', text: 'Error: path outside allowed prefix' }], isError: true };
     }
+    sendAgentConnected(device);
     const output = await sendAndWait('read_file', { path }, device.id);
     const o = output.payload;
     if (o.success) return { content: [{ type: 'text', text: o.content }] };
@@ -352,6 +368,7 @@ function createMcpServer() {
     if (!checkPathAllowed(path)) {
       return { content: [{ type: 'text', text: 'Error: path outside allowed prefix' }], isError: true };
     }
+    sendAgentConnected(device);
     const output = await sendAndWait('write_file', { path, content }, device.id);
     const o = output.payload;
     if (o.success) return { content: [{ type: 'text', text: `File written: ${path}` }] };
@@ -378,11 +395,12 @@ function createMcpServer() {
       code: z.string().describe('客户端显示的验证码'),
     }),
   }, async ({ code }) => {
-    const device = getDefaultDevice();
+    const device = findDeviceByCode(code) || getDefaultDevice();
     if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
     if (device.authCode !== code) {
       return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
     }
+    sendAgentConnected(device);
     const result = await sendAndWait('get_device_info', {}, device.id);
     const info = result.payload;
     const text = [
@@ -496,15 +514,7 @@ wss.on('connection', (ws, req) => {
         authCode: authCode || null,
         connectedAt: new Date().toISOString(),
       });
-      // 注册时携带的 authCode 同步到同 hostname 的所有设备
-      if (authCode) {
-        for (const [otherId, other] of devices) {
-          if (otherId !== deviceId && other.hostname === hostname && !other.authCode) {
-            other.authCode = authCode;
-            console.error(`[device] code synced: ${other.name} (${otherId}) -> ${authCode}`);
-          }
-        }
-      }
+// 注册时携带的 authCode 同步到同 hostname 的其他设备      if (authCode) {        for (const [otherId, other] of devices) {          if (otherId !== deviceId && other.hostname === hostname && !other.authCode) {            other.authCode = authCode;            console.error(`[device] code synced from register: ${other.name} (${otherId}) -> ${authCode}`);          }        }      }
       console.error(`[device] registered: ${name} (${deviceId}) code:${authCode || 'none'}`);
       sendJSON(ws, { type: 'register_result', requestId, success: true, deviceId });
       return;
@@ -530,9 +540,9 @@ wss.on('connection', (ws, req) => {
       const device = devices.get(deviceId);
       if (device) {
         device.authCode = msg.authCode;
-        // 同步到同 hostname 的所有设备
+        // 同步到同 hostname 的所有设备（agent.py 和 main.py 共享配对码）
         for (const [otherId, other] of devices) {
-          if (otherId !== deviceId && other.hostname === device.hostname) {
+          if (otherId !== deviceId && other.name === device.name || other.hostname === device.hostname) {
             other.authCode = msg.authCode;
             console.error(`[device] code synced: ${other.name} (${otherId}) -> ${msg.authCode}`);
           }
@@ -583,3 +593,10 @@ process.on('SIGINT', () => {
   httpServer.close();
   process.exit(0);
 });
+
+function sendAgentConnected(device) {
+  if (device && !device._agentPaired) {
+    device._agentPaired = true;
+    try { sendJSON(device.ws, { type: "agent_connected", requestId: "0", payload: {} }); } catch(e) {}
+  }
+}
