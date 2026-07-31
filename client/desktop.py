@@ -87,6 +87,7 @@ async def ws_connect():
                     except:
                         pass
         except Exception as e:
+            notify_ui("agent_status", {"status": "disconnected"})
             notify_ui("log", {"text": f"连接断开: {e}"})
             notify_ui("relay_status", {"status": "disconnected"})
         finally:
@@ -104,8 +105,7 @@ def handle_message(data):
         global device_id
         device_id = data.get("deviceId", "")
         notify_ui("log", {"text": "注册成功"})
-        # 通知前端也连接中转，以便接收 agent_connected 等消息
-        notify_ui("connect_relay", {})
+        notify_ui("agent_status", {"status": "connected"})
     elif t == "agent_connected":
         notify_ui("agent_status", {"status": "connected"})
     elif t == "agent_disconnected":
@@ -367,11 +367,8 @@ class Api:
                 notify_ui("log", {"text": "已断开连接"})
                 return {"connected": False}
             elif CONNECT_THREAD and CONNECT_THREAD.is_alive():
-                # 正在连接中，停止连接
-                SHOULD_RECONNECT = False
-                CONNECT_THREAD = None
-                notify_ui("relay_status", {"status": "disconnected"})
-                notify_ui("log", {"text": "已取消连接"})
+                # 正在连接中，忽略重复点击
+                notify_ui("log", {"text": "正在连接中..."})
                 return {"connected": False}
             else:
                 # 连接
