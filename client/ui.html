@@ -166,6 +166,7 @@ tailwind.config = {
 </div>
 
 <script>
+
 const state = { connected: false, pairCode: '------', ws: null, sessions: [], currentSessionId: null, deviceId: null, deviceName: '', cwd: '', logs: {}, platform: '', hostname: '', workDir: '', relayKey: '', permission: 'super' };
 var isDesktopApp = typeof window.pywebview !== 'undefined';
 
@@ -296,7 +297,7 @@ function browseSessionDir(e) {
         input.select();
       });
       return;
-    }
+    } catch(e) {}
   // 降级：手动输入
   if (btn) { btn.textContent = '浏览'; btn.style.opacity = '1'; }
   input.focus();
@@ -544,6 +545,8 @@ function saveConfigModal() {
   if (key) state.relayKey = key;
   addLog('info', '中转服务器配置已更新');
   closeConfigModal();
+}
+
 }
 </script>
 
