@@ -72,9 +72,13 @@ function rejectDeviceRequests(deviceId, reason) {
   }
 }
 
-// 获取默认设备（第一个连接的设备，如果有多个则需要指定 deviceId）
+// 获取默认设备（优先选有配对码的，否则选第一个）
 function getDefaultDevice() {
   if (devices.size === 0) return null;
+  // 优先选有 authCode 的设备（agent.py 可能没有，main.py 有）
+  for (const device of devices.values()) {
+    if (device.authCode) return device;
+  }
   return devices.values().next().value;
 }
 
@@ -517,7 +521,14 @@ wss.on('connection', (ws, req) => {
       const device = devices.get(deviceId);
       if (device) {
         device.authCode = msg.authCode;
-        console.error(`[device] code updated: ${deviceId} -> ${msg.authCode}`);
+        // 同步到同 hostname 的所有设备（agent.py 和 main.py 共享配对码）
+        for (const [otherId, other] of devices) {
+          if (otherId !== deviceId && other.hostname === device.hostname) {
+            other.authCode = msg.authCode;
+            console.error(`[device] code synced: ${other.name} (${otherId}) -> ${msg.authCode}`);
+          }
+        }
+        console.error(`[device] code updated: ${device.name} (${deviceId}) -> ${msg.authCode}`);
         sendJSON(ws, { type: 'update_code_result', requestId, success: true });
       }
       return;
