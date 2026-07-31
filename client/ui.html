@@ -277,34 +277,9 @@ function saveSessionModal() {
   }, 200);
 }
 function browseSessionDir(e) {
-  var btn = e ? e.target : null;
-  if (btn) {
-    var origText = btn.textContent;
-    btn.textContent = '...';
-    btn.style.background = '#444';
-    setTimeout(function() { btn.textContent = origText; btn.style.background = ''; }, 1000);
-  }
-  // 使用 File System Access API (Chrome 86+, 需要 HTTPS 或 localhost)
-  try {
-    if (window.showDirectoryPicker) {
-      window.showDirectoryPicker().then(function(handle) {
-        document.getElementById('modalSessionDir').value = handle.name;
-        addLog('info', '已选择目录: ' + handle.name);
-      }).catch(function(err) {
-        if (err.name !== 'AbortError') {
-          manualInput();
-        }
-      });
-      return;
-    }
-  } catch(e) {}
-  manualInput();
-  function manualInput() {
-    var input = document.getElementById('modalSessionDir');
-    input.focus();
-    input.select();
-    addLog('info', '请手动输入完整路径，如 C:\\Users\\Administrator\\project');
-  }
+  var input = document.getElementById('modalSessionDir');
+  input.focus();
+  input.select();
 }
 function refreshSessions() { addLog('info', '会话列表已刷新'); }
 var ctxSessionId = null;
