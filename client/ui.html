@@ -131,15 +131,33 @@
   .sidebar-add {
     width: 32px;
     height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--primary);
+    position: relative;
     cursor: pointer;
     border-radius: var(--radius-sm);
     transition: all 0.2s;
     margin-bottom: 6px;
-    font-family: 'Segoe UI', Arial, sans-serif;
+  }
+  .sidebar-add::before,
+  .sidebar-add::after {
+    content: "";
+    position: absolute;
+    background: var(--primary);
+    border-radius: 1px;
+  }
+  .sidebar-add::before {
+    width: 14px;
+    height: 2px;
+    top: 15px;
+    left: 9px;
+  }
+  .sidebar-add::after {
+    width: 2px;
+    height: 14px;
+    top: 9px;
+    left: 15px;
+  }
+  .sidebar-add:hover {
+    background: rgba(243, 160, 76, 0.1);
   }
   .sidebar-add:hover {
     background: rgba(243, 160, 76, 0.1);
@@ -549,7 +567,7 @@
   <!-- 左侧：会话内容 -->
   <div class="left-panel">
     <div class="session-sidebar" id="sessionSidebar">
-      <div class="sidebar-add" onclick="createSession()" title="新建会话">+</div>
+      <div class="sidebar-add" onclick="createSession()" title="新建会话"></div>
       <div class="sidebar-list" id="sidebarList">
       </div>
     </div>
