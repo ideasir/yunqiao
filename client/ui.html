@@ -496,56 +496,67 @@
     </div>
   </div>
 
-  <!-- 右侧：功能区 -->
+  <!-- 右侧：拓扑图 -->
   <div class="right-panel">
-    <!-- 上游 Agent -->
-    <div class="section">
-      <div class="section-header">
-        <span class="dot green" id="agentDot"></span> 上游 Agent
-      </div>
-      <div class="section-body">
-        <div class="field"><span class="label">状态</span><span class="value" id="agentStatus">等待连接</span></div>
-        <div class="field"><span class="label">配对码</span><span class="value code" id="pairCode">------</span></div>
-        <div class="field"><span class="label">设备</span><span class="value" id="deviceName">-</span></div>
-        <div class="btn-group" style="margin-top:6px">
-          <button class="btn primary" onclick="copyPairCode()">📋 复制配对码</button>
-          <button class="btn" onclick="refreshPairCode()">🔄 刷新</button>
-        </div>
-      </div>
-    </div>
+    <div class="topology">
+      <canvas id="particleCanvas"></canvas>
 
-    <!-- 中转服务器 -->
-    <div class="section">
-      <div class="section-header">
-        <span class="dot green" id="relayDot"></span> 中转服务器
+      <!-- 上游 Agent -->
+      <div class="topo-node" id="nodeAgent">
+        <div class="node-header">
+          <span class="dot orange" id="agentDot"></span>
+          <span>上游 Agent</span>
+          <span class="node-badge" id="agentStatus">待接入</span>
+        </div>
+        <div class="node-body">
+          <div class="field"><span class="label">配对码</span><span class="value code" id="pairCode">------</span></div>
+          <div class="field"><span class="label">设备</span><span class="value" id="deviceName">-</span></div>
+          <div class="btn-group" style="margin-top:4px">
+            <button class="btn primary" onclick="copyPairCode()">📋 复制</button>
+            <button class="btn" onclick="refreshPairCode()">🔄</button>
+          </div>
+        </div>
       </div>
-      <div class="section-body">
-        <div class="field"><span class="label">地址</span><span class="value" id="relayUrl">yunqiao.very.im</span></div>
-        <div class="field"><span class="label">延迟</span><span class="value" id="relayLatency">-- ms</span></div>
-        <div class="field"><span class="label">连接</span><span class="value" id="relayStatus">已连接</span></div>
-      </div>
-    </div>
 
-    <!-- 客户端 -->
-    <div class="section">
-      <div class="section-header">
-        <span class="dot gray" id="clientDot"></span> 客户端
+      <!-- 连接线 1 (Agent → Relay) -->
+      <div class="connector">
+        <div class="conn-label" id="connLabel1">SSE 短连接</div>
       </div>
-      <div class="section-body">
-        <div class="field"><span class="label">工作目录</span>
-          <span style="display:flex;gap:4px">
-            <span class="value" id="workDir" style="font-size:10px;max-width:140px;overflow:hidden;text-overflow:ellipsis">未设置</span>
-            <button class="btn" onclick="browseWorkDir()">📁</button>
-          </span>
+
+      <!-- 中转服务器 -->
+      <div class="topo-node" id="nodeRelay">
+        <div class="node-header">
+          <span class="dot green" id="relayDot"></span>
+          <span>中转服务器</span>
+          <span class="node-badge" id="relayStatus">运行中</span>
         </div>
-        <div class="field"><span class="label">平台</span><span class="value" id="clientPlatform">-</span></div>
-        <div class="field"><span class="label">主机名</span><span class="value" id="clientHostname">-</span></div>
-        <div class="session-list" id="sessionList">
-          <!-- 会话列表由 JS 动态生成 -->
+        <div class="node-body">
+          <div class="field"><span class="label">地址</span><span class="value" id="relayUrl">yunqiao.very.im</span></div>
+          <div class="field"><span class="label">延迟</span><span class="value" id="relayLatency">-- ms</span></div>
         </div>
-        <div class="btn-group" style="margin-top:4px">
-          <button class="btn primary" onclick="createSession()">➕ 新建会话</button>
-          <button class="btn" onclick="refreshSessions()">🔄 刷新</button>
+      </div>
+
+      <!-- 连接线 2 (Relay → Client) -->
+      <div class="connector">
+        <div class="conn-label" id="connLabel2">WSS 长连接</div>
+      </div>
+
+      <!-- 客户端 -->
+      <div class="topo-node" id="nodeClient">
+        <div class="node-header">
+          <span class="dot" id="clientDot"></span>
+          <span>客户端</span>
+          <span class="node-badge" id="clientStatus">未连接</span>
+        </div>
+        <div class="node-body">
+          <div class="field"><span class="label">工作目录</span><span class="value" id="workDir" style="font-size:10px">未设置</span></div>
+          <div class="field"><span class="label">平台</span><span class="value" id="clientPlatform">-</span></div>
+          <div class="field"><span class="label">主机名</span><span class="value" id="clientHostname">-</span></div>
+          <div class="session-list" id="sessionList"></div>
+          <div class="btn-group" style="margin-top:4px">
+            <button class="btn primary" onclick="createSession()">+ 新建会话</button>
+            <button class="btn" onclick="refreshSessions()">↻</button>
+          </div>
         </div>
       </div>
     </div>
@@ -791,6 +802,11 @@ function handleBridge(action, data) {
   } else if (action === 'command_result') {
     const p = data.payload;
     if (p.exitCode !== undefined) {
+      // 触发粒子动画：向下（命令执行）→ 向上（结果返回）
+      if (window.particleTrigger) {
+        window.particleTrigger.flowDown();
+        setTimeout(() => window.particleTrigger.flowUp(), 500);
+      }
       const text = p.stdout || p.stderr || '(无输出)';
       addLog('out', text);
       if (p.exitCode !== 0) addLog('err', `退出码: ${p.exitCode}`);
@@ -839,6 +855,101 @@ setInterval(() => {
   document.getElementById('relayLatency').textContent =
     `${Math.floor(Math.random() * 20 + 5)} ms`;
 }, 3000);
+// ─── 粒子动画 ────────────────────────────────
+const particleState = {
+  flow1: 'idle',  // 'up' | 'down' | 'idle'
+  flow2: 'idle',
+  particles: [],
+};
+
+function startParticles(canvas, fromY, toY, direction, color) {
+  const count = 20;
+  for (let i = 0; i < count; i++) {
+    particleState.particles.push({
+      x: canvas.width / 2,
+      y: fromY + (toY - fromY) * Math.random(),
+      progress: Math.random(),
+      speed: 0.005 + Math.random() * 0.005,
+      direction: direction,
+      color: color,
+      fromY: fromY,
+      toY: toY,
+      size: 2 + Math.random() * 2,
+    });
+  }
+}
+
+function initParticleCanvas() {
+  const canvas = document.getElementById('particleCanvas');
+  const topo = canvas.parentElement;
+  canvas.width = topo.offsetWidth;
+  canvas.height = topo.offsetHeight;
+
+  const nodes = topo.querySelectorAll('.topo-node');
+  const conns = topo.querySelectorAll('.connector');
+  if (nodes.length < 3 || conns.length < 2) return;
+
+  const nodeRects = [];
+  nodes.forEach(n => nodeRects.push(n.getBoundingClientRect()));
+  const topoRect = topo.getBoundingClientRect();
+
+  const conn1Y = nodeRects[0].bottom - topoRect.top + conns[0].offsetHeight / 2;
+  const conn2Y = nodeRects[1].bottom - topoRect.top + conns[1].offsetHeight / 2;
+
+  // 绘制连接线 (fallback, 实际用 CSS connector)
+  const ctx = canvas.getContext('2d');
+
+  function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = 'transparent';
+    ctx.lineWidth = 1;
+
+    // 更新粒子
+    particleState.particles = particleState.particles.filter(p => {
+      if (p.direction === 'down') {
+        p.progress += p.speed;
+      } else {
+        p.progress -= p.speed;
+      }
+      return p.progress >= 0 && p.progress <= 1;
+    });
+
+    // 绘制粒子
+    for (const p of particleState.particles) {
+      const y = p.fromY + (p.toY - p.fromY) * p.progress;
+      ctx.beginPath();
+      ctx.arc(p.x, y, p.size, 0, Math.PI * 2);
+      ctx.fillStyle = p.color;
+      ctx.fill();
+    }
+
+    requestAnimationFrame(animate);
+  }
+
+  animate();
+
+  // 监听粒子触发
+  window.particleTrigger = {
+    flowDown: function() {
+      particleState.flow1 = 'down';
+      startParticles(canvas, 0, conn1Y, 'down', 'rgba(243, 160, 76, 0.8)');
+      setTimeout(() => {
+        particleState.flow2 = 'down';
+        startParticles(canvas, conn1Y, conn2Y, 'down', 'rgba(64, 180, 62, 0.8)');
+      }, 300);
+    },
+    flowUp: function() {
+      particleState.flow2 = 'up';
+      startParticles(canvas, conn2Y, conn1Y, 'up', 'rgba(64, 180, 62, 0.8)');
+      setTimeout(() => {
+        particleState.flow1 = 'up';
+        startParticles(canvas, conn1Y, 0, 'up', 'rgba(243, 160, 76, 0.8)');
+      }, 300);
+    }
+  };
+}
+
+// 初始化粒子
+setTimeout(initParticleCanvas, 100);
+window.addEventListener('resize', initParticleCanvas);
 </script>
-</body>
-</html>
