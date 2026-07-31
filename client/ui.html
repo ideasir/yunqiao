@@ -321,7 +321,42 @@ function setConn状态(status) {
   addLog('info', '欢迎使用云桥 MCP v2.0');
   setConn状态('disconnected');
 })();
-</script>
+
+
+function configRelay() {
+  document.getElementById('modalRelayUrl').value = document.getElementById('relayUrl').textContent;
+  document.getElementById('modalRelayKey').value = state.relayKey || '';
+  var overlay = document.getElementById('configModal');
+  var content = document.getElementById('configModalContent');
+  overlay.style.opacity = '1';
+  overlay.style.pointerEvents = 'auto';
+  setTimeout(function() {
+    content.style.transform = 'scale(1) translateY(0)';
+    content.style.opacity = '1';
+  }, 10);
+  setTimeout(function() {
+    document.getElementById('modalRelayUrl').focus();
+    document.getElementById('modalRelayUrl').select();
+  }, 100);
+}
+function closeConfigModal() {
+  var overlay = document.getElementById('configModal');
+  var content = document.getElementById('configModalContent');
+  content.style.transform = 'scale(0.9) translateY(20px)';
+  content.style.opacity = '0';
+  setTimeout(function() {
+    overlay.style.opacity = '0';
+    overlay.style.pointerEvents = 'none';
+  }, 200);
+}
+function saveConfigModal() {
+  var url = document.getElementById('modalRelayUrl').value.trim();
+  var key = document.getElementById('modalRelayKey').value.trim();
+  if (url) document.getElementById('relayUrl').textContent = url;
+  if (key) state.relayKey = key;
+  addLog('info', '中转服务器配置已更新');
+  closeConfigModal();
+}</script>
 <!-- 配置弹窗 -->
 <div id="configModal" class="fixed inset-0 flex items-center justify-center z-50 transition-all duration-300" style="background: rgba(0,0,0,0.6); opacity: 0; pointer-events: none; backdrop-filter: blur(4px);">
   <div id="configModalContent" class="rounded-xl bg-[#1a1a1a] border border-[#333] shadow-2xl w-80 transition-all duration-300" style="transform: scale(0.9) translateY(20px); opacity: 0;">
