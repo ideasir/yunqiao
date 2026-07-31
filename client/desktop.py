@@ -367,8 +367,11 @@ class Api:
                 notify_ui("log", {"text": "已断开连接"})
                 return {"connected": False}
             elif CONNECT_THREAD and CONNECT_THREAD.is_alive():
-                # 正在连接中，忽略重复点击
-                notify_ui("log", {"text": "正在连接中..."})
+                # 正在连接中，停止连接
+                SHOULD_RECONNECT = False
+                CONNECT_THREAD = None
+                notify_ui("relay_status", {"status": "disconnected"})
+                notify_ui("log", {"text": "已取消连接"})
                 return {"connected": False}
             else:
                 # 连接
