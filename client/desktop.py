@@ -104,6 +104,8 @@ def handle_message(data):
         global device_id
         device_id = data.get("deviceId", "")
         notify_ui("log", {"text": "注册成功"})
+        # 通知前端也连接中转，以便接收 agent_connected 等消息
+        notify_ui("connect_relay", {})
     elif t == "agent_connected":
         notify_ui("agent_status", {"status": "connected"})
     elif t == "agent_disconnected":

@@ -453,6 +453,7 @@ function updateStatus() {
 }
 function handleBridge(action, data) {
   if (action === 'log') { addLog('info', data.text); }
+  else if (action === 'connect_relay') { connectRelay(); }
   else if (action === 'command_result') {
     var p = data.payload;
     if (p && p.exitCode !== undefined) {
@@ -464,8 +465,26 @@ function handleBridge(action, data) {
   }
   else if (action === 'agent_status') {
     var s = document.getElementById('agent状态');
-    if (data.status === 'connected') { s.textContent = '已配对'; s.style.color = '#4ade80'; }
-    else { s.textContent = '待接入'; s.style.color = '#bbb'; }
+    if (data.status === 'connected') {
+      s.textContent = '已配对'; s.style.color = '#4ade80';
+      var agentDot = document.getElementById('agentDot');
+      if (agentDot) agentDot.className = 'w-1.5 h-1.5 rounded-full bg-[#3b82f6] animate-pulse';
+      var relayAgentDot = document.getElementById('relayAgentDot');
+      if (relayAgentDot) {
+        relayAgentDot.classList.remove('hidden');
+        relayAgentDot.className = 'w-1.5 h-1.5 rounded-full animate-pulse';
+        relayAgentDot.style.background = '#3b82f6';
+      }
+    } else {
+      s.textContent = '待接入'; s.style.color = '#bbb';
+      var agentDot = document.getElementById('agentDot');
+      if (agentDot) agentDot.className = 'w-1.5 h-1.5 rounded-full bg-[#666]';
+      var relayAgentDot = document.getElementById('relayAgentDot');
+      if (relayAgentDot) {
+        relayAgentDot.classList.add('hidden');
+        relayAgentDot.className = 'w-1.5 h-1.5 rounded-full hidden';
+      }
+    }
   }
   else if (action === 'relay_status') {
     var dot = document.getElementById('relayDot');
@@ -579,12 +598,27 @@ function connectRelay() {
         document.getElementById('agent状态').textContent = '已配对';
         document.getElementById('agent状态').style.color = '#4ade80';
         var agentDot = document.getElementById('agentDot');
-        if (agentDot) agentDot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
+        if (agentDot) agentDot.className = 'w-1.5 h-1.5 rounded-full bg-[#3b82f6] animate-pulse';
+        if (!window.pywebview) {
+          var relayAgentDot = document.getElementById('relayAgentDot');
+          if (relayAgentDot) {
+            relayAgentDot.classList.remove('hidden');
+            relayAgentDot.className = 'w-1.5 h-1.5 rounded-full animate-pulse';
+            relayAgentDot.style.background = '#3b82f6';
+          }
+        }
       } else if (msg.type === 'agent_disconnected') {
         document.getElementById('agent状态').textContent = '已断开';
         document.getElementById('agent状态').style.color = '#bbb';
         var agentDot = document.getElementById('agentDot');
         if (agentDot) agentDot.className = 'w-1.5 h-1.5 rounded-full bg-[#666]';
+        if (!window.pywebview) {
+          var relayAgentDot = document.getElementById('relayAgentDot');
+          if (relayAgentDot) {
+            relayAgentDot.classList.add('hidden');
+            relayAgentDot.className = 'w-1.5 h-1.5 rounded-full hidden';
+          }
+        }
       } else if (msg.type === 'command_result' || msg.type === 'session_op_result') {
         trafficFlash();
       }
@@ -602,6 +636,11 @@ function connectRelay() {
       document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
       var clientDot = document.getElementById('clientDot');
       if (clientDot) clientDot.className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
+      var relayAgentDot = document.getElementById('relayAgentDot');
+      if (relayAgentDot) {
+        relayAgentDot.classList.add('hidden');
+        relayAgentDot.className = 'w-1.5 h-1.5 rounded-full hidden';
+      }
     }
   };
   state.ws.onerror = function() {
