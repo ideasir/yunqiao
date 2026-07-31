@@ -27,7 +27,13 @@ if CONFIG_FILE.exists():
         cfg = json.loads(CONFIG_FILE.read_text("utf-8"))
         RELAY_PSK = cfg.get("psk", "")
         if not RELAY_URL or RELAY_URL == "wss://yunqiao.very.im/device":
-            RELAY_URL = cfg.get("relayUrl", RELAY_URL)
+            cfg_url = cfg.get("relayUrl", "")
+            if cfg_url and not cfg_url.startswith("ws"):
+                RELAY_URL = "wss://" + cfg_url + "/device"
+            elif cfg_url:
+                RELAY_URL = cfg_url
+            else:
+                RELAY_URL = "wss://yunqiao.very.im/device"
     except:
         pass
 if not RELAY_PSK:
