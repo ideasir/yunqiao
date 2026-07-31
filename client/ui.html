@@ -185,15 +185,15 @@ var _lastLogText = '';
 var _lastLogTime = 0;
 var _lastLogType = '';
 function addLog(type, text) {
-  var now = Date.now();
+  var _now = Date.now();
   // 连续相同文本跳过
   if (text === _lastLogText) return;
   // 状态类日志快速重复跳过（3秒内同类型状态）
   if (type === 'status' || type === 'info' || type === 'done') {
-    if (type === _lastLogType && now - _lastLogTime < 3000) return;
+    if (type === _lastLogType && _now - _lastLogTime < 3000) return;
   }
   _lastLogText = text;
-  _lastLogTime = now;
+  _lastLogTime = _now;
   _lastLogType = type;
   const log = document.getElementById('sessionLog');
   const entry = document.createElement('div');
