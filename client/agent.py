@@ -571,13 +571,27 @@ async def handle_command(ws, msg_type, request_id, payload):
 
 
 # ─── 连接管理 ────────────────────────────────
+async def _ws_connect_headers():
+    """兼容不同 websockets 版本的请求头参数名"""
+    try:
+        import websockets
+        import inspect
+        sig = inspect.signature(websockets.connect)
+        if 'additional_headers' in sig.parameters:
+            return {'additional_headers': {"X-PSK": RELAY_PSK}}
+    except:
+        pass
+    return {'extra_headers': {"X-PSK": RELAY_PSK}}
+
 async def connect():
     url = RELAY_URL
     print(f"[agent] connecting to {RELAY_URL}...")
+    ws_kwargs = await _ws_connect_headers()
+    ws_kwargs['ping_interval'] = 30
 
     while True:
         try:
-            async with websockets.connect(url, ping_interval=30, additional_headers={"X-PSK": RELAY_PSK}) as ws:
+            async with websockets.connect(url, **ws_kwargs) as ws:
                 print(f"[agent] connected!")
                 await ws.send(
                     json.dumps(

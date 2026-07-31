@@ -47,13 +47,27 @@ pair_code = str(100000 + int(time.time() * 1000) % 900000)
 device_id = ""
 
 # ─── WebSocket 连接 ──────────────────────────────
+async def _ws_connect_headers():
+    """兼容不同 websockets 版本的请求头参数名"""
+    try:
+        import websockets
+        import inspect
+        sig = inspect.signature(websockets.connect)
+        if 'additional_headers' in sig.parameters:
+            return {'additional_headers': {"X-PSK": RELAY_PSK}}
+    except:
+        pass
+    return {'extra_headers': {"X-PSK": RELAY_PSK}}
+
 async def ws_connect():
     global WS, device_id
     import websockets
     url = RELAY_URL
+    ws_kwargs = await _ws_connect_headers()
+    ws_kwargs['ping_interval'] = 30
     while True:
         try:
-            async with websockets.connect(url, ping_interval=30, additional_headers={"X-PSK": RELAY_PSK}) as ws:
+            async with websockets.connect(url, **ws_kwargs) as ws:
                 WS = ws
                 notify_ui("log", {"text": "已连接到中转服务器"})
                 notify_ui("relay_status", {"status": "connected"})

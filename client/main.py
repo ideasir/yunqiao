@@ -665,6 +665,17 @@ class App:
                       font=("Segoe UI", 9), padx=12, pady=3, command=save).pack(side=tk.RIGHT, padx=6)
 
 
+    def _ws_connect_args(self, psk):
+        """兼容不同 websockets 版本的请求头参数名"""
+        try:
+            import inspect
+            sig = inspect.signature(websockets.connect)
+            if 'additional_headers' in sig.parameters:
+                return {'additional_headers': {"X-PSK": psk}}
+        except:
+            pass
+        return {'extra_headers': {"X-PSK": psk}}
+
     def start_connect(self):
         self._loop = None
         self.set_status("connecting", "连接中...")
@@ -725,9 +736,10 @@ class App:
                 self.add_log("INFO", f"正在连接 {url}...")
                 t0 = time.time()
                 self._loop = asyncio.get_running_loop()
-                # 用自定义请求头传递PSK
+                # 用自定义请求头传递PSK（兼容不同 websockets 版本）
+                ws_kwargs = self._ws_connect_args(psk)
                 async with websockets.connect(
-                    url, additional_headers={"X-PSK": psk},
+                    url, **ws_kwargs,
                 ) as ws:
                     state["ws_client"] = ws
                     state["connected"] = True

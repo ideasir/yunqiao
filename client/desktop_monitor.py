@@ -79,11 +79,19 @@ def refresh_code():
 async def ws_client():
     url = RELAY_URL
     add_activity("system", f"正在连接服务器 {RELAY_URL}...")
+    # 兼容不同 websockets 版本的请求头参数名
+    try:
+        import inspect
+        sig = inspect.signature(websockets.connect)
+        ws_kwargs = {'additional_headers': {"X-PSK": RELAY_PSK}} if 'additional_headers' in sig.parameters else {'extra_headers': {"X-PSK": RELAY_PSK}}
+    except:
+        ws_kwargs = {'extra_headers': {"X-PSK": RELAY_PSK}}
+    ws_kwargs['ping_interval'] = 10
 
     while True:
         try:
             t_start = time.time()
-            async with websockets.connect(url, ping_interval=10, additional_headers={"X-PSK": RELAY_PSK}) as ws:
+            async with websockets.connect(url, **ws_kwargs) as ws:
                 latency = (time.time() - t_start) * 1000
                 server_status["connected"] = True
                 server_status["latency"] = round(latency, 1)
