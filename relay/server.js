@@ -536,6 +536,22 @@ wss.on('connection', (ws, req) => {
       return;
     }
 
+    if (type === 'get_agent_status') {
+      const device = devices.get(deviceId);
+      if (device) {
+        const entry = agentStatus.get(device.id) || { online: false, connectedAt: null, lastSeenAt: null, disconnectedAt: null };
+        sendJSON(ws, {
+          type: 'agent_status',
+          requestId,
+          status: entry.online ? 'online' : 'offline',
+          connectedAt: entry.connectedAt,
+          lastSeenAt: entry.lastSeenAt,
+          disconnectedAt: entry.disconnectedAt,
+        });
+      }
+      return;
+    }
+
     if (type === 'update_code') {
       const device = devices.get(deviceId);
       if (device) {
