@@ -27,6 +27,26 @@
     --radius-sm: 6px;
     --radius-lg: 14px;
   }
+  /* ── 全局动画 ── */
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(-8px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  @keyframes glow {
+    0%, 100% { box-shadow: 0 0 4px var(--primary-glow); }
+    50% { box-shadow: 0 0 12px var(--primary-glow); }
+  }
+  * {
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.15s ease;
+  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     font-family: 'Segoe UI', -apple-system, 'PingFang SC', sans-serif;
@@ -176,8 +196,9 @@
     color: var(--text2);
     cursor: pointer;
     border-radius: 4px;
-    transition: all 0.2s;
+    transition: all 0.15s ease;
     position: relative;
+    animation: slideIn 0.2s ease;
   }
   .sidebar-item:hover {
     color: var(--text);
@@ -276,6 +297,10 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    transition: color 0.3s ease;
+  }
+  .session-header .cwd:not(:empty) {
+    color: var(--text);
   }
   .session-header .cwd::before { content: '\01F4C2 '; }
   .session-header .info {
@@ -294,7 +319,7 @@
     padding: 1px 0;
     display: flex;
     gap: 10px;
-    animation: fadeIn 0.15s ease;
+    animation: fadeIn 0.2s ease;
   }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
   .session-log .entry .time {
@@ -346,7 +371,14 @@
     cursor: pointer;
     font-size: 12px;
     font-weight: 600;
-    transition: all 0.2s;
+    transition: all 0.2s ease;
+  }
+  .session-input button:hover {
+    background: var(--accent);
+    transform: translateY(-1px);
+  }
+  .session-input button:active {
+    transform: translateY(0);
   }
   .session-input button:hover { transform: translateY(-1px); box-shadow: 0 4px 16px var(--primary-glow); }
 
@@ -383,6 +415,11 @@
     width: 100%;
     z-index: 2;
     position: relative;
+    transition: all 0.2s ease;
+  }
+  .topo-node:hover {
+    border-color: var(--border-hover);
+    transform: translateY(-1px);
   }
   .node-header {
     display: flex;
@@ -423,6 +460,7 @@
     background: linear-gradient(to bottom, var(--primary), var(--border), var(--success));
     position: relative;
     z-index: 1;
+    animation: glow 3s ease-in-out infinite;
   }
   .conn-label {
     position: absolute;
@@ -504,7 +542,9 @@
     background: var(--bg3);
     border-color: var(--border-hover);
     color: var(--text);
+    transform: translateY(-1px);
   }
+  .btn:active { transform: translateY(0); }
   .btn.primary {
     background: var(--primary);
     color: #fff;
