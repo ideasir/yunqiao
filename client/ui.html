@@ -246,9 +246,9 @@ function saveSessionModal() {
     overlay.style.pointerEvents = 'none';
   }, 200);
 }
-function browseSessionDir() {
+function browseSessionDir(e) {
   var input = document.getElementById('modalSessionDir');
-  var btn = event ? event.target : null;
+  var btn = e ? e.target : null;
   // 按钮视觉反馈
   if (btn) {
     var origText = btn.textContent;
