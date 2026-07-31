@@ -89,7 +89,12 @@ async def ws_connect():
         except Exception as e:
             notify_ui("log", {"text": f"连接断开: {e}"})
             notify_ui("relay_status", {"status": "disconnected"})
-            await asyncio.sleep(5)
+        finally:
+            with CONNECT_LOCK:
+                WS = None
+                CONNECT_THREAD = None
+            if SHOULD_RECONNECT:
+                await asyncio.sleep(5)
 
 def handle_message(data):
     t = data.get("type")
