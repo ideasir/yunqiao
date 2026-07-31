@@ -170,6 +170,7 @@ const state = { connected: false, pairCode: '------', ws: null, sessions: [], cu
 function addLog(type, text) {
   const log = document.getElementById('sessionLog');
   const entry = document.createElement('div');
+  entry.className = 'entry ' + type + ' flex gap-3 py-1 animate-slide-up';
 
   const now = new Date();
   const time = now.toTimeString().slice(0, 8);
