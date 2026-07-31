@@ -28,7 +28,8 @@ tailwind.config = {
   ::-webkit-scrollbar-thumb { background: #262626; border-radius: 2px; }
   ::-webkit-scrollbar-thumb:hover { background: #333333; }
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
-  @keyframes slide-up { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes modalIn { from { opacity: 0; transform: scale(0.9) translateY(20px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+@keyframes slide-up { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
   .animate-pulse { animation: pulse 2s ease-in-out infinite; }
   .animate-slide-up { animation: slide-up 0.2s ease; }
 </style>
@@ -235,19 +236,41 @@ function connectRelay() {
   };
 }
 function configRelay() {
-  var currentUrl = document.getElementById('relayUrl').textContent;
-  var currentKey = state.relayKey || '';
-  var url = prompt('中转服务器地址:', currentUrl);
-  if (url === null) return;
-  if (url && url.trim()) {
-    document.getElementById('relayUrl').textContent = url.trim();
-  }
-  var key = prompt('中转服务器密钥 (Key):', currentKey);
-  if (key === null) return;
-  if (key && key.trim()) {
-    state.relayKey = key.trim();
-  }
+  document.getElementById('modalRelayUrl').value = document.getElementById('relayUrl').textContent;
+  document.getElementById('modalRelayKey').value = state.relayKey || '';
+  openConfigModal();
+}
+function openConfigModal() {
+  var overlay = document.getElementById('configModal');
+  var content = document.getElementById('configModalContent');
+  overlay.style.opacity = '1';
+  overlay.style.pointerEvents = 'auto';
+  setTimeout(function() {
+    content.style.transform = 'scale(1) translateY(0)';
+    content.style.opacity = '1';
+  }, 10);
+  setTimeout(function() {
+    document.getElementById('modalRelayUrl').focus();
+    document.getElementById('modalRelayUrl').select();
+  }, 100);
+}
+function closeConfigModal() {
+  var overlay = document.getElementById('configModal');
+  var content = document.getElementById('configModalContent');
+  content.style.transform = 'scale(0.9) translateY(20px)';
+  content.style.opacity = '0';
+  setTimeout(function() {
+    overlay.style.opacity = '0';
+    overlay.style.pointerEvents = 'none';
+  }, 200);
+}
+function saveConfigModal() {
+  var url = document.getElementById('modalRelayUrl').value.trim();
+  var key = document.getElementById('modalRelayKey').value.trim();
+  if (url) document.getElementById('relayUrl').textContent = url;
+  if (key) state.relayKey = key;
   addLog('info', '中转服务器配置已更新');
+  closeConfigModal();
 }
 function refreshSessions() { addLog('info', '会话列表已刷新'); }
 function renderSidebar() {
@@ -329,5 +352,27 @@ function setConn状态(status) {
   setConn状态('disconnected');
 })();
 </script>
-</body>
-</html>
+<!-- 配置弹窗 -->
+<div id="configModal" class="fixed inset-0 flex items-center justify-center z-50 transition-all duration-300" style="background: rgba(0,0,0,0.6); opacity: 0; pointer-events: none; backdrop-filter: blur(4px);">
+  <div id="configModalContent" class="rounded-xl bg-[#1a1a1a] border border-[#333] shadow-2xl w-80 transition-all duration-300" style="transform: scale(0.9) translateY(20px); opacity: 0;">
+    <div class="px-4 py-3 border-b border-[#222]">
+      <span class="text-sm font-medium text-[#ededed]">中转服务器配置</span>
+    </div>
+    <div class="px-4 py-3 space-y-3">
+      <div>
+        <label class="text-xs text-[#888] block mb-1">中转服务器地址</label>
+        <input type="text" id="modalRelayUrl" class="w-full bg-[#0d0d0d] border border-[#333] rounded-lg px-3 py-2 text-xs text-[#ededed] outline-none font-mono transition-colors focus:border-[#555]" placeholder="yunqiao.very.im" />
+      </div>
+      <div>
+        <label class="text-xs text-[#888] block mb-1">Key（密钥）</label>
+        <input type="text" id="modalRelayKey" class="w-full bg-[#0d0d0d] border border-[#333] rounded-lg px-3 py-2 text-xs text-[#ededed] outline-none font-mono transition-colors focus:border-[#555]" placeholder="输入密钥" />
+      </div>
+    </div>
+    <div class="flex gap-2 px-4 py-3 border-t border-[#222]">
+      <button class="flex-1 text-xs py-2 rounded-lg bg-[#333] text-[#aaa] hover:bg-[#444] hover:text-[#ededed] transition-all font-medium" onclick="closeConfigModal()">取消</button>
+      <button class="flex-1 text-xs py-2 rounded-lg bg-[#ededed] text-[#0a0a0a] hover:bg-white transition-all font-medium" onclick="saveConfigModal()">确定</button>
+    </div>
+  </div>
+</div>
+
+<script>
