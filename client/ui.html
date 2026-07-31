@@ -28,7 +28,8 @@ tailwind.config = {
   ::-webkit-scrollbar-thumb { background: #262626; border-radius: 2px; }
   ::-webkit-scrollbar-thumb:hover { background: #333333; }
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
-  @keyframes modalIn { from { opacity: 0; transform: scale(0.9) translateY(20px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes modalIn { from { opacity: 0; transform: scale(0.9) translateY(20px); } to { opacity: 1; transform: scale(1) translateY(0); } }
 @keyframes slide-up { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
   .animate-pulse { animation: pulse 2s ease-in-out infinite; }
   .animate-slide-up { animation: slide-up 0.2s ease; }
@@ -54,6 +55,11 @@ tailwind.config = {
     <div class="w-7 h-7 flex items-center justify-center rounded-lg cursor-pointer text-base font-semibold text-[#888] transition-all hover:bg-[#1a1a1a] hover:text-[#ededed]" onclick="createSession()" title="新建会话">+</div>
     <div class="w-4 h-px my-0.5 bg-[#222]"></div>
     <div class="flex flex-col gap-1 items-center flex-1 overflow-y-auto w-full px-0.5" id="sidebarList"></div>
+      <!-- 上下文菜单 -->
+    <div id="ctxMenu" class="fixed z-50 rounded-lg bg-[#1a1a1a] border border-[#333] shadow-xl py-1" style="display:none; min-width:140px;">
+      <div class="px-3 py-1.5 text-xs text-[#aaa] hover:bg-[#222] hover:text-[#ededed] cursor-pointer transition-colors" onclick="ctxSetDefault()">设为默认工作区</div>
+      <div class="px-3 py-1.5 text-xs text-[#aaa] hover:bg-[#222] hover:text-[#ff6b6b] cursor-pointer transition-colors border-t border-[#222]" onclick="ctxDelete()">删除工作区</div>
+    </div>
   </div>
 
   <!-- 左侧：对话/日志 -->
@@ -277,23 +283,56 @@ function browseSessionDir() {
   input.click();
 }
 function refreshSessions() { addLog('info', '会话列表已刷新'); }
+var ctxSessionId = null;
 function renderSidebar() {
   var list = document.getElementById('sidebarList');
   if (!list) return;
   list.innerHTML = '';
-  state.sessions.forEach(function(s) {
+  // 默认会话置顶
+  var sorted = [].concat(state.sessions);
+  sorted.sort(function(a, b) {
+    if (a.id === state.currentSessionId) return -1;
+    if (b.id === state.currentSessionId) return 1;
+    return 0;
+  });
+  sorted.forEach(function(s) {
     var isDefault = s.id === state.currentSessionId;
     var item = document.createElement('div');
     item.className = 'flex items-center justify-center rounded-lg cursor-pointer text-xs font-semibold transition-all relative';
-    item.style.cssText = isDefault ? 'background:#222;color:#ededed;width:26px;height:26px;border:1px solid #555;' : 'color:#666;width:26px;height:26px;background:transparent;';
-    item.title = (s.name || 'unnamed') + ' - ' + (s.workDir || '') + (isDefault ? ' [当前默认]' : ' (点击查看，双击设为默认)');
+    if (isDefault) {
+      item.style.cssText = 'background:#222;color:#4ade80;width:26px;height:26px;border:1px solid #4ade80;';
+    } else {
+      item.style.cssText = 'color:#666;width:26px;height:26px;background:transparent;';
+    }
+    item.title = (s.name || 'unnamed') + ' - ' + (s.workDir || '');
     item.textContent = (s.name || '?').slice(0, 1);
     item.onmouseover = function() { if (!isDefault) { this.style.background = '#1a1a1a'; this.style.color = '#aaa'; } };
     item.onmouseout = function() { if (!isDefault) { this.style.background = 'transparent'; this.style.color = '#666'; } };
-    item.onclick = function() { switchSession(s.id); };
-    item.ondblclick = function() { setDefaultSession(s.id); };
+    item.onclick = function(e) {
+      e.stopPropagation();
+      ctxSessionId = s.id;
+      var menu = document.getElementById('ctxMenu');
+      menu.style.display = 'block';
+      menu.style.left = '48px';
+      menu.style.top = Math.min(e.clientY, window.innerHeight - 80) + 'px';
+    };
     list.appendChild(item);
   });
+}
+// 点击其他地方关闭菜单
+document.addEventListener('click', function() {
+  var menu = document.getElementById('ctxMenu');
+  if (menu) menu.style.display = 'none';
+});
+function ctxSetDefault() {
+  var menu = document.getElementById('ctxMenu');
+  menu.style.display = 'none';
+  if (ctxSessionId) setDefaultSession(ctxSessionId);
+}
+function ctxDelete() {
+  var menu = document.getElementById('ctxMenu');
+  menu.style.display = 'none';
+  if (ctxSessionId) closeSession(ctxSessionId);
 }
 
 function renderSessions() {}
