@@ -7,22 +7,22 @@
 <title>云桥 MCP v2.0</title>
 <style>
   :root {
-    --bg: #0d1117;
-    --bg2: #161b22;
-    --bg3: #1c2128;
-    --border: #30363d;
-    --border-hover: #484f58;
-    --text: #e6edf3;
-    --text2: #8b949e;
-    --text3: #484f58;
-    --primary: #f3a04c;
-    --primary-glow: rgba(243, 160, 76, 0.25);
-    --accent: #e58522;
-    --success: #3fb950;
-    --success-glow: rgba(63, 185, 80, 0.25);
-    --warning: #d29922;
-    --danger: #f85149;
-    --danger-glow: rgba(248, 81, 73, 0.25);
+    --bg: #1e1e2e;
+    --bg2: #181825;
+    --bg3: #313244;
+    --border: #45475a;
+    --border-hover: #585b70;
+    --text: #cdd6f4;
+    --text2: #a6adc8;
+    --text3: #6c7086;
+    --primary: #fab387;
+    --primary-glow: rgba(250, 179, 135, 0.25);
+    --accent: #f9e2af;
+    --success: #a6e3a1;
+    --success-glow: rgba(166, 227, 161, 0.25);
+    --warning: #f9e2af;
+    --danger: #f38ba8;
+    --danger-glow: rgba(243, 139, 168, 0.25);
     --radius: 10px;
     --radius-sm: 6px;
     --radius-lg: 14px;
@@ -71,8 +71,8 @@
   .titlebar .logo {
     width: 24px;
     height: 24px;
-    background: var(--primary);
-    border-radius: 4px;
+    background: #cba6f7;
+    border-radius: 6px;
     flex-shrink: 0;
     display: inline-flex;
     align-items: center;
@@ -155,7 +155,7 @@
   }
 
   .sidebar-add:hover {
-    background: rgba(243, 160, 76, 0.1);
+    background: rgba(203, 166, 247, 0.1);
   }
   .sidebar-add {
     width: 28px;
@@ -163,7 +163,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--primary);
+    color: #cba6f7;
     cursor: pointer;
     border-radius: 4px;
     transition: all 0.2s;
@@ -202,11 +202,11 @@
   }
   .sidebar-item:hover {
     color: var(--text);
-    background: var(--bg3);
+    background: rgba(203, 166, 247, 0.08);
   }
   .sidebar-item.active {
-    color: var(--primary);
-    background: rgba(243, 160, 76, 0.12);
+    color: #cba6f7;
+    background: rgba(203, 166, 247, 0.15);
   }
   .sidebar-item .badge {
     position: absolute;
@@ -363,18 +363,18 @@
 
   .session-input input::placeholder { color: var(--text3); }
   .session-input button {
-    background: var(--primary);
+    background: #cba6f7;
     border: none;
-    color: #fff;
+    color: #1e1e2e;
     padding: 7px 18px;
     border-radius: var(--radius-sm);
     cursor: pointer;
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 700;
     transition: all 0.2s ease;
   }
   .session-input button:hover {
-    background: var(--accent);
+    background: #b4befe;
     transform: translateY(-1px);
   }
   .session-input button:active {
@@ -438,7 +438,7 @@
     border-radius: 50%;
     flex-shrink: 0;
   }
-  .node-header .dot.orange { background: var(--primary); }
+  .node-header .dot.orange { background: #cba6f7; }
   .node-header .dot.green { background: var(--success); }
   .node-header .dot.gray { background: var(--text3); }
   .node-badge {
@@ -457,7 +457,7 @@
   .connector {
     width: 2px;
     height: 40px;
-    background: linear-gradient(to bottom, var(--primary), var(--border), var(--success));
+    background: linear-gradient(to bottom, #cba6f7, var(--border), #89b4fa);
     position: relative;
     z-index: 1;
     animation: glow 3s ease-in-out infinite;
@@ -546,8 +546,8 @@
   }
   .btn:active { transform: translateY(0); }
   .btn.primary {
-    background: var(--primary);
-    color: #fff;
+    background: #cba6f7;
+    color: #1e1e2e;
     border: none;
   }
   .btn.primary:hover { transform: translateY(-1px); box-shadow: 0 4px 16px var(--primary-glow); }
