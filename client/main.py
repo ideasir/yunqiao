@@ -871,7 +871,7 @@ class App:
         import asyncio, subprocess
         async def run():
             try:
-                cwd = state["workDir"] if state["workDir"] else None
+                cwd = state.get("workDir") or None
                 proc = await asyncio.create_subprocess_shell(
                     command, stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE, cwd=cwd)
@@ -1016,7 +1016,21 @@ class App:
                 command = payload.get("command", "")
                 timeout = payload.get("timeout", 30000)
                 self.add_log("INFO", f"会话执行: {command[:50]}")
-                # 重用 _run_cmd 逻辑
+                # 读取当前会话的 cwd 作为工作目录
+                cwd = None
+                idx_file = Path.home() / ".yunqiao" / "sessions.json"
+                if idx_file.exists():
+                    try:
+                        data = json.loads(idx_file.read_text("utf-8"))
+                        default_id = data.get("defaultSessionId")
+                        if default_id:
+                            sfile = Path.home() / ".yunqiao" / "sessions" / f"{default_id}.json"
+                            if sfile.exists():
+                                sd = json.loads(sfile.read_text("utf-8"))
+                                cwd = sd.get("cwd") or sd.get("workDir")
+                    except: pass
+                if cwd:
+                    state["workDir"] = cwd
                 self._run_cmd(ws, rid, command, timeout)
 
             elif op == "read_file":
