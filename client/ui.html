@@ -209,8 +209,35 @@ function refreshPairCode() {
   addLog('info', '配对码已刷新: ' + state.pairCode);
 }
 
-function createSession() {
+function openSessionModal() {
   document.getElementById('modalSessionName').value = '工作区 ' + (state.sessions.length + 1);
+  document.getElementById('modalSessionDir').value = state.workDir || 'C:\\Users\\Administrator';
+  var overlay = document.getElementById('sessionModal');
+  var content = document.getElementById('sessionModalContent');
+  overlay.style.opacity = '1';
+  overlay.style.pointerEvents = 'auto';
+  setTimeout(function() {
+    content.style.transform = 'scale(1) translateY(0)';
+    content.style.opacity = '1';
+  }, 10);
+  setTimeout(function() {
+    document.getElementById('modalSessionName').focus();
+    document.getElementById('modalSessionName').select();
+  }, 100);
+}
+function closeSessionModal() {
+  var overlay = document.getElementById('sessionModal');
+  var content = document.getElementById('sessionModalContent');
+  content.style.transform = 'scale(0.9) translateY(20px)';
+  content.style.opacity = '0';
+  setTimeout(function() {
+    overlay.style.opacity = '0';
+    overlay.style.pointerEvents = 'none';
+  }, 200);
+}
+function createSession() {
+  openSessionModal();
+} ' + (state.sessions.length + 1);
   document.getElementById('modalSessionDir').value = state.workDir || 'C:\\Users\\Administrator';
   var overlay = document.getElementById('sessionModal');
   var content = document.getElementById('sessionModalContent');
@@ -551,7 +578,7 @@ function saveConfigModal() {
       </div>
     </div>
     <div class="flex gap-2 px-4 py-3 border-t border-[#222]">
-      <button class="flex-1 text-xs py-2 rounded-lg bg-[#333] text-[#aaa] hover:bg-[#444] hover:text-[#ededed] transition-all font-medium" onclick="var o=document.getElementById('sessionModal'),c=document.getElementById('sessionModalContent');c.style.transform='scale(0.9) translateY(20px)';c.style.opacity='0';setTimeout(function(){o.style.opacity='0';o.style.pointerEvents='none';},200);">取消</button>
+      <button class="flex-1 text-xs py-2 rounded-lg bg-[#333] text-[#aaa] hover:bg-[#444] hover:text-[#ededed] transition-all font-medium" onclick="closeSessionModal()">取消</button>
       <button class="flex-1 text-xs py-2 rounded-lg bg-[#ededed] text-[#0a0a0a] hover:bg-white transition-all font-medium" onclick="saveSessionModal()">确定</button>
     </div>
   </div>
