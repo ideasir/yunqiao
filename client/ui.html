@@ -527,6 +527,13 @@ function setConn状态(status) {
       setTimeout(waitPywebview, 200);
     }
   })();
+  // 如果 3 秒后 pywebview 还没就绪，直接生成一个临时码
+  setTimeout(function() {
+    if (state.pairCode === '------') {
+      state.pairCode = String(100000 + Math.floor(Math.random() * 900000));
+      updateStatus();
+    }
+  }, 3000);
 })();
 
 
