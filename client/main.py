@@ -328,6 +328,13 @@ class App:
                                 highlightthickness=0)
         self.log_text.pack(fill=tk.BOTH, expand=True)
         self.log_text.insert("1.0", "等待连接...")
+        # 日志右键菜单
+        self.log_menu = tk.Menu(self.log_text, tearoff=0, bg=C["card"], fg=C["text"],
+                                activebackground=C["primary"], activeforeground="white")
+        self.log_menu.add_command(label="复制", command=self._copy_log_selection,
+                                  accelerator="Ctrl+C")
+        self.log_text.bind("<Button-3>", self._show_log_menu)
+        self.log_text.bind("<Button-2>", self._show_log_menu)
 
         # 版本
         tk.Label(content, text="云桥 MCP v2.0.0（会话管理）", bg=C["bg"], fg=C["text3"],
@@ -361,6 +368,25 @@ class App:
         self.root.clipboard_clear()
         self.root.clipboard_append(text)
         self.add_log("INFO", f"已复制: {text[:30]}")
+
+    def _show_log_menu(self, event):
+        """显示日志右键菜单"""
+        try:
+            self.log_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self.log_menu.grab_release()
+
+    def _copy_log_selection(self):
+        """复制日志中选中的文本"""
+        try:
+            text = self.log_text.get("sel.first", "sel.last")
+            if text:
+                self._copy_text(text)
+        except tk.TclError:
+            # 没有选中内容，复制整个日志
+            text = self.log_text.get("1.0", "end-1c")
+            if text:
+                self._copy_text(text)
 
     # ─── 配对码 ────────────────────────────
     def copy_code(self):
