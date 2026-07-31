@@ -112,6 +112,7 @@ class App:
         state["deviceName"] = cfg.get("deviceName", platform.node())
         state["workDir"] = cfg.get("workDir", "")
         state["directMode"] = cfg.get("directMode", True)
+        state["autoConnect"] = cfg.get("autoConnect", True)
         state["pairCode"] = gen_code()
         self.agent_status = None
         self.agent_last = 0
@@ -587,6 +588,13 @@ class App:
         tk.Radiobutton(mode_btnf, text="系统代理", variable=self.direct_var,
                        value=False, bg=C["panel"], fg=C["text"],
                        font=("Segoe UI", 9), selectcolor=C["panel"]).pack(side=tk.LEFT)
+        # 自动连接开关
+        auto_frame = tk.Frame(win, bg=C["panel"])
+        auto_frame.pack(fill=tk.X, padx=12, pady=(4, 0))
+        self.auto_connect_var = tk.BooleanVar(value=state.get("autoConnect", True))
+        tk.Checkbutton(auto_frame, text="启动后自动连接", variable=self.auto_connect_var,
+                       bg=C["panel"], fg=C["text"], font=("Segoe UI", 9),
+                       selectcolor=C["panel"]).pack(anchor="w")
         entries = {}
 
         def save():
@@ -600,9 +608,11 @@ class App:
             state["psk"] = psk
             state["deviceName"] = name
             state["directMode"] = self.direct_var.get()
+            state["autoConnect"] = self.auto_connect_var.get()
             save_config()
             win.destroy()
-            self.start_connect()
+            if state["autoConnect"]:
+                self.start_connect()
 
         entries = {}
         entry_widgets = []
@@ -962,6 +972,7 @@ class App:
 
     def _update_log_ui(self, ts, level, msg, tag):
         try:
+            self.log_text.config(state=tk.NORMAL)
             self.log_text.insert("end", f"[{ts}] {level} {msg}\n", tag)
             self.log_text.see("end")
             if "执行:" in msg:
