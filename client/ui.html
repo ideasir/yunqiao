@@ -37,8 +37,8 @@ tailwind.config = {
 <body class="h-screen flex flex-col overflow-hidden bg-[#0a0a0a]">
 
 <!-- ─── 标题栏 ─── -->
-<header class="flex items-center gap-3 px-5 py-2.5 flex-shrink-0 select-none bg-[#0a0a0a] border-b border-[#1a1a1a]">
-  <div class="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold text-black bg-[#ededed] flex-shrink-0 shadow-sm">~</div>
+<header class="flex items-center gap-3 px-5 py-2.5 flex-shrink-0 select-none bg-[#0a0a0a] ">
+  <div class="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold text-black bg-[#ededed] flex-shrink-0 ">~</div>
   <span class="text-sm font-medium text-[#ededed]">云桥 MCP</span>
   <span class="text-xs text-[#666] font-mono">v2.0</span>
   <div class="flex-1"></div>
@@ -50,7 +50,7 @@ tailwind.config = {
 <div class="flex flex-1 overflow-hidden gap-0">
 
   <!-- 左侧侧边栏 -->
-  <div class="flex flex-col items-center gap-1.5 py-2.5 px-1.5 flex-shrink-0 select-none bg-[#0d0d0d] border-r border-[#1a1a1a]">
+  <div class="flex flex-col items-center gap-1.5 py-2.5 px-1.5 flex-shrink-0 select-none bg-[#0d0d0d] ">
     <div class="w-7 h-7 flex items-center justify-center rounded-lg cursor-pointer text-base font-semibold text-[#888] transition-all hover:bg-[#1a1a1a] hover:text-[#ededed]" onclick="createSession()" title="新建会话">+</div>
     <div class="w-4 h-px my-0.5 bg-[#222]"></div>
     <div class="flex flex-col gap-1 items-center flex-1 overflow-y-auto w-full px-0.5" id="sidebarList"></div>
@@ -60,7 +60,7 @@ tailwind.config = {
   <div class="flex-1 flex flex-col min-w-0 bg-[#0a0a0a]">
 
     <!-- 路径栏 -->
-    <div class="flex items-center gap-2 px-5 py-2 flex-shrink-0 select-none bg-[#0a0a0a] border-b border-[#1a1a1a]">
+    <div class="flex items-center gap-2 px-5 py-2 flex-shrink-0 select-none bg-[#0a0a0a] ">
       <span class="text-[#666] text-sm font-bold">❯</span>
       <span class="text-xs font-mono text-[#aaa] flex-1 truncate" id="currentCwd">~</span>
     </div>
@@ -79,7 +79,7 @@ tailwind.config = {
   </div>
 
   <!-- 右侧：拓扑图 -->
-  <aside class="w-64 flex flex-col gap-0 p-0 overflow-y-auto flex-shrink-0 select-none bg-[#0d0d0d] border-l border-[#1a1a1a]" style="padding: 12px;">
+  <aside class="w-64 flex flex-col gap-0 p-0 overflow-y-auto flex-shrink-0 select-none bg-[#0d0d0d] " style="padding: 12px;">
 
     <!-- Agent 节点 -->
     <div class="rounded-xl bg-[#141414] border border-[#222222]">
