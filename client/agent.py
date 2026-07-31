@@ -13,8 +13,31 @@ import time
 import uuid
 from pathlib import Path
 
-RELAY_URL = os.environ.get("RELAY_URL", "wss://yunqiao.very.im/device")
-RELAY_PSK = os.environ.get("RELAY_PSK", "PSK_REMOVED")
+RELAY_URL = os.environ.get("RELAY_URL")
+if not RELAY_URL:
+    try:
+        import json
+        config_path = Path.home() / ".yunqiao" / "config.json"
+        if config_path.exists():
+            cfg = json.loads(config_path.read_text("utf-8"))
+            RELAY_URL = cfg.get("relayUrl", "")
+    except:
+        pass
+if not RELAY_URL:
+    RELAY_URL = "wss://yunqiao.very.im/device"
+# 优先从环境变量读取，其次从配置文件读取，最后用默认值
+RELAY_PSK = os.environ.get("RELAY_PSK")
+if not RELAY_PSK:
+    try:
+        import json
+        config_path = Path.home() / ".yunqiao" / "config.json"
+        if config_path.exists():
+            cfg = json.loads(config_path.read_text("utf-8"))
+            RELAY_PSK = cfg.get("psk", "")
+    except:
+        pass
+if not RELAY_PSK:
+    RELAY_PSK = "yunqiao-mcp-key-2026"
 DEVICE_NAME = os.environ.get("DEVICE_NAME", platform.node())
 RECONNECT_DELAY = int(os.environ.get("RECONNECT_DELAY", "5000"))
 
