@@ -285,7 +285,7 @@ function browseSessionDir(e) {
   
   // 尝试原生文件夹选择器
   try {
-    if (window.showDirectoryPicker) {
+
       window.showDirectoryPicker().then(function(handle) {
         document.getElementById('modalSessionDir').value = handle.name;
         if (btn) { btn.textContent = '浏览'; btn.style.opacity = '1'; }
