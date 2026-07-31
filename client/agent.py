@@ -66,7 +66,16 @@ class SessionManager:
         SESSIONS_INDEX.write_text(json.dumps(data, indent=2), "utf-8")
 
     def create(self, work_dir, name=None):
-        """创建新会话并设为当前"""
+        """创建新会话并设为当前（同目录复用）"""
+        # 检查是否已有同目录的会话
+        for s in self.sessions.values():
+            if s.workDir == work_dir:
+                self.current_session_id = s.id
+                self._save_index()
+                s.lastActive = time.time()
+                s._save()
+                return s.to_dict()
+        # 新建
         sid = uuid.uuid4().hex[:8]
         if not name:
             name = f"workspace_{sid}"
