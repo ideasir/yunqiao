@@ -609,7 +609,26 @@ function refreshPairCode() {
 
 // ─── 会话管理 ────────────────────────────────
 function createSession() {
-  addLog('info', '请在客户端 UI 上新建会话');
+  const name = prompt('会话名称（可选）:', '工作区');
+  if (name === null) return;
+  const dir = prompt('工作目录 (如 C:\\Users\\Administrator):', state.workDir || 'C:\\Users\\Administrator');
+  if (dir === null) return;
+  // 添加一个临时会话到侧边栏
+  const id = 's_' + Date.now().toString(36);
+  state.sessions.push({
+    id: id,
+    name: name || '工作区',
+    workDir: dir,
+    cwd: dir,
+    isDefault: state.sessions.length === 0,
+  });
+  state.currentSessionId = id;
+  state.workDir = dir;
+  renderSidebar();
+  renderSessions();
+  addLog('info', `会话已创建: ${name} (${id})`);
+  addLog('info', `工作目录: ${dir}`);
+  updateStatus();
 }
 
 function refreshSessions() {
@@ -727,8 +746,12 @@ function updateStatus() {
 // ─── 初始化 ──────────────────────────────────
 connect();
 refreshPairCode();
+// 添加一个默认会话示例
+state.sessions.push({id:'demo', name:'工作区', workDir:'未设置', cwd:'未设置', isDefault:true});
+state.currentSessionId = 'demo';
 updateStatus();
 renderSidebar();
+addLog('info', '点击左侧 + 号新建会话');
 setInterval(() => {
   document.getElementById('relayLatency').textContent =
     `${Math.floor(Math.random() * 20 + 5)} ms`;
