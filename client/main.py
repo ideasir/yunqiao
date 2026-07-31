@@ -988,8 +988,35 @@ class App:
             if op == "create":
                 work_dir = payload.get("workDir", "")
                 name = payload.get("name")
-                # 创建会话文件
+                # 检查是否已有同目录的会话，有则复用
                 import random
+                existing = None
+                idx_file = Path.home() / ".yunqiao" / "sessions.json"
+                if idx_file.exists():
+                    try:
+                        data = json.loads(idx_file.read_text("utf-8"))
+                        for sid in data.get("sessions", []):
+                            sfile = Path.home() / ".yunqiao" / "sessions" / f"{sid}.json"
+                            if sfile.exists():
+                                sd = json.loads(sfile.read_text("utf-8"))
+                                if sd.get("workDir") == work_dir:
+                                    existing = sd
+                                    # 设为默认
+                                    data["defaultSessionId"] = sid
+                                    idx_file.write_text(json.dumps(data, indent=2), "utf-8")
+                                    break
+                    except: pass
+                if existing:
+                    import asyncio
+                    newloop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(newloop)
+                    newloop.run_until_complete(ws.send(json.dumps({
+                        "type": "session_op_result", "requestId": rid,
+                        "payload": existing,
+                    })))
+                    self.add_log("INFO", f"复用会话: {existing['name']} ({existing['id']})")
+                    return
+                # 新建会话
                 sid = ''.join(random.choices('0123456789abcdef', k=8))
                 sdata = {
                     "id": sid,
@@ -1003,7 +1030,6 @@ class App:
                 sfile.parent.mkdir(parents=True, exist_ok=True)
                 sfile.write_text(json.dumps(sdata, indent=2), "utf-8")
                 # 更新索引
-                idx_file = Path.home() / ".yunqiao" / "sessions.json"
                 idx = {"defaultSessionId": sid, "sessions": [sid]}
                 if idx_file.exists():
                     try:
