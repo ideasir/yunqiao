@@ -278,26 +278,37 @@ function renderSidebar() {
   if (!list) return;
   list.innerHTML = '';
   state.sessions.forEach(function(s) {
+    var isDefault = s.id === state.currentSessionId;
     var item = document.createElement('div');
-    var active = s.id === state.currentSessionId;
-    item.className = 'flex items-center justify-center rounded-lg cursor-pointer text-xs font-semibold transition-all';
-    item.style.cssText = active ? 'background:#222;color:#ededed;width:26px;height:26px;border:1px solid #333;' : 'color:#666;width:26px;height:26px;background:transparent;';
-    item.title = (s.name || 'unnamed') + ' - ' + (s.workDir || '');
+    item.className = 'flex items-center justify-center rounded-lg cursor-pointer text-xs font-semibold transition-all relative';
+    item.style.cssText = isDefault ? 'background:#222;color:#ededed;width:26px;height:26px;border:1px solid #555;' : 'color:#666;width:26px;height:26px;background:transparent;';
+    item.title = (s.name || 'unnamed') + ' - ' + (s.workDir || '') + (isDefault ? ' [当前默认]' : ' (点击查看，双击设为默认)');
     item.textContent = (s.name || '?').slice(0, 1);
-    item.onmouseover = function() { if (!active) { this.style.background = '#1a1a1a'; this.style.color = '#aaa'; } };
-    item.onmouseout = function() { if (!active) { this.style.background = 'transparent'; this.style.color = '#666'; } };
+    item.onmouseover = function() { if (!isDefault) { this.style.background = '#1a1a1a'; this.style.color = '#aaa'; } };
+    item.onmouseout = function() { if (!isDefault) { this.style.background = 'transparent'; this.style.color = '#666'; } };
     item.onclick = function() { switchSession(s.id); };
+    item.ondblclick = function() { setDefaultSession(s.id); };
     list.appendChild(item);
   });
 }
 
 function renderSessions() {}
 
-function switchSession(id) { 
-  state.currentSessionId = id; 
-  renderSidebar(); 
-  renderSessions(); 
-  addLog('info', '已切换到会话: ' + id); 
+function switchSession(id) {
+  // 查看会话日志（不切换默认工作区）
+  var s = state.sessions.find(function(s) { return s.id === id; });
+  if (s) {
+    addLog('info', '查看会话: ' + (s.name || 'unnamed') + ' (' + id + ')');
+  }
+}
+
+function setDefaultSession(id) {
+  state.currentSessionId = id;
+  renderSidebar();
+  renderSessions();
+  updateStatus();
+  var s = state.sessions.find(function(s) { return s.id === id; });
+  addLog('status', '默认工作区已切换: ' + (s ? s.name : id));
 }
 function closeSession(id) {
   if (!confirm('确定关闭此会话?')) return;
