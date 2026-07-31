@@ -128,37 +128,7 @@
     padding: 8px 0;
     gap: 2px;
   }
-  .sidebar-add {
-    width: 32px;
-    height: 32px;
-    position: relative;
-    cursor: pointer;
-    border-radius: var(--radius-sm);
-    transition: all 0.2s;
-    margin-bottom: 6px;
-  }
-  .sidebar-add::before,
-  .sidebar-add::after {
-    content: "";
-    position: absolute;
-    background: var(--primary);
-    border-radius: 1px;
-  }
-  .sidebar-add::before {
-    width: 14px;
-    height: 2px;
-    top: 15px;
-    left: 9px;
-  }
-  .sidebar-add::after {
-    width: 2px;
-    height: 14px;
-    top: 9px;
-    left: 15px;
-  }
-  .sidebar-add:hover {
-    background: rgba(243, 160, 76, 0.1);
-  }
+
   .sidebar-add:hover {
     background: rgba(243, 160, 76, 0.1);
   }
@@ -170,7 +140,7 @@
     flex: 1;
     overflow-y: auto;
     width: 100%;
-    padding: 0 8px;
+    padding: 8px 8px 0;
   }
   .sidebar-item {
     width: 34px;
@@ -567,7 +537,6 @@
   <!-- 左侧：会话内容 -->
   <div class="left-panel">
     <div class="session-sidebar" id="sessionSidebar">
-      <div class="sidebar-add" onclick="createSession()" title="新建会话"></div>
       <div class="sidebar-list" id="sidebarList">
       </div>
     </div>
@@ -945,7 +914,7 @@ refreshPairCode();
 // 空状态，无默认会话
 updateStatus();
 renderSidebar();
-addLog('info', '点击左侧 + 号新建会话');
+
 setInterval(() => {
   document.getElementById('relayLatency').textContent =
     `${Math.floor(Math.random() * 20 + 5)} ms`;
