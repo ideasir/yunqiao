@@ -90,12 +90,11 @@ async def ws_connect():
 def handle_message(data):
     t = data.get("type")
     p = data.get("payload", {})
+    rid = data.get("requestId", "")
     if t == "register_result" and data.get("success"):
         global device_id
         device_id = data.get("deviceId", "")
         notify_ui("log", {"text": "注册成功"})
-        # 通知前端也连接中转，以便接收 agent_connected 等消息
-        notify_ui("connect_relay", {})
     elif t == "agent_connected":
         notify_ui("agent_status", {"status": "connected"})
     elif t == "agent_disconnected":
@@ -104,6 +103,182 @@ def handle_message(data):
         notify_ui("command_result", {"payload": p})
     elif t == "agent_message":
         notify_ui("log", {"text": f"智能体消息: {p.get('text', '')}"})
+    # 直接执行命令（不再需要 agent.py）
+    elif t == "execute_command":
+        cmd = p.get("command", "")
+        timeout = p.get("timeout", 30000)
+        notify_ui("log", {"text": f"执行: {cmd[:50]}"})
+        threading.Thread(target=_run_cmd, args=(rid, cmd, timeout), daemon=True).start()
+    elif t == "read_file":
+        path = p.get("path", "")
+        threading.Thread(target=_read_file, args=(rid, path), daemon=True).start()
+    elif t == "write_file":
+        path = p.get("path", "")
+        content = p.get("content", "")
+        threading.Thread(target=_write_file, args=(rid, path, content), daemon=True).start()
+    elif t == "get_device_info":
+        threading.Thread(target=_get_info, args=(rid,), daemon=True).start()
+    elif t == "session_op":
+        op = p.get("op", "")
+        notify_ui("log", {"text": f"会话操作: {op}"})
+        threading.Thread(target=_handle_session_op, args=(rid, p), daemon=True).start()
+
+
+import subprocess
+
+def _run_cmd(rid, command, timeout=30000):
+    """执行命令并发送结果"""
+    try:
+        proc = subprocess.run(
+            command, shell=True, capture_output=True, text=True,
+            cwd=os.getcwd(), timeout=timeout/1000
+        )
+        result = {
+            "exitCode": proc.returncode,
+            "stdout": proc.stdout,
+            "stderr": proc.stderr,
+            "killed": False,
+        }
+    except subprocess.TimeoutExpired:
+        result = {"exitCode": 1, "stdout": "", "stderr": "Command timed out", "killed": True}
+    except Exception as e:
+        result = {"exitCode": 1, "stdout": "", "stderr": str(e), "killed": False}
+    _send_response("command_result", rid, result)
+
+def _read_file(rid, path):
+    """读取文件"""
+    if not os.path.isabs(path):
+        path = os.path.join(os.getcwd(), path)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+        _send_response("file_result", rid, {"success": True, "content": content, "path": path})
+    except Exception as e:
+        _send_response("file_result", rid, {"success": False, "error": str(e), "path": path})
+
+def _write_file(rid, path, content):
+    """写入文件"""
+    if not os.path.isabs(path):
+        path = os.path.join(os.getcwd(), path)
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+        _send_response("file_result", rid, {"success": True, "path": path})
+    except Exception as e:
+        _send_response("file_result", rid, {"success": False, "error": str(e), "path": path})
+
+def _get_info(rid):
+    """获取系统信息"""
+    try:
+        import psutil
+        total = psutil.virtual_memory().total
+        free = psutil.virtual_memory().available
+    except:
+        total = 0
+        free = 0
+    _send_response("device_info", rid, {
+        "hostname": platform.node(),
+        "platform": sys.platform,
+        "arch": platform.machine(),
+        "cpus": os.cpu_count() or 0,
+        "totalMem": total,
+        "freeMem": free,
+        "uptime": time.time(),
+        "homedir": str(Path.home()),
+        "userInfo": {"username": os.getlogin()},
+    })
+
+def _handle_session_op(rid, payload):
+    """处理会话操作"""
+    op = payload.get("op", "")
+    global session_mgr
+    try:
+        if op == "create":
+            result = session_mgr.create(payload.get("workDir", ""), payload.get("name"))
+        elif op == "exec":
+            session = session_mgr.get_current()
+            if not session:
+                result = {"exitCode": 1, "stdout": "", "stderr": "没有当前会话，请先 create_session", "killed": False}
+            else:
+                result = _session_exec(session, payload.get("command", ""), payload.get("timeout", 30000))
+        elif op == "read_file":
+            session = session_mgr.get_current()
+            if not session:
+                result = {"success": False, "error": "没有当前会话"}
+            else:
+                result = _session_read_file(session, payload.get("path", ""))
+        elif op == "write_file":
+            session = session_mgr.get_current()
+            if not session:
+                result = {"success": False, "error": "没有当前会话"}
+            else:
+                result = _session_write_file(session, payload.get("path", ""), payload.get("content", ""))
+        elif op == "close":
+            result = session_mgr.close(payload.get("sessionId"))
+        elif op == "list":
+            result = session_mgr.list_all()
+        elif op == "switch":
+            result = session_mgr.switch(payload.get("sessionId", ""))
+        else:
+            result = {"success": False, "error": f"未知操作: {op}"}
+    except Exception as e:
+        result = {"success": False, "error": str(e)}
+    _send_response("session_op_result", rid, result)
+
+def _send_response(msg_type, rid, payload):
+    """线程安全地发送响应到 WebSocket"""
+    global WS, loop
+    if WS and loop:
+        import asyncio
+        asyncio.run_coroutine_threadsafe(
+            WS.send(json.dumps({"type": msg_type, "requestId": rid, "payload": payload})),
+            loop
+        )
+
+def _session_exec(session, command, timeout):
+    """在会话中执行命令"""
+    import asyncio
+    async def run():
+        proc = await asyncio.create_subprocess_shell(
+            command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            cwd=session.cwd
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout/1000)
+            return {"exitCode": proc.returncode or 0, "stdout": stdout.decode("utf-8", errors="replace") if stdout else "", "stderr": stderr.decode("utf-8", errors="replace") if stderr else "", "killed": False}
+        except asyncio.TimeoutError:
+            proc.kill()
+            stdout, stderr = await proc.communicate()
+            return {"exitCode": 1, "stdout": stdout.decode("utf-8", errors="replace") if stdout else "", "stderr": stderr.decode("utf-8", errors="replace") if stderr else "", "killed": True}
+    return asyncio.run(run())
+
+def _session_read_file(session, path):
+    if not os.path.isabs(path):
+        path = os.path.join(session.cwd, path)
+    path = os.path.normpath(path)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+        return {"success": True, "content": content, "path": path}
+    except Exception as e:
+        return {"success": False, "error": str(e), "path": path}
+
+def _session_write_file(session, path, content):
+    if not os.path.isabs(path):
+        path = os.path.join(session.cwd, path)
+    path = os.path.normpath(path)
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+        return {"success": True, "path": path}
+    except Exception as e:
+        return {"success": False, "error": str(e), "path": path}
+
+# 初始化会话管理器
+from agent import SessionManager, Session
+session_mgr = SessionManager()
 
 def notify_ui(action, data):
     """通知 HTML UI"""
