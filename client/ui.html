@@ -526,6 +526,13 @@ function trafficFlash() {
 }
 function configRelay() {
   document.getElementById('modalRelayUrl').value = document.getElementById('relayUrl').textContent;
+  // 尝试从后端读取当前配置
+  if (window.pywebview && window.pywebview.api) {
+    window.pywebview.api.get_settings().then(function(cfg) {
+      if (cfg && cfg.psk) state.relayKey = cfg.psk;
+      if (cfg && cfg.relayUrl) document.getElementById('modalRelayUrl').value = cfg.relayUrl;
+    }).catch(function() {});
+  }
   document.getElementById('modalRelayKey').value = state.relayKey || '';
   var overlay = document.getElementById('configModal');
   var content = document.getElementById('configModalContent');
