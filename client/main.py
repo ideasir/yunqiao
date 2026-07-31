@@ -677,6 +677,12 @@ class App:
                             threading.Thread(target=self._get_info,
                                 args=(ws, rid), daemon=True).start()
 
+                        elif t == "session_op":
+                            op = payload.get("op", "")
+                            self.add_log("INFO", f"会话操作: {op}")
+                            threading.Thread(target=self._handle_session_op,
+                                args=(ws, rid, payload), daemon=True).start()
+
             except websockets.ConnectionClosed:
                 self.root.after(0, lambda: self.set_status("reconnecting", "重连中..."))
                 self.add_log("WARN", "连接断开，5秒后重连")
@@ -928,7 +934,174 @@ class App:
                 self.add_log("ERROR", f"写入失败: {e}")
         asyncio.run(run())
 
+    def _handle_session_op(self, ws, rid, payload):
+        """处理会话管理操作"""
+        from pathlib import Path
+        op = payload.get("op", "")
+        try:
+            if op == "create":
+                work_dir = payload.get("workDir", "")
+                name = payload.get("name")
+                # 创建会话文件
+                import random
+                sid = ''.join(random.choices('0123456789abcdef', k=8))
+                sdata = {
+                    "id": sid,
+                    "name": name or f"workspace_{sid[:4]}",
+                    "workDir": work_dir,
+                    "cwd": work_dir,
+                    "createdAt": __import__('time').time(),
+                    "lastActive": __import__('time').time(),
+                }
+                sfile = Path.home() / ".yunqiao" / "sessions" / f"{sid}.json"
+                sfile.parent.mkdir(parents=True, exist_ok=True)
+                sfile.write_text(json.dumps(sdata, indent=2), "utf-8")
+                # 更新索引
+                idx_file = Path.home() / ".yunqiao" / "sessions.json"
+                idx = {"defaultSessionId": sid, "sessions": [sid]}
+                if idx_file.exists():
+                    try:
+                        old = json.loads(idx_file.read_text("utf-8"))
+                        old["sessions"].append(sid)
+                        old["defaultSessionId"] = sid
+                        idx = old
+                    except: pass
+                idx_file.write_text(json.dumps(idx, indent=2), "utf-8")
+                import asyncio
+                newloop = asyncio.new_event_loop()
+                asyncio.set_event_loop(newloop)
+                newloop.run_until_complete(ws.send(json.dumps({
+                    "type": "session_op_result", "requestId": rid,
+                    "payload": sdata,
+                })))
+                self.add_log("INFO", f"会话已创建: {sdata['name']} ({sid})")
+
+            elif op == "exec":
+                command = payload.get("command", "")
+                timeout = payload.get("timeout", 30000)
+                self.add_log("INFO", f"会话执行: {command[:50]}")
+                # 重用 _run_cmd 逻辑
+                self._run_cmd(ws, rid, command, timeout)
+
+            elif op == "read_file":
+                path = payload.get("path", "")
+                self._read_file(ws, rid, path)
+
+            elif op == "write_file":
+                path = payload.get("path", "")
+                content = payload.get("content", "")
+                self._write_file(ws, rid, path, content)
+
+            elif op == "list":
+                sessions = []
+                idx_file = Path.home() / ".yunqiao" / "sessions.json"
+                if idx_file.exists():
+                    try:
+                        data = json.loads(idx_file.read_text("utf-8"))
+                        default_id = data.get("defaultSessionId")
+                        for sid in data.get("sessions", []):
+                            sfile = Path.home() / ".yunqiao" / "sessions" / f"{sid}.json"
+                            if sfile.exists():
+                                sd = json.loads(sfile.read_text("utf-8"))
+                                sd["isDefault"] = sd["id"] == default_id
+                                sessions.append(sd)
+                    except: pass
+                import asyncio
+                newloop = asyncio.new_event_loop()
+                asyncio.set_event_loop(newloop)
+                newloop.run_until_complete(ws.send(json.dumps({
+                    "type": "session_op_result", "requestId": rid,
+                    "payload": {"sessions": sessions},
+                })))
+
+            elif op == "close":
+                import os
+                sid = payload.get("sessionId")
+                if not sid:
+                    idx_file = Path.home() / ".yunqiao" / "sessions.json"
+                    if idx_file.exists():
+                        data = json.loads(idx_file.read_text("utf-8"))
+                        sid = data.get("defaultSessionId")
+                if sid:
+                    sfile = Path.home() / ".yunqiao" / "sessions" / f"{sid}.json"
+                    if sfile.exists():
+                        sfile.unlink()
+                    idx_file = Path.home() / ".yunqiao" / "sessions.json"
+                    if idx_file.exists():
+                        data = json.loads(idx_file.read_text("utf-8"))
+                        data["sessions"] = [s for s in data["sessions"] if s != sid]
+                        data["defaultSessionId"] = data["sessions"][0] if data["sessions"] else None
+                        idx_file.write_text(json.dumps(data, indent=2), "utf-8")
+                import asyncio
+                newloop = asyncio.new_event_loop()
+                asyncio.set_event_loop(newloop)
+                newloop.run_until_complete(ws.send(json.dumps({
+                    "type": "session_op_result", "requestId": rid,
+                    "payload": {"success": True},
+                })))
+                self.add_log("INFO", "会话已关闭")
+
+            elif op == "switch":
+                sid = payload.get("sessionId", "")
+                idx_file = Path.home() / ".yunqiao" / "sessions.json"
+                if idx_file.exists():
+                    data = json.loads(idx_file.read_text("utf-8"))
+                    if sid in data.get("sessions", []):
+                        data["defaultSessionId"] = sid
+                        idx_file.write_text(json.dumps(data, indent=2), "utf-8")
+                        sfile = Path.home() / ".yunqiao" / "sessions" / f"{sid}.json"
+                        sd = {}
+                        if sfile.exists():
+                            sd = json.loads(sfile.read_text("utf-8"))
+                        import asyncio
+                        newloop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(newloop)
+                        newloop.run_until_complete(ws.send(json.dumps({
+                            "type": "session_op_result", "requestId": rid,
+                            "payload": {"success": True, "sessionId": sid, "name": sd.get("name", ""), "workDir": sd.get("workDir", "")},
+                        })))
+                        self.add_log("INFO", f"已切换到会话: {sid}")
+                        return
+                import asyncio
+                newloop = asyncio.new_event_loop()
+                asyncio.set_event_loop(newloop)
+                newloop.run_until_complete(ws.send(json.dumps({
+                    "type": "session_op_result", "requestId": rid,
+                    "payload": {"success": False, "error": f"会话 {sid} 不存在"},
+                })))
+
+            else:
+                import asyncio
+                newloop = asyncio.new_event_loop()
+                asyncio.set_event_loop(newloop)
+                newloop.run_until_complete(ws.send(json.dumps({
+                    "type": "session_op_result", "requestId": rid,
+                    "payload": {"success": False, "error": f"未知操作: {op}"},
+                })))
+        except Exception as e:
+            import asyncio
+            newloop = asyncio.new_event_loop()
+            asyncio.set_event_loop(newloop)
+            newloop.run_until_complete(ws.send(json.dumps({
+                "type": "session_op_result", "requestId": rid,
+                "payload": {"success": False, "error": str(e)},
+            })))
+
     def _get_info(self, ws, rid):
+        """获取设备信息"""
+        import asyncio
+        async def run():
+            await ws.send(json.dumps({
+                "type": "device_info", "requestId": rid,
+                "payload": {
+                    "hostname": platform.node(), "platform": sys.platform,
+                    "arch": platform.machine(), "cpus": os.cpu_count() or 0,
+                    "uptime": time.time(), "homedir": str(Path.home()),
+                    "userInfo": {"username": os.getlogin()},
+                },
+            }))
+            self.add_log("INFO", "已返回系统信息")
+        asyncio.run(run())
         import asyncio
         async def run():
             await ws.send(json.dumps({
