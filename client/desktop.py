@@ -43,6 +43,7 @@ if not RELAY_PSK:
 # ─── 全局状态 ────────────────────────────────────
 UI = None  # pywebview 窗口引用
 WS = None
+SHOULD_RECONNECT = True
 pair_code = str(100000 + int(time.time() * 1000) % 900000)
 device_id = ""
 
@@ -340,9 +341,10 @@ class Api:
 
     def toggle_connect(self):
         """连接/断开切换"""
-        global WS
+        global WS, SHOULD_RECONNECT
         if WS:
             # 断开
+            SHOULD_RECONNECT = False
             import asyncio
             try:
                 asyncio.run_coroutine_threadsafe(WS.close(), loop)
@@ -354,6 +356,7 @@ class Api:
             return {"connected": False}
         else:
             # 连接
+            SHOULD_RECONNECT = True
             threading.Thread(target=start_ws, daemon=True).start()
             notify_ui("log", {"text": "正在连接..."})
             return {"connected": True}
