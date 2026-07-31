@@ -553,6 +553,12 @@ function saveConfigModal() {
   var key = document.getElementById('modalRelayKey').value.trim();
   if (url) document.getElementById('relayUrl').textContent = url;
   if (key) state.relayKey = key;
+  // 保存到后端配置文件
+  try {
+    if (window.pywebview && window.pywebview.api) {
+      window.pywebview.api.save_settings(key, url);
+    }
+  } catch(e) {}
   addLog('info', '中转服务器配置已更新');
   closeConfigModal();
 }
