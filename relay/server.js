@@ -448,7 +448,7 @@ httpServer.on('upgrade', (req, socket, head) => {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
 
   if (url.pathname === '/device') {
-    const psk = req.headers['x-psk'];
+    const psk = req.headers['x-psk'] || url.searchParams.get('psk');
     if (psk !== PSK) {
       socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
       socket.destroy();
