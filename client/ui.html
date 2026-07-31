@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="data:,">
 <title>云桥 MCP v2.0</title>
 <style>
   :root {
@@ -567,28 +568,8 @@ const state = {
 
 // ─── WebSocket 连接 ─────────────────────────
 function connect() {
-  const url = `wss://yunqiao.very.im/device`;
-  state.ws = new WebSocket(url);
-  state.ws.onopen = () => {
-    addLog('info', 'WebSocket 已连接');
-    setConnStatus('connected');
-  };
-  state.ws.onmessage = (e) => {
-    try {
-      const msg = JSON.parse(e.data);
-      handleMessage(msg);
-    } catch (err) {
-      console.error('parse error:', err);
-    }
-  };
-  state.ws.onclose = () => {
-    addLog('info', 'WebSocket 已断开，5秒后重连...');
-    setConnStatus('disconnected');
-    setTimeout(connect, 5000);
-  };
-  state.ws.onerror = (err) => {
-    console.error('ws error:', err);
-  };
+  addLog('info', 'HTML 预览模式，使用桌面版连接 WebSocket');
+  setConnStatus('disconnected');
 }
 
 // ─── 消息处理 ───────────────────────────────
@@ -750,10 +731,14 @@ function switchSession(id) {
 }
 
 function closeSession(id) {
-  state.currentSessionId = id;
+  if (!confirm('确定关闭此会话?')) return;
+  state.sessions = state.sessions.filter(s => s.id !== id);
+  if (state.currentSessionId === id) {
+    state.currentSessionId = state.sessions.length > 0 ? state.sessions[0].id : null;
+  }
   renderSidebar();
   renderSessions();
-  addLog('info', `关闭会话: ${id}`);
+  addLog('info', `会话已关闭: ${id}`);
 }
 
 // ─── 设置弹窗 ────────────────────────────────
@@ -846,9 +831,7 @@ function updateStatus() {
 // ─── 初始化 ──────────────────────────────────
 connect();
 refreshPairCode();
-// 添加一个默认会话示例
-state.sessions.push({id:'demo', name:'工作区', workDir:'未设置', cwd:'未设置', isDefault:true});
-state.currentSessionId = 'demo';
+// 空状态，无默认会话
 updateStatus();
 renderSidebar();
 addLog('info', '点击左侧 + 号新建会话');
