@@ -181,7 +181,11 @@ console.log("JS loaded OK");
 const state = { connected: false, pairCode: '------', ws: null, sessions: [], currentSessionId: null, deviceId: null, deviceName: '', cwd: '', logs: {}, platform: '', hostname: '', workDir: '', relayKey: 'yunqiao-mcp-key-2026', permission: 'super' };
 var isDesktopApp = typeof window.pywebview !== 'undefined';
 
+var _lastLogText = '';
 function addLog(type, text) {
+  // 去重：连续相同的日志跳过
+  if (text === _lastLogText) return;
+  _lastLogText = text;
   const log = document.getElementById('sessionLog');
   const entry = document.createElement('div');
   entry.className = 'entry ' + type + ' flex gap-3 py-1 animate-slide-up';
