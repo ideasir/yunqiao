@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>Y</text></svg>">
 <title>云桥 MCP v2.0</title>
 <style>
   :root {
@@ -49,21 +49,18 @@
     flex-shrink: 0;
   }
   .titlebar .logo {
-    width: 22px;
-    height: 22px;
+    width: 24px;
+    height: 24px;
     background: var(--primary);
-    border-radius: 50%;
+    border-radius: 4px;
     flex-shrink: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-  }
-  .titlebar .logo::after {
-    content: "";
-    width: 8px;
-    height: 8px;
-    background: #fff;
-    border-radius: 50%;
+    font-size: 13px;
+    font-weight: 700;
+    color: #fff;
+    font-family: 'Segoe UI', Arial, sans-serif;
   }
   .titlebar h1 {
     font-size: 15px;
@@ -535,7 +532,7 @@
 </head>
 <body>
 <div class="titlebar">
-  <span class="logo"></span>
+  <span class="logo">Y</span>
   <h1>云桥 MCP <span style="font-size:11px;color:var(--text3);font-weight:normal">v2.0</span></h1>
   <span class="status-badge" id="connStatus">初始化中...</span>
   <button onclick="openSettings()">⚙ 设置</button>
