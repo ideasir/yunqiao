@@ -182,10 +182,19 @@ const state = { connected: false, pairCode: '------', ws: null, sessions: [], cu
 var isDesktopApp = typeof window.pywebview !== 'undefined';
 
 var _lastLogText = '';
+var _lastLogTime = 0;
+var _lastLogType = '';
 function addLog(type, text) {
-  // 去重：连续相同的日志跳过
+  var now = Date.now();
+  // 连续相同文本跳过
   if (text === _lastLogText) return;
+  // 状态类日志快速重复跳过（3秒内同类型状态）
+  if (type === 'status' || type === 'info' || type === 'done') {
+    if (type === _lastLogType && now - _lastLogTime < 3000) return;
+  }
   _lastLogText = text;
+  _lastLogTime = now;
+  _lastLogType = type;
   const log = document.getElementById('sessionLog');
   const entry = document.createElement('div');
   entry.className = 'entry ' + type + ' flex gap-3 py-1 animate-slide-up';
@@ -544,10 +553,11 @@ function connectRelay() {
     document.getElementById('connectBtn').style.color = '#fca5a5';
     addLog('done', '中转服务器连接成功');
     document.getElementById('relayStatus').textContent = '已连接';
-    document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
-    var clientDot = document.getElementById('clientDot');
-    if (clientDot) {
-      clientDot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
+    // 非 pywebview 模式（浏览器）才由 connectRelay 更新灯
+    if (!window.pywebview) {
+      document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
+      var clientDot = document.getElementById('clientDot');
+      if (clientDot) clientDot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
     }
     state.ws.send(JSON.stringify({
       type: 'register', deviceName: 'web-ui', os: 'web', arch: 'web',
@@ -587,10 +597,11 @@ function connectRelay() {
     document.getElementById('connectBtn').style.color = '';
     addLog('info', '中转服务器连接断开');
     document.getElementById('relayStatus').textContent = '未连接';
-    document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
-    var clientDot = document.getElementById('clientDot');
-    if (clientDot) {
-      clientDot.className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
+    // 非 pywebview 模式（浏览器）才由 connectRelay 更新灯
+    if (!window.pywebview) {
+      document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
+      var clientDot = document.getElementById('clientDot');
+      if (clientDot) clientDot.className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
     }
   };
   state.ws.onerror = function() {
