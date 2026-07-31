@@ -274,9 +274,12 @@ class App:
 
         # ─── 会话管理面板 ────────────────────
         sess_card = self.make_card(content, "工作区管理")
-        self.sess_info = tk.Label(sess_card, text="加载中...", bg=C["card"], fg=C["text2"],
-                                   font=("Segoe UI", 10))
-        self.sess_info.pack(fill=tk.X, pady=2)
+        # 会话列表（可滚动，最多显示 3 条 + 计数）
+        sess_frame = tk.Frame(sess_card, bg=C["card"])
+        sess_frame.pack(fill=tk.X, pady=2)
+        self.sess_info = tk.Label(sess_frame, text="加载中...", bg=C["card"], fg=C["text2"],
+                                   font=("Segoe UI", 10), anchor="w", justify="left")
+        self.sess_info.pack(side=tk.LEFT, fill=tk.X, expand=True)
         sess_btn = tk.Frame(sess_card, bg=C["card"])
         sess_btn.pack(fill=tk.X)
         tk.Button(sess_btn, text="➕ 新建会话", bg=C["primary"], fg="white", bd=0,
@@ -369,16 +372,20 @@ class App:
         return sessions
 
     def refresh_sessions(self):
-        """刷新会话列表显示"""
+        """刷新会话列表显示（最多显示 3 条 + 计数）"""
         sessions = self._load_sessions()
         if not sessions:
             self.sess_info.configure(text="没有会话。点击「新建会话」创建。")
             return
         lines = []
-        for s in sessions:
+        total = len(sessions)
+        show = sessions[:3]
+        for s in show:
             prefix = "👉" if s.get("isDefault") else "  "
             lines.append(f"{prefix} {s.get('name', 'unnamed')} ({s['id']})")
             lines.append(f"  目录: {s.get('workDir', '?')}")
+        if total > 3:
+            lines.append(f"  ... 还有 {total - 3} 个会话")
         self.sess_info.configure(text="\n".join(lines))
 
     def create_session_dialog(self):
