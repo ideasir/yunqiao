@@ -292,6 +292,22 @@ class App:
                   font=("Segoe UI", 9), padx=8, pady=2,
                   command=self.close_session).pack(side=tk.LEFT)
 
+        # 发消息给Agent
+        msg_frame = tk.Frame(content, bg=C["panel"], padx=6, pady=3)
+        msg_frame.pack(fill=tk.X, pady=(1, 0))
+        tk.Label(msg_frame, text="给智能体发消息", bg=C["panel"], fg=C["text2"],
+                 font=("Segoe UI", 9, "bold")).pack(anchor="w")
+        msg_input_frame = tk.Frame(msg_frame, bg=C["panel"])
+        msg_input_frame.pack(fill=tk.X, pady=(2, 0))
+        self.msg_entry = tk.Entry(msg_input_frame, font=("Segoe UI", 10),
+                                  bg=C["int4"], fg=C["text"], bd=1,
+                                  relief="solid")
+        self.msg_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
+        self.msg_entry.bind("<Return>", lambda e: self.send_to_agent())
+        tk.Button(msg_input_frame, text="发送", bg=C["primary"], fg="white", bd=0,
+                  font=("Segoe UI", 9), padx=8, pady=2,
+                  command=self.send_to_agent).pack(side=tk.RIGHT)
+
         # 日志
         log_frame = tk.Frame(content, bg=C["log_bg"], padx=6, pady=4)
         log_frame.pack(fill=tk.BOTH, expand=True, pady=(2, 0))
@@ -348,6 +364,26 @@ class App:
         self.first_use_btn.configure(text="✅ 已复制，请发给Agent", fg=C["success"])
         self.root.after(3000, lambda: self.first_use_btn.configure(
             text="首次使用请点击这里", fg=C["accent"]))
+
+    def send_to_agent(self):
+        """发送消息给智能体"""
+        text = self.msg_entry.get().strip()
+        if not text:
+            return
+        self.msg_entry.delete(0, tk.END)
+        self.add_log("INFO", f"发送给智能体: {text[:50]}")
+        # 通过 WSS 发送
+        import asyncio
+        async def send():
+            if state.get("ws_client"):
+                await state["ws_client"].send(json.dumps({
+                    "type": "agent_message", "requestId": "msg_" + str(int(time.time())),
+                    "text": text,
+                }))
+        try:
+            asyncio.run(send())
+        except:
+            self.add_log("ERROR", "发送失败：未连接")
 
     def refresh_code(self):
         state["pairCode"] = gen_code()
@@ -684,6 +720,9 @@ class App:
                         elif t == "get_device_info":
                             threading.Thread(target=self._get_info,
                                 args=(ws, rid), daemon=True).start()
+
+                        elif t == "agent_message_result":
+                            self.add_log("INFO", "消息已发送到服务器")
 
                         elif t == "session_op":
                             op = payload.get("op", "")
