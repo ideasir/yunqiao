@@ -204,45 +204,10 @@ function refreshPairCode() {
 }
 
 function createSession() {
-  var name = prompt('会话名称（可选）:', '工作区');
-  if (name === null) return;
-  var dir = prompt('工作目录:', state.workDir || 'C:\\Users\\Administrator');
-  if (dir === null) return;
-  var id = 's_' + Date.now().toString(36);
-  state.sessions.push({ id: id, name: name || '工作区', workDir: dir, cwd: dir, isDefault: state.sessions.length === 0 });
-  state.currentSessionId = id; state.workDir = dir;
-  renderSidebar(); renderSessions(); updateStatus();
-  addLog('info', '会话已创建: ' + name + ' (' + id + ')');
-}
-function connectRelay() {
-  var url = document.getElementById('relayUrl').textContent;
-  addLog('status', '正在连接中转服务器: ' + url);
-  if (state.ws) {
-    try { state.ws.close(); } catch(e) {}
-  }
-  state.ws = new WebSocket('wss://' + url + '/device');
-  state.ws.onopen = function() {
-    addLog('done', '中转服务器连接成功');
-    document.getElementById('relayStatus').textContent = '已连接';
-    document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#ededed]';
-  };
-  state.ws.onclose = function() {
-    addLog('info', '中转服务器连接断开');
-    document.getElementById('relayStatus').textContent = '未连接';
-    document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
-  };
-  state.ws.onerror = function() {
-    addLog('err', '中转服务器连接失败');
-  };
-}
-function configRelay() {
-  document.getElementById('modalRelayUrl').value = document.getElementById('relayUrl').textContent;
-  document.getElementById('modalRelayKey').value = state.relayKey || '';
-  openConfigModal();
-}
-function openConfigModal() {
-  var overlay = document.getElementById('configModal');
-  var content = document.getElementById('configModalContent');
+  document.getElementById('modalSessionName').value = '工作区 ' + (state.sessions.length + 1);
+  document.getElementById('modalSessionDir').value = state.workDir || 'C:\\Users\\Administrator';
+  var overlay = document.getElementById('sessionModal');
+  var content = document.getElementById('sessionModalContent');
   overlay.style.opacity = '1';
   overlay.style.pointerEvents = 'auto';
   setTimeout(function() {
@@ -250,13 +215,20 @@ function openConfigModal() {
     content.style.opacity = '1';
   }, 10);
   setTimeout(function() {
-    document.getElementById('modalRelayUrl').focus();
-    document.getElementById('modalRelayUrl').select();
+    document.getElementById('modalSessionName').focus();
+    document.getElementById('modalSessionName').select();
   }, 100);
 }
-function closeConfigModal() {
-  var overlay = document.getElementById('configModal');
-  var content = document.getElementById('configModalContent');
+function saveSessionModal() {
+  var name = document.getElementById('modalSessionName').value.trim() || '工作区';
+  var dir = document.getElementById('modalSessionDir').value.trim() || 'C:\\Users\\Administrator';
+  var id = 's_' + Date.now().toString(36);
+  state.sessions.push({ id: id, name: name, workDir: dir, cwd: dir, isDefault: state.sessions.length === 0 });
+  state.currentSessionId = id; state.workDir = dir;
+  renderSidebar(); renderSessions(); updateStatus();
+  addLog('info', '会话已创建: ' + name + ' (' + id + ')');
+  var overlay = document.getElementById('sessionModal');
+  var content = document.getElementById('sessionModalContent');
   content.style.transform = 'scale(0.9) translateY(20px)';
   content.style.opacity = '0';
   setTimeout(function() {
@@ -264,13 +236,11 @@ function closeConfigModal() {
     overlay.style.pointerEvents = 'none';
   }, 200);
 }
-function saveConfigModal() {
-  var url = document.getElementById('modalRelayUrl').value.trim();
-  var key = document.getElementById('modalRelayKey').value.trim();
-  if (url) document.getElementById('relayUrl').textContent = url;
-  if (key) state.relayKey = key;
-  addLog('info', '中转服务器配置已更新');
-  closeConfigModal();
+function browseSessionDir() {
+  var dir = prompt('请输入工作目录路径:', document.getElementById('modalSessionDir').value || 'C:\\Users\\Administrator');
+  if (dir && dir.trim()) {
+    document.getElementById('modalSessionDir').value = dir.trim();
+  }
 }
 function refreshSessions() { addLog('info', '会话列表已刷新'); }
 function renderSidebar() {
