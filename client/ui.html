@@ -252,6 +252,39 @@
     transition: border-color 0.2s;
   }
   .session-input input:focus { border-color: var(--primary); box-shadow: 0 0 12px var(--primary-glow); }
+
+  .msg-input {
+    display: flex;
+    gap: 6px;
+    padding: 6px 14px;
+    background: var(--glass-bg2);
+    border-top: 1px solid var(--glass-border);
+    flex-shrink: 0;
+  }
+  .msg-input input {
+    flex: 1;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--glass-border);
+    color: var(--text2);
+    padding: 5px 10px;
+    border-radius: var(--radius-sm);
+    font-size: 11px;
+    outline: none;
+    transition: all 0.2s;
+  }
+  .msg-input input:focus { border-color: var(--accent); color: var(--text); }
+  .msg-input input::placeholder { color: var(--text3); }
+  .msg-input button {
+    background: transparent;
+    border: 1px solid var(--glass-border);
+    color: var(--text2);
+    padding: 5px 12px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 11px;
+    transition: all 0.2s;
+  }
+  .msg-input button:hover { border-color: var(--accent); color: var(--accent); }
   .session-input input::placeholder { color: var(--text3); }
   .session-input button {
     background: linear-gradient(135deg, var(--primary), var(--accent));
@@ -420,6 +453,11 @@
         <input type="text" id="cmdInput" placeholder="输入命令 (Enter 发送)" spellcheck="false"
                onkeydown="if(event.key==='Enter')sendCommand()" />
         <button onclick="sendCommand()">发送</button>
+      </div>
+      <div class="msg-input">
+        <input type="text" id="msgInput" placeholder="给智能体发消息..." spellcheck="false"
+               onkeydown="if(event.key==='Enter')sendMessage()" />
+        <button onclick="sendMessage()">💬 发送</button>
       </div>
     </div>
   </div>
@@ -658,9 +696,76 @@ function setConnStatus(status) {
   }
 }
 
+// ─── Bridge 通信（接收 Python 后端消息） ──
+function handleBridge(action, data) {
+  if (action === 'log') {
+    addLog('info', data.text);
+  } else if (action === 'command_result') {
+    const p = data.payload;
+    if (p.exitCode !== undefined) {
+      const text = p.stdout || p.stderr || '(无输出)';
+      addLog('out', text);
+      if (p.exitCode !== 0) addLog('err', `退出码: ${p.exitCode}`);
+      else addLog('done', `完成 (退出码: ${p.exitCode})`);
+    }
+  } else if (action === 'agent_status') {
+    const dot = document.getElementById('agentDot');
+    const status = document.getElementById('agentStatus');
+    if (data.status === 'connected') {
+      dot.className = 'dot green';
+      status.textContent = '已连接';
+    } else {
+      dot.className = 'dot yellow';
+      status.textContent = '已断开';
+    }
+  } else if (action === 'relay_status') {
+    const dot = document.getElementById('relayDot');
+    if (data.status === 'connected') {
+      dot.className = 'dot green';
+      document.getElementById('relayStatus').textContent = '已连接';
+    } else {
+      dot.className = 'dot gray';
+      document.getElementById('relayStatus').textContent = '未连接';
+    }
+  }
+}
+
+// ─── 发送消息给智能体 ────────────────────────
+function sendMessage() {
+  const input = document.getElementById('msgInput');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  addLog('info', `发送给智能体: ${text}`);
+  try {
+    pywebview.api.api_send_message(text);
+  } catch(e) {
+    // 纯 HTML 模式（无 pywebview），通过 WebSocket 发送
+    if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+      state.ws.send(JSON.stringify({
+        type: 'agent_message',
+        requestId: 'msg_' + Date.now(),
+        text: text,
+      }));
+    } else {
+      addLog('err', '未连接，无法发送消息');
+    }
+  }
+}
+
+// ─── 更新状态 ────────────────────────────────
+function updateStatus() {
+  document.getElementById('pairCode').textContent = state.pairCode;
+  document.getElementById('deviceName').textContent = state.deviceName || '-';
+  document.getElementById('clientPlatform').textContent = state.platform || '-';
+  document.getElementById('clientHostname').textContent = state.hostname || '-';
+  document.getElementById('workDir').textContent = state.workDir || '未设置';
+}
+
 // ─── 初始化 ──────────────────────────────────
 connect();
 refreshPairCode();
+updateStatus();
 setInterval(() => {
   document.getElementById('relayLatency').textContent =
     `${Math.floor(Math.random() * 20 + 5)} ms`;
