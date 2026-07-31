@@ -137,6 +137,24 @@
   .sidebar-add:hover {
     background: rgba(243, 160, 76, 0.1);
   }
+  .sidebar-add {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--primary);
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.2s;
+    margin-bottom: 4px;
+    font-size: 18px;
+    font-weight: 300;
+    font-family: 'Segoe UI', Arial, sans-serif;
+  }
+  .sidebar-add:hover {
+    background: rgba(243, 160, 76, 0.1);
+  }
   .sidebar-list {
     display: flex;
     flex-direction: column;
@@ -145,7 +163,7 @@
     flex: 1;
     overflow-y: auto;
     width: 100%;
-    padding: 8px 8px 0;
+    padding: 0 8px;
   }
   .sidebar-item {
     width: 28px;
@@ -544,6 +562,7 @@
   <!-- 左侧：会话内容 -->
   <div class="left-panel">
     <div class="session-sidebar" id="sessionSidebar">
+      <div class="sidebar-add" onclick="createSession()" title="新建会话"></div>
       <div class="sidebar-list" id="sidebarList">
       </div>
     </div>
@@ -767,7 +786,8 @@ function createSession() {
   state.workDir = dir;
   renderSidebar();
   renderSessions();
-  addLog('info', `会话已创建: ${name} (${id})`);
+  addLog('inf
+  addLog('info', '点击左侧 + 号新建会话');o', `会话已创建: ${name} (${id})`);
   addLog('info', `工作目录: ${dir}`);
   updateStatus();
 }
