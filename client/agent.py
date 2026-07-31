@@ -153,8 +153,8 @@ class Session:
         sfile = SESSIONS_DIR / f"{self.id}.json"
         sfile.write_text(json.dumps(self.to_dict(), indent=2), "utf-8")
 
-    async def exec(self, command, timeout=30000):
-        """在会话中执行命令，保持 cwd"""
+        async def exec(self, command, timeout=30000):
+        """在会话中执行命令，保持 cwd，使用持久 shell（效率更高）"""
         self.lastActive = time.time()
 
         # 处理 cd 命令：直接更新 cwd，不执行 shell
@@ -167,39 +167,99 @@ class Session:
             if os.path.isdir(new_dir):
                 self.cwd = new_dir
                 self._save()
-                return {"exitCode": 0, "stdout": f"cwd → {self.cwd}", "stderr": "", "killed": False}
+                return {"exitCode": 0, "stdout": f"cwd -> {self.cwd}", "stderr": "", "killed": False}
             else:
                 return {"exitCode": 1, "stdout": "", "stderr": f"目录不存在: {new_dir}", "killed": False}
 
-        # 在 cwd 下执行
+        # 使用持久 shell 执行（首次自动启动）
         try:
-            proc = await asyncio.create_subprocess_shell(
-                command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=self.cwd,
-            )
-            try:
-                stdout, stderr = await asyncio.wait_for(
-                    proc.communicate(), timeout=timeout / 1000
-                )
-                exit_code = proc.returncode or 0
-                killed = False
-            except asyncio.TimeoutError:
-                proc.kill()
-                stdout, stderr = await proc.communicate()
-                exit_code = 1
-                killed = True
-
-            self._save()
-            return {
-                "exitCode": exit_code,
-                "stdout": stdout.decode("utf-8", errors="replace") if stdout else "",
-                "stderr": stderr.decode("utf-8", errors="replace") if stderr else "",
-                "killed": killed,
-            }
+            return await self._exec_persistent(command, timeout)
         except Exception as e:
             return {"exitCode": 1, "stdout": "", "stderr": str(e), "killed": False}
+
+    async def _ensure_shell(self):
+        """确保持久 shell 进程在运行"""
+        if self.shell is not None and self.shell.returncode is None:
+            return
+        self.shell = await asyncio.create_subprocess_exec(
+            'powershell', '-NoExit', '-Command', '-',
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            cwd=self.cwd,
+        )
+        await asyncio.sleep(0.5)
+
+    async def _exec_persistent(self, command, timeout=30000):
+        """在持久 shell 中执行命令"""
+        await self._ensure_shell()
+        marker = f'__CMD_DONE_{int(time.time() * 1000000)}__'
+        # 写入命令 + 标记行（用 \n 换行）
+        full_cmd = f'{command}\nWrite-Host \"{marker}\"\n'
+        self.shell.stdin.write(full_cmd.encode('utf-8'))
+        await self.shell.stdin.drain()
+        # 读取输出直到标记
+        stdout_lines = []
+        try:
+            while True:
+                line = await asyncio.wait_for(
+                    self.shell.stdout.readline(),
+                    timeout=timeout / 1000
+                )
+                decoded = line.decode('utf-8', errors='replace').rstrip('\r\n')
+                if marker in decoded:
+                    break
+                stdout_lines.append(decoded)
+        except asyncio.TimeoutError:
+            return {"exitCode": 1, "stdout": '\n'.join(stdout_lines), "stderr": "", "killed": True}
+        stdout = '\n'.join(stdout_lines)
+        self._save()
+        return {"exitCode": 0, "stdout": stdout, "stderr": "", "killed": False}
+    async def _ensure_shell(self):
+        """确保持久 shell 进程在运行"""
+        if self.shell is not None and self.shell.returncode is None:
+            return
+        self.shell = await asyncio.create_subprocess_exec(
+            'powershell', '-NoExit', '-Command', '-',
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            cwd=self.cwd,
+        )
+        # 等待 shell 启动
+        await asyncio.sleep(0.5)
+
+    async def _exec_persistent(self, command, timeout=30000):
+        """在持久 shell 中执行命令"""
+        await self._ensure_shell()
+
+        # 生成唯一标记，用于分隔命令输出
+        marker = f'__CMD_DONE_{int(time.time() * 1000000)}__'
+        # 写入命令 + 标记行
+        full_cmd = f'{command}
+Write-Host "{marker}"
+'
+        self.shell.stdin.write(full_cmd.encode('utf-8'))
+        await self.shell.stdin.drain()
+
+        # 读取输出直到标记
+        stdout_lines = []
+        try:
+            while True:
+                line = await asyncio.wait_for(
+                    self.shell.stdout.readline(),
+                    timeout=timeout / 1000
+                )
+                decoded = line.decode('utf-8', errors='replace').rstrip('\r\n')
+                if marker in decoded:
+                    break
+                stdout_lines.append(decoded)
+        except asyncio.TimeoutError:
+            return {"exitCode": 1, "stdout": "\n".join(stdout_lines), "stderr": "", "killed": True}
+
+        stdout = "\n".join(stdout_lines)
+        self._save()
+        return {"exitCode": 0, "stdout": stdout, "stderr": "", "killed": False}
 
     async def read_file(self, path):
         """读取文件，相对路径基于 cwd"""
