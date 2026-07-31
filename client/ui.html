@@ -247,18 +247,9 @@ function saveSessionModal() {
   }, 200);
 }
 function browseSessionDir() {
-  // 桌面版: 调用 pywebview 原生文件夹选择器
-  try {
-    pywebview.api.browse_folder().then(function(path) {
-      if (path) document.getElementById('modalSessionDir').value = path;
-    });
-    return;
-  } catch(e) {}
-  // 浏览器版: 聚焦输入框并提示
   var input = document.getElementById('modalSessionDir');
   input.focus();
   input.select();
-  addLog('info', '请手动输入工作目录路径，如 C:\\Users\\Administrator\\project');
 }
 function refreshSessions() { addLog('info', '会话列表已刷新'); }
 var ctxSessionId = null;
