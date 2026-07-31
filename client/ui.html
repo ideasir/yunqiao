@@ -200,7 +200,7 @@ function createSession() {
   var id = 's_' + Date.now().toString(36);
   state.sessions.push({ id: id, name: name || '工作区', workDir: dir, cwd: dir, isDefault: state.sessions.length === 0 });
   state.currentSessionId = id; state.workDir = dir;
-  renderSessions(); update状态();
+  renderSidebar(); renderSessions(); updateStatus();
   addLog('info', '会话已创建: ' + name + ' (' + id + ')');
 }
 function connectRelay() {
@@ -268,7 +268,7 @@ function closeSession(id) {
   renderSidebar(); renderSessions(); addLog('info', '会话已关闭: ' + id);
 }
 
-function update状态() {
+function updateStatus() {
   var el;
   el = document.getElementById('pairCode'); if (el) el.textContent = state.pairCode;
   el = document.getElementById('deviceName'); if (el) el.textContent = state.deviceName || '-';
@@ -284,7 +284,7 @@ function setConn状态(status) {
 
 (function() {
   refreshPairCode();
-  update状态();
+  updateStatus();
   addLog('info', '欢迎使用云桥 MCP v2.0');
   setConn状态('disconnected');
 })();
