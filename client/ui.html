@@ -237,7 +237,10 @@ function closeSessionModal() {
 }
 function createSession() {
   openSessionModal();
-} ' + (state.sessions.length + 1);
+}
+
+function openSessionModal() {
+  document.getElementById('modalSessionName').value = '工作区 ' + (state.sessions.length + 1);
   document.getElementById('modalSessionDir').value = state.workDir || 'C:\\Users\\Administrator';
   var overlay = document.getElementById('sessionModal');
   var content = document.getElementById('sessionModalContent');
