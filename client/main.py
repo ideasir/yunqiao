@@ -165,6 +165,7 @@ class App:
         self.status_label = tk.Label(self.status_frame, text="初始化中...",
                                      bg=C["bg"], fg=C["text2"], font=("Segoe UI", 13))
         self.status_label.pack(side=tk.LEFT)
+        self._make_copyable(self.status_label)
 
         # 当前连接卡片
         self.conn_card = self.make_card(content, "当前连接")
@@ -193,16 +194,20 @@ class App:
             dl = tk.Label(nf, text=desc, bg=C["int4"], fg=C["text2"],
                        font=("Segoe UI", 9))
             dl.pack()
+            self._make_copyable(dl)
             self.node_labels.append(dl)
 
         # 状态行
         stat = tk.Frame(self.conn_card, bg=C["card"])
         stat.pack(fill=tk.X, pady=(4, 0))
-        tk.Label(stat, text=state["deviceName"], bg=C["card"], fg=C["text"],
-                 font=("Segoe UI", 11, "bold")).pack(side=tk.LEFT)
+        self.device_label = tk.Label(stat, text=state["deviceName"], bg=C["card"], fg=C["text"],
+                               font=("Segoe UI", 11, "bold"))
+        self.device_label.pack(side=tk.LEFT)
+        self._make_copyable(self.device_label)
         self.latency_label = tk.Label(stat, text="延迟 -- ms", bg=C["card"], fg=C["text2"],
                                       font=("Segoe UI", 10))
         self.latency_label.pack(side=tk.LEFT, padx=8)
+        self._make_copyable(self.latency_label)
         self.status_badge = tk.Label(stat, text="未连接", bg=C["int8"], fg=C["text2"],
                                      font=("Segoe UI", 9), padx=6, pady=1)
         self.status_badge.pack(side=tk.RIGHT)
@@ -229,6 +234,7 @@ class App:
         self.act_label = tk.Label(self.act_frame, text="暂无活动", bg=C["card"], fg=C["text3"],
                                   font=("Segoe UI", 10))
         self.act_label.pack(pady=4)
+        self._make_copyable(self.act_label)
 
         # 配对码
         pair_card = self.make_card(content, "Agent 配对码")
@@ -239,6 +245,7 @@ class App:
         self.pair_badge = tk.Label(pf, text="", bg=C["card"], fg=C["text2"],
                                    font=("Segoe UI", 9), padx=6, pady=1)
         self.pair_badge.pack(side=tk.RIGHT)
+        self._make_copyable(self.pair_badge)
 
         pair_body = tk.Frame(pair_card, bg=C["card"])
         pair_body.pack(fill=tk.X, pady=2)
@@ -246,6 +253,7 @@ class App:
                                    bg=C["card"], fg=C["accent"],
                                    font=("Courier New", 20, "bold"))
         self.code_label.pack()
+        self._make_copyable(self.code_label)
         tk.Label(pair_body, text="将此配对码发给智能体，用于建立连接",
                  bg=C["card"], fg=C["text2"], font=("Segoe UI", 9)).pack()
         # Agent 工作区
@@ -256,6 +264,7 @@ class App:
         self.workdir_label = tk.Label(wd_frame, text=state["workDir"] or "未设置工作目录",
                                       bg=C["int4"], fg=C["text"], font=("Segoe UI", 10))
         self.workdir_label.pack(side=tk.LEFT)
+        self._make_copyable(self.workdir_label)
         tk.Button(wd_frame, text="📁 浏览", bg=C["int8"], fg=C["text"], bd=0,
                   font=("Segoe UI", 9), padx=8, pady=2,
                   command=self.browse_workdir).pack(side=tk.RIGHT)
@@ -280,6 +289,7 @@ class App:
         self.sess_info = tk.Label(sess_frame, text="加载中...", bg=C["card"], fg=C["text2"],
                                    font=("Segoe UI", 10), anchor="w", justify="left")
         self.sess_info.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self._make_copyable(self.sess_info)
         sess_btn = tk.Frame(sess_card, bg=C["card"])
         sess_btn.pack(fill=tk.X)
         tk.Button(sess_btn, text="➕ 新建会话", bg=C["primary"], fg="white", bd=0,
@@ -340,6 +350,17 @@ class App:
             self.status_badge.configure(text=label, bg=color, fg="white")
         except tk.TclError:
             pass
+
+    # ─── 复制辅助 ────────────────────────────
+    def _make_copyable(self, widget):
+        """让 tk.Label 支持右键复制文本"""
+        widget.bind("<Button-3>", lambda e: self._copy_text(widget.cget("text")))
+        widget.bind("<Button-2>", lambda e: self._copy_text(widget.cget("text")))
+
+    def _copy_text(self, text):
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+        self.add_log("INFO", f"已复制: {text[:30]}")
 
     # ─── 配对码 ────────────────────────────
     def copy_code(self):
