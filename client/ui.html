@@ -414,11 +414,28 @@ function updateStatus() {
   el = document.getElementById('client主机名'); if (el) el.textContent = state.hostname || '-';
   el = document.getElementById('workDir'); if (el) el.textContent = state.workDir || '未设置';
   el = document.getElementById('currentCwd'); if (el) el.textContent = state.workDir || '~';
-  // 更新默认工作区显示
-  var label = document.getElementById('defaultSessionLabel');
-  if (label) {
-    var s = state.sessions.find(function(s) { return s.id === state.currentSessionId; });
-    label.textContent = s ? (s.name || s.id) : '未设置';
+
+}
+function handleBridge(action, data) {
+  if (action === 'log') { addLog('info', data.text); }
+  else if (action === 'command_result') {
+    var p = data.payload;
+    if (p && p.exitCode !== undefined) {
+      var txt = p.stdout || p.stderr || '(无输出)';
+      addLog('out', txt);
+      if (p.exitCode !== 0) addLog('err', '退出码: ' + p.exitCode);
+      else addLog('done', '完成 (退出码: ' + p.exitCode + ')');
+    }
+  }
+  else if (action === 'agent_status') {
+    var s = document.getElementById('agent状态');
+    if (data.status === 'connected') { s.textContent = '已配对'; s.style.color = '#4ade80'; }
+    else { s.textContent = '待接入'; s.style.color = '#bbb'; }
+  }
+  else if (action === 'relay_status') {
+    var dot = document.getElementById('relayDot');
+    if (data.status === 'connected') { dot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse'; }
+    else { dot.className = 'w-1.5 h-1.5 rounded-full bg-[#444]'; }
   }
 }
 function setConn状态(status) {
