@@ -496,6 +496,15 @@ wss.on('connection', (ws, req) => {
         authCode: authCode || null,
         connectedAt: new Date().toISOString(),
       });
+      // 注册时携带的 authCode 同步到同 hostname 的所有设备
+      if (authCode) {
+        for (const [otherId, other] of devices) {
+          if (otherId !== deviceId && other.hostname === hostname && !other.authCode) {
+            other.authCode = authCode;
+            console.error(`[device] code synced: ${other.name} (${otherId}) -> ${authCode}`);
+          }
+        }
+      }
       console.error(`[device] registered: ${name} (${deviceId}) code:${authCode || 'none'}`);
       sendJSON(ws, { type: 'register_result', requestId, success: true, deviceId });
       return;
@@ -521,7 +530,7 @@ wss.on('connection', (ws, req) => {
       const device = devices.get(deviceId);
       if (device) {
         device.authCode = msg.authCode;
-        // 同步到同 hostname 的所有设备（agent.py 和 main.py 共享配对码）
+        // 同步到同 hostname 的所有设备
         for (const [otherId, other] of devices) {
           if (otherId !== deviceId && other.hostname === device.hostname) {
             other.authCode = msg.authCode;
