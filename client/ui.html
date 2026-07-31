@@ -170,7 +170,7 @@ const state = { connected: false, pairCode: '------', ws: null, sessions: [], cu
 function addLog(type, text) {
   const log = document.getElementById('sessionLog');
   const entry = document.createElement('div');
-  entry.className = 'entry ' + type + ' flex gap-3 py-1 animate-slide-up';
+
   const now = new Date();
   const time = now.toTimeString().slice(0, 8);
   const colors = {cmd:'text-white font-medium',out:'text-[#e8e8e8]',err:'text-[#ff6b6b]',info:'text-[#aaaaaa]',done:'text-white font-medium',file:'text-[#cccccc]',code:'text-[#cccccc]',status:'text-[#cccccc]'};
@@ -395,12 +395,8 @@ function updateStatus() {
   // 更新默认工作区显示
   var label = document.getElementById('defaultSessionLabel');
   if (label) {
-    if (state.currentSessionId) {
-      var s = state.sessions.find(function(s) { return s.id === state.currentSessionId; });
-      label.textContent = s ? (s.name || s.id) : '未设置';
-    } else {
-      label.textContent = '未设置';
-    }
+    var s = state.sessions.find(function(s) { return s.id === state.currentSessionId; });
+    label.textContent = s ? (s.name || s.id) : '未设置';
   }
 }
 function setConn状态(status) {
