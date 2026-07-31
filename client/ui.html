@@ -458,6 +458,7 @@ function updateStatus() {
 }
 function handleBridge(action, data) {
   if (action === 'log') { addLog('info', data.text); }
+  else if (action === 'connect_relay') { connectRelay(); }
   else if (action === 'command_result') {
     var p = data.payload;
     if (p && p.exitCode !== undefined) {
@@ -553,6 +554,9 @@ function setCardBottomBorder(cardId, connected, borderClass) {
 }
 
 function connectRelay() {
+  if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+    return; // 已经连接了
+  }
   var url = document.getElementById('relayUrl').textContent;
   var key = state.relayKey;
   if (!key) { addLog('error', '请先配置中转服务器 Key'); return; }
