@@ -499,6 +499,7 @@ function connectRelay() {
   }
   state.ws = new WebSocket('wss://' + url + '/device?psk=' + encodeURIComponent(key));
   state.ws.onopen = function() {
+    document.getElementById('connectBtn').textContent = '断开';
     addLog('done', '中转服务器连接成功');
     document.getElementById('relayStatus').textContent = '已连接';
     document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
@@ -512,6 +513,13 @@ function connectRelay() {
     }));
   };
   state.ws.onmessage = function(e) {
+    // 从后端更新配对码
+    if (window.pywebview && window.pywebview.api) {
+      window.pywebview.api.get_status().then(function(s) {
+        state.pairCode = s.pairCode;
+        var el = document.getElementById('pairCode'); if (el) el.textContent = state.pairCode;
+      });
+    }
     try {
       var msg = JSON.parse(e.data);
       if (msg.type === 'agent_connected') {
@@ -531,6 +539,7 @@ function connectRelay() {
     } catch(e) {}
   };
   state.ws.onclose = function() {
+    document.getElementById('connectBtn').textContent = '连接';
     addLog('info', '中转服务器连接断开');
     document.getElementById('relayStatus').textContent = '未连接';
     document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
