@@ -463,11 +463,13 @@ function setConn状态(status) {
 
 function connectRelay() {
   var url = document.getElementById('relayUrl').textContent;
+  var key = state.relayKey;
+  if (!key) { addLog('error', '请先配置中转服务器 Key'); return; }
   addLog('status', '正在连接中转服务器: ' + url);
   if (state.ws) {
     try { state.ws.close(); } catch(e) {}
   }
-  state.ws = new WebSocket('wss://' + url + '/device');
+  state.ws = new WebSocket('wss://' + url + '/device?psk=' + encodeURIComponent(key));
   state.ws.onopen = function() {
     addLog('done', '中转服务器连接成功');
     document.getElementById('relayStatus').textContent = '已连接';
