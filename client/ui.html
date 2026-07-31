@@ -134,12 +134,12 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 18px;
     color: var(--primary);
     cursor: pointer;
     border-radius: var(--radius-sm);
     transition: all 0.2s;
     margin-bottom: 6px;
+    font-family: 'Segoe UI', Arial, sans-serif;
   }
   .sidebar-add:hover {
     background: rgba(243, 160, 76, 0.1);
@@ -472,7 +472,7 @@
   <!-- 左侧：会话内容 -->
   <div class="left-panel">
     <div class="session-sidebar" id="sessionSidebar">
-      <div class="sidebar-add" onclick="createSession()" title="新建会话">➕</div>
+      <div class="sidebar-add" onclick="createSession()" title="新建会话"><span style="font-size:20px;font-weight:200;line-height:1">+</span></div>
       <div class="sidebar-list" id="sidebarList">
       </div>
     </div>
