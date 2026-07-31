@@ -94,6 +94,7 @@ class App:
         self.root = tk.Tk()
         self.root.title("云桥 MCP")
         self.root.geometry("400x680")
+        self._shell = None  # 持久 shell 进程
         # 主窗口居中（延迟执行确保渲染完成）
         def center_main():
             sw = self.root.winfo_screenwidth()
@@ -865,34 +866,55 @@ class App:
             pass
 
     # ─── 命令处理 ────────────────────────────
-    def _run_cmd(self, ws, rid, command, timeout):
-        import asyncio, subprocess
+        def _run_cmd(self, ws, rid, command, timeout):
+        """使用持久 shell 执行命令"""
+        import asyncio
         async def run():
             try:
-                cwd = state["workDir"] if state["workDir"] else None
-                proc = await asyncio.create_subprocess_shell(
-                    command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-                    cwd=cwd)
-                try:
-                    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout/1000)
-                    ec = proc.returncode or 0; killed = False
-                except asyncio.TimeoutError:
-                    proc.kill(); stdout, stderr = await proc.communicate()
-                    ec = 1; killed = True
-                await ws.send(json.dumps({
+                result = await self._exec_persistent(command, timeout)
+                import asyncio as aio2
+                loop = aio2.new_event_loop()
+                aio2.set_event_loop(loop)
+                loop.run_until_complete(ws.send(json.dumps({
                     "type": "command_result", "requestId": rid,
-                    "payload": {
-                        "exitCode": ec,
-                        "stdout": (stdout or b"").decode("utf-8", errors="replace"),
-                        "stderr": (stderr or b"").decode("utf-8", errors="replace"),
-                        "killed": killed,
-                    },
-                }))
-                self.add_log("INFO", f"完成, 退出码: {ec}")
+                    "payload": result,
+                })))
+                self.add_log("INFO", f"完成, 退出码: {result.get('exitCode', '?')}")
             except Exception as e:
                 self.add_log("ERROR", f"执行失败: {e}")
         asyncio.run(run())
 
+    def _ensure_shell(self):
+        """确保持久 shell 进程在运行"""
+        import subprocess
+        if self._shell is not None and self._shell.returncode is None:
+            return
+        work_dir = state.get("workDir") or None
+        self._shell = subprocess.Popen(
+            ["powershell", "-NoExit", "-Command", "-"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, cwd=work_dir,
+        )
+
+    async def _exec_persistent(self, command, timeout=30000):
+        """在持久 shell 中执行命令"""
+        import time as time_module
+        self._ensure_shell()
+        marker = f"__CMD_DONE_{int(time_module.time() * 1000000)}__"
+        full_cmd = f"{command}\nWrite-Host \"{marker}\"\n"
+        self._shell.stdin.write(full_cmd.encode("utf-8"))
+        self._shell.stdin.flush()
+        stdout_lines = []
+        import asyncio
+        loop = asyncio.get_event_loop()
+        deadline = time_module.time() + timeout / 1000
+        while time_module.time() < deadline:
+            line = await loop.run_in_executor(None, self._shell.stdout.readline)
+            decoded = line.decode("utf-8", errors="replace").rstrip("\r\n")
+            if marker in decoded:
+                break
+            stdout_lines.append(decoded)
+        return {"exitCode": 0, "stdout": "\n".join(stdout_lines), "stderr": "", "killed": False}
     def _read_file(self, ws, rid, path):
         import asyncio
         async def run():
