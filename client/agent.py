@@ -154,7 +154,7 @@ class Session:
         sfile.write_text(json.dumps(self.to_dict(), indent=2), "utf-8")
 
         async def exec(self, command, timeout=30000):
-        """在会话中执行命令，保持 cwd，使用持久 shell（效率更高）"""
+        """在会话中执行命令，保持 cwd"""
         self.lastActive = time.time()
 
         # 处理 cd 命令：直接更新 cwd，不执行 shell
@@ -171,9 +171,33 @@ class Session:
             else:
                 return {"exitCode": 1, "stdout": "", "stderr": f"目录不存在: {new_dir}", "killed": False}
 
-        # 使用持久 shell 执行（首次自动启动）
+        # 在 cwd 下执行（一键执行）
         try:
-            return await self._exec_persistent(command, timeout)
+            proc = await asyncio.create_subprocess_shell(
+                command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=self.cwd,
+            )
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(), timeout=timeout / 1000
+                )
+                exit_code = proc.returncode or 0
+                killed = False
+            except asyncio.TimeoutError:
+                proc.kill()
+                stdout, stderr = await proc.communicate()
+                exit_code = 1
+                killed = True
+
+            self._save()
+            return {
+                "exitCode": exit_code,
+                "stdout": stdout.decode("utf-8", errors="replace") if stdout else "",
+                "stderr": stderr.decode("utf-8", errors="replace") if stderr else "",
+                "killed": killed,
+            }
         except Exception as e:
             return {"exitCode": 1, "stdout": "", "stderr": str(e), "killed": False}
 
