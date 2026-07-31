@@ -106,8 +106,8 @@
     display: flex;
     flex: 1;
     overflow: hidden;
-    padding: 8px;
-    gap: 8px;
+    padding: 0 6px 6px 6px;
+    gap: 6px;
   }
 
   /* ── 左侧面板 ── */
@@ -123,14 +123,14 @@
 
   }
     .session-sidebar {
-    width: 50px;
+    width: 40px;
     display: flex;
     flex-direction: column;
     background: var(--bg);
     border-right: 1px solid var(--border);
     flex-shrink: 0;
     align-items: center;
-    padding: 8px 0;
+    padding: 6px 0;
     gap: 2px;
   }
 
@@ -148,16 +148,16 @@
     padding: 8px 8px 0;
   }
   .sidebar-item {
-    width: 34px;
-    height: 34px;
+    width: 28px;
+    height: 28px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 600;
     color: var(--text2);
     cursor: pointer;
-    border-radius: 6px;
+    border-radius: 4px;
     transition: all 0.2s;
     position: relative;
   }
@@ -334,7 +334,7 @@
 
   /* ── 右侧面板 ── */
     .right-panel {
-    width: 300px;
+    width: 280px;
     display: flex;
     flex-direction: column;
     overflow-y: auto;
@@ -345,7 +345,7 @@
     flex-direction: column;
     align-items: center;
     gap: 0;
-    padding: 12px;
+    padding: 8px;
     position: relative;
     min-height: 100%;
   }
@@ -533,9 +533,11 @@
 <body>
 <div class="titlebar">
   <span class="logo">Y</span>
-  <h1>云桥 MCP <span style="font-size:11px;color:var(--text3);font-weight:normal">v2.0</span></h1>
-  <span class="status-badge" id="connStatus">初始化中...</span>
-  <button onclick="openSettings()">⚙ 设置</button>
+  <span class="title-text">云桥 MCP</span>
+  <span class="title-version">v2.0</span>
+  <span class="spacer"></span>
+  <span class="status-dot" id="connStatus"></span>
+  <button class="title-btn" onclick="openSettings()" title="设置">⚙</button>
 </div>
 
 <div class="main">
