@@ -460,8 +460,20 @@ function handleBridge(action, data) {
   }
   else if (action === 'relay_status') {
     var dot = document.getElementById('relayDot');
-    if (data.status === 'connected') { dot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse'; }
-    else { dot.className = 'w-1.5 h-1.5 rounded-full bg-[#444]'; }
+    if (data.status === 'connected') {
+      dot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
+      var clientDot = document.getElementById('clientDot');
+      if (clientDot) clientDot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
+    } else {
+      dot.className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
+      var clientDot = document.getElementById('clientDot');
+      if (clientDot) clientDot.className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
+      var relayAgentDot = document.getElementById('relayAgentDot');
+      if (relayAgentDot) {
+        relayAgentDot.classList.add('hidden');
+        relayAgentDot.className = 'w-1.5 h-1.5 rounded-full hidden';
+      }
+    }
   }
 }
 function setConn状态(status) {
@@ -535,7 +547,7 @@ function connectRelay() {
     document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
     var clientDot = document.getElementById('clientDot');
     if (clientDot) {
-      clientDot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80]';
+      clientDot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
     }
     state.ws.send(JSON.stringify({
       type: 'register', deviceName: 'web-ui', os: 'web', arch: 'web',
