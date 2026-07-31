@@ -236,15 +236,18 @@ function connectRelay() {
 }
 function configRelay() {
   var currentUrl = document.getElementById('relayUrl').textContent;
+  var currentKey = state.relayKey || '';
   var url = prompt('中转服务器地址:', currentUrl);
-  if (!url || !url.trim()) return;
-  document.getElementById('relayUrl').textContent = url.trim();
-  var key = prompt('中转服务器 Key:', '');
+  if (url === null) return;
+  if (url && url.trim()) {
+    document.getElementById('relayUrl').textContent = url.trim();
+  }
+  var key = prompt('中转服务器密钥 (Key):', currentKey);
+  if (key === null) return;
   if (key && key.trim()) {
     state.relayKey = key.trim();
-    addLog('info', '中转服务器 Key 已更新');
   }
-  addLog('info', '中转服务器配置已更新: ' + url.trim());
+  addLog('info', '中转服务器配置已更新');
 }
 function refreshSessions() { addLog('info', '会话列表已刷新'); }
 function renderSidebar() {
