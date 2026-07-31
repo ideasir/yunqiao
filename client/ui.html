@@ -61,19 +61,19 @@ tailwind.config = {
     <!-- 路径栏 -->
     <div class="flex items-center gap-2 px-5 py-2 flex-shrink-0 select-none bg-[#0a0a0a] border-b border-[#1a1a1a]">
       <span class="text-[#666] text-sm font-bold">❯</span>
-      <span class="text-xs font-mono text-[#666] flex-1 truncate" id="currentCwd">~</span>
+      <span class="text-xs font-mono text-[#aaa] flex-1 truncate" id="currentCwd">~</span>
     </div>
 
     <!-- 日志区 -->
     <div class="flex-1 overflow-y-auto px-5 py-3 font-mono text-xs leading-relaxed" id="sessionLog">
-      <div class="entry info flex gap-3 py-1 animate-slide-up"><span class="text-[#444] flex-shrink-0 min-w-[60px]">--:--:--</span><span class="text-[#666]">云桥 MCP v2.0 运行中</span></div>
-      <div class="entry info flex gap-3 py-1 animate-slide-up"><span class="text-[#444] flex-shrink-0 min-w-[60px]">--:--:--</span><span class="text-[#555]">输入命令开始操作</span></div>
+      <div class="entry info flex gap-3 py-1 animate-slide-up"><span class="text-[#777] flex-shrink-0 min-w-[60px]">--:--:--</span><span class="text-[#ccc]">云桥 MCP v2.0 运行中</span></div>
+      <div class="entry info flex gap-3 py-1 animate-slide-up"><span class="text-[#777] flex-shrink-0 min-w-[60px]">--:--:--</span><span class="text-[#bbb]">输入命令开始操作</span></div>
     </div>
 
     <!-- 输入区 -->
     <div class="flex items-stretch flex-shrink-0 bg-[#0a0a0a] border-t border-[#1a1a1a]">
       <span class="flex items-center pl-5 pr-1 text-[#888] text-sm font-bold select-none">❯</span>
-      <input type="text" id="cmdInput" class="flex-1 bg-transparent border-none text-[#ededed] px-3 py-3 font-mono text-xs outline-none placeholder-[#444]" placeholder="输入命令..." spellcheck="false" onkeydown="if(event.key==='Enter')sendCommand()" />
+      <input type="text" id="cmdInput" class="flex-1 bg-transparent border-none text-[#ededed] px-3 py-3 font-mono text-xs outline-none placeholder-[#666]" placeholder="输入命令..." spellcheck="false" onkeydown="if(event.key==='Enter')sendCommand()" />
     </div>
   </div>
 
@@ -166,12 +166,12 @@ function addLog(type, text) {
   entry.className = 'entry ' + type + ' flex gap-3 py-1 animate-slide-up';
   const now = new Date();
   const time = now.toTimeString().slice(0, 8);
-  const colors = {cmd:'text-[#ededed] font-medium',out:'text-[#cccccc]',err:'text-[#ff6b6b]',info:'text-[#777777]',done:'text-[#ededed] font-medium',file:'text-[#cccccc]',code:'text-[#cccccc]',status:'text-[#aaaaaa]'};
+  const colors = {cmd:'text-white font-medium',out:'text-[#e8e8e8]',err:'text-[#ff6b6b]',info:'text-[#aaaaaa]',done:'text-white font-medium',file:'text-[#cccccc]',code:'text-[#cccccc]',status:'text-[#cccccc]'};
   const c = colors[type] || 'text-[#cccccc]';
   if (type === 'file' || type === 'code') {
-    entry.innerHTML = '<span class="text-[#444] flex-shrink-0 min-w-[60px]">' + time + '</span><span class="' + c + '"><pre style="margin:0;font-family:inherit;white-space:pre-wrap">' + esc(text) + '</pre></span>';
+    entry.innerHTML = '<span class="text-[#777] flex-shrink-0 min-w-[60px]">' + time + '</span><span class="' + c + '"><pre style="margin:0;font-family:inherit;white-space:pre-wrap">' + esc(text) + '</pre></span>';
   } else {
-    entry.innerHTML = '<span class="text-[#444] flex-shrink-0 min-w-[60px]">' + time + '</span><span class="' + c + '">' + esc(text) + '</span>';
+    entry.innerHTML = '<span class="text-[#777] flex-shrink-0 min-w-[60px]">' + time + '</span><span class="' + c + '">' + esc(text) + '</span>';
   }
   log.appendChild(entry);
   log.scrollTop = log.scrollHeight;
