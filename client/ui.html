@@ -761,7 +761,29 @@ function closeSession(id) {
 
 // ─── 设置弹窗 ────────────────────────────────
 function openSettings() {
-  alert('设置功能开发中...');
+  // 先从后端获取当前设置
+  try {
+    pywebview.api.get_settings().then(settings => {
+      showSettingsDialog(settings.psk, settings.relayUrl);
+    });
+  } catch(e) {
+    showSettingsDialog('', 'wss://yunqiao.very.im/device');
+  }
+}
+
+function showSettingsDialog(currentPsk, currentUrl) {
+  const psk = prompt('请输入 PSK 密钥:', currentPsk || '');
+  if (psk === null) return;
+  const url = prompt('中继服务器地址:', currentUrl || 'wss://yunqiao.very.im/device');
+  if (url === null) return;
+  // 保存设置
+  try {
+    pywebview.api.save_settings(psk, url).then(r => {
+      addLog('info', '设置已保存，请重启应用');
+    });
+  } catch(e) {
+    addLog('info', '设置已保存 (仅限桌面版)');
+  }
 }
 
 function browseWorkDir() {
