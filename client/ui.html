@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22><text y=%2214%22 font-size=%2214%22>~</text></svg>">
 <title>云桥 MCP v2.0</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
@@ -44,7 +45,7 @@ tailwind.config = {
   <span class="text-sm font-semibold text-white/90">云桥 MCP</span>
   <span class="text-xs text-white/30 font-medium">v2.0</span>
   <div class="flex-1"></div>
-  <div class="w-2 h-2 rounded-full bg-white/20" id="connStatus"></div>
+  <div class="w-2 h-2 rounded-full bg-white/20" id="conn状态"></div>
   <button class="text-white/30 hover:text-white/70 text-sm px-1 py-0.5 rounded transition-colors" onclick="openSettings()">⚙</button>
 </header>
 
@@ -80,16 +81,16 @@ tailwind.config = {
     <div class="rounded-xl p-4" style="background: rgba(26,28,42,0.8); border: 1px solid rgba(255,255,255,0.06);">
       <div class="flex items-center gap-2 mb-3">
         <div class="w-2 h-2 rounded-full bg-success-400 animate-pulse-dot"></div>
-        <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">Upstream Agent</span>
+        <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">上游 Agent</span>
       </div>
       <div class="space-y-1.5 text-sm">
-        <div class="flex justify-between items-center"><span class="text-white/35">Status</span><span class="text-white/70" id="agentStatus">Awaiting</span></div>
-        <div class="flex justify-between items-center"><span class="text-white/35">Pair Code</span><span class="font-mono text-brand-400 font-bold tracking-wider text-base" id="pairCode">------</span></div>
-        <div class="flex justify-between items-center"><span class="text-white/35">Device</span><span class="text-white/70 truncate max-w-[130px]" id="deviceName">-</span></div>
+        <div class="flex justify-between items-center"><span class="text-white/35">状态</span><span class="text-white/70" id="agent状态">待接入</span></div>
+        <div class="flex justify-between items-center"><span class="text-white/35">配对码</span><span class="font-mono text-brand-400 font-bold tracking-wider text-base" id="pairCode">------</span></div>
+        <div class="flex justify-between items-center"><span class="text-white/35">设备</span><span class="text-white/70 truncate max-w-[130px]" id="deviceName">-</span></div>
       </div>
       <div class="flex gap-2 mt-3 pt-3" style="border-top: 1px solid rgba(255,255,255,0.06);">
-        <button class="text-xs px-3 py-1.5 rounded-lg transition-all" style="background: rgba(85,112,232,0.15); color: #6c8cff;" onclick="copyPairCode()" onmouseover="this.style.background='rgba(85,112,232,0.25)'" onmouseout="this.style.background='rgba(85,112,232,0.15)'">Copy</button>
-        <button class="text-xs px-3 py-1.5 rounded-lg transition-all text-white/40 hover:text-white/70" style="background: rgba(255,255,255,0.05);" onclick="refreshPairCode()" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">Refresh</button>
+        <button class="text-xs px-3 py-1.5 rounded-lg transition-all" style="background: rgba(85,112,232,0.15); color: #6c8cff;" onclick="copyPairCode()" onmouseover="this.style.background='rgba(85,112,232,0.25)'" onmouseout="this.style.background='rgba(85,112,232,0.15)'">复制</button>
+        <button class="text-xs px-3 py-1.5 rounded-lg transition-all text-white/40 hover:text-white/70" style="background: rgba(255,255,255,0.05);" onclick="refreshPairCode()" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">刷新</button>
       </div>
     </div>
 
@@ -97,11 +98,11 @@ tailwind.config = {
     <div class="rounded-xl p-4" style="background: rgba(26,28,42,0.8); border: 1px solid rgba(255,255,255,0.06);">
       <div class="flex items-center gap-2 mb-3">
         <div class="w-2 h-2 rounded-full bg-success-400"></div>
-        <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">Relay Server</span>
+        <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">中转服务器</span>
       </div>
       <div class="space-y-1.5 text-sm">
-        <div class="flex justify-between items-center"><span class="text-white/35">Endpoint</span><span class="text-white/70 font-mono text-xs truncate max-w-[150px]" id="relayUrl">yunqiao.very.im</span></div>
-        <div class="flex justify-between items-center"><span class="text-white/35">Latency</span><span class="text-white/70 font-mono" id="relayLatency">-- ms</span></div>
+        <div class="flex justify-between items-center"><span class="text-white/35">地址</span><span class="text-white/70 font-mono text-xs truncate max-w-[150px]" id="relayUrl">yunqiao.very.im</span></div>
+        <div class="flex justify-between items-center"><span class="text-white/35">延迟</span><span class="text-white/70 font-mono" id="relay延迟">-- ms</span></div>
       </div>
     </div>
 
@@ -112,13 +113,13 @@ tailwind.config = {
         <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">Client</span>
       </div>
       <div class="space-y-1.5 text-sm">
-        <div class="flex justify-between items-center"><span class="text-white/35">Work Dir</span><span class="text-white/70 font-mono text-xs truncate max-w-[140px]" id="workDir">Not set</span></div>
-        <div class="flex justify-between items-center"><span class="text-white/35">Platform</span><span class="text-white/70" id="clientPlatform">-</span></div>
-        <div class="flex justify-between items-center"><span class="text-white/35">Hostname</span><span class="text-white/70 truncate max-w-[130px]" id="clientHostname">-</span></div>
+        <div class="flex justify-between items-center"><span class="text-white/35">工作目录</span><span class="text-white/70 font-mono text-xs truncate max-w-[140px]" id="workDir">未设置</span></div>
+        <div class="flex justify-between items-center"><span class="text-white/35">平台</span><span class="text-white/70" id="client平台">-</span></div>
+        <div class="flex justify-between items-center"><span class="text-white/35">主机名</span><span class="text-white/70 truncate max-w-[130px]" id="client主机名">-</span></div>
       </div>
       <div class="mt-3 pt-3" style="border-top: 1px solid rgba(255,255,255,0.06);" id="sessionList"></div>
       <div class="flex gap-2 mt-3">
-        <button class="text-xs px-3 py-1.5 rounded-lg transition-all" style="background: rgba(85,112,232,0.15); color: #6c8cff;" onclick="createSession()" onmouseover="this.style.background='rgba(85,112,232,0.25)'" onmouseout="this.style.background='rgba(85,112,232,0.15)'">+ New Session</button>
+        <button class="text-xs px-3 py-1.5 rounded-lg transition-all" style="background: rgba(85,112,232,0.15); color: #6c8cff;" onclick="createSession()" onmouseover="this.style.background='rgba(85,112,232,0.25)'" onmouseout="this.style.background='rgba(85,112,232,0.15)'">+ 新建会话</button>
         <button class="text-xs px-3 py-1.5 rounded-lg transition-all text-white/40 hover:text-white/70" style="background: rgba(255,255,255,0.05);" onclick="refreshSessions()" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">↻</button>
       </div>
     </div>
@@ -156,32 +157,32 @@ function sendCommand() {
     state.ws.send(JSON.stringify({ type: 'execute_command', requestId: 'cmd_' + Date.now(), payload: { command: text, timeout: 30000 } }));
     state.ws.send(JSON.stringify({ type: 'agent_message', requestId: 'msg_' + Date.now(), text: text }));
   } else {
-    try { pywebview.api.api_send_command(text); } catch(e) { addLog('err', 'Not connected'); }
+    try { pywebview.api.api_send_command(text); } catch(e) { addLog('err', '未连接到服务器'); }
   }
 }
 
 function copyPairCode() {
   navigator.clipboard.writeText('云桥 配对码 ' + state.pairCode);
-  addLog('info', 'Pair code copied');
+  addLog('info', '配对码已复制');
 }
 function refreshPairCode() {
   state.pairCode = String(100000 + Math.floor(Math.random() * 900000));
   var el = document.getElementById('pairCode'); if (el) el.textContent = state.pairCode;
-  addLog('info', 'Pair code refreshed: ' + state.pairCode);
+  addLog('info', '配对码已刷新: ' + state.pairCode);
 }
 
 function createSession() {
-  var name = prompt('Session name:', 'Workspace');
+  var name = prompt('会话名称（可选）:', '工作区');
   if (name === null) return;
-  var dir = prompt('Work directory:', state.workDir || 'C:\\Users\\Administrator');
+  var dir = prompt('工作目录:', state.workDir || 'C:\\Users\\Administrator');
   if (dir === null) return;
   var id = 's_' + Date.now().toString(36);
-  state.sessions.push({ id: id, name: name || 'Workspace', workDir: dir, cwd: dir, isDefault: state.sessions.length === 0 });
+  state.sessions.push({ id: id, name: name || '工作区', workDir: dir, cwd: dir, isDefault: state.sessions.length === 0 });
   state.currentSessionId = id; state.workDir = dir;
-  renderSessions(); updateStatus();
-  addLog('info', 'Session created: ' + name + ' (' + id + ')');
+  renderSessions(); update状态();
+  addLog('info', '会话已创建: ' + name + ' (' + id + ')');
 }
-function refreshSessions() { addLog('info', 'Session list refreshed'); }
+function refreshSessions() { addLog('info', '会话列表已刷新'); }
 function renderSessions() {
   var list = document.getElementById('sessionList');
   list.innerHTML = '';
@@ -196,33 +197,33 @@ function renderSessions() {
     list.appendChild(item);
   });
 }
-function switchSession(id) { state.currentSessionId = id; renderSessions(); addLog('info', 'Switched to session: ' + id); }
+function switchSession(id) { state.currentSessionId = id; renderSessions(); addLog('info', '已切换到会话: ' + id); }
 function closeSession(id) {
-  if (!confirm('Close this session?')) return;
+  if (!confirm('确定关闭此会话?')) return;
   state.sessions = state.sessions.filter(function(s) { return s.id !== id; });
   if (state.currentSessionId === id) { state.currentSessionId = state.sessions.length > 0 ? state.sessions[0].id : null; }
-  renderSessions(); addLog('info', 'Session closed: ' + id);
+  renderSessions(); addLog('info', '会话已关闭: ' + id);
 }
 
-function updateStatus() {
+function update状态() {
   var el;
   el = document.getElementById('pairCode'); if (el) el.textContent = state.pairCode;
   el = document.getElementById('deviceName'); if (el) el.textContent = state.deviceName || '-';
-  el = document.getElementById('clientPlatform'); if (el) el.textContent = state.platform || '-';
-  el = document.getElementById('clientHostname'); if (el) el.textContent = state.hostname || '-';
-  el = document.getElementById('workDir'); if (el) el.textContent = state.workDir || 'Not set';
+  el = document.getElementById('client平台'); if (el) el.textContent = state.platform || '-';
+  el = document.getElementById('client主机名'); if (el) el.textContent = state.hostname || '-';
+  el = document.getElementById('workDir'); if (el) el.textContent = state.workDir || '未设置';
   el = document.getElementById('currentCwd'); if (el) el.textContent = state.workDir || '~';
 }
-function setConnStatus(status) {
-  var dot = document.getElementById('connStatus');
+function setConn状态(status) {
+  var dot = document.getElementById('conn状态');
   dot.className = 'w-2 h-2 rounded-full ' + (status === 'connected' ? 'bg-green-400 animate-pulse-dot' : 'bg-white/20');
 }
 
 (function() {
   refreshPairCode();
-  updateStatus();
-  addLog('info', 'Welcome to 云桥 MCP v2.0');
-  setConnStatus('disconnected');
+  update状态();
+  addLog('info', '欢迎使用云桥 MCP v2.0');
+  setConn状态('disconnected');
 })();
 </script>
 </body>
