@@ -866,15 +866,14 @@ class App:
             pass
 
     # ─── 命令处理 ────────────────────────────
-        def _run_cmd(self, ws, rid, command, timeout):
-        """使用持久 shell 执行命令"""
+    def _run_cmd(self, ws, rid, command, timeout):
+        """使用持久 shell 执行命令 (4空格缩进版本)"""
         import asyncio
         async def run():
             try:
                 result = await self._exec_persistent(command, timeout)
-                import asyncio as aio2
-                loop = aio2.new_event_loop()
-                aio2.set_event_loop(loop)
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
                 loop.run_until_complete(ws.send(json.dumps({
                     "type": "command_result", "requestId": rid,
                     "payload": result,
