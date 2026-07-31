@@ -224,7 +224,11 @@ function saveSessionModal() {
   var dir = document.getElementById('modalSessionDir').value.trim() || 'C:\\Users\\Administrator';
   var id = 's_' + Date.now().toString(36);
   state.sessions.push({ id: id, name: name, workDir: dir, cwd: dir, isDefault: state.sessions.length === 0 });
-  state.currentSessionId = id; state.workDir = dir;
+  state.workDir = dir;
+  // 如果没有默认会话，则设为默认
+  if (!state.currentSessionId) {
+    state.currentSessionId = id;
+  }
   renderSidebar(); renderSessions(); updateStatus();
   addLog('info', '会话已创建: ' + name + ' (' + id + ')');
   var overlay = document.getElementById('sessionModal');
@@ -350,6 +354,16 @@ function updateStatus() {
   el = document.getElementById('client主机名'); if (el) el.textContent = state.hostname || '-';
   el = document.getElementById('workDir'); if (el) el.textContent = state.workDir || '未设置';
   el = document.getElementById('currentCwd'); if (el) el.textContent = state.workDir || '~';
+  // 更新默认工作区显示
+  var label = document.getElementById('defaultSessionLabel');
+  if (label) {
+    if (state.currentSessionId) {
+      var s = state.sessions.find(function(s) { return s.id === state.currentSessionId; });
+      label.textContent = s ? (s.name || s.id) : '未设置';
+    } else {
+      label.textContent = '未设置';
+    }
+  }
 }
 function setConn状态(status) {
   var dot = document.getElementById('conn状态');
