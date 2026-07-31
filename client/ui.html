@@ -489,7 +489,7 @@ function toggleConnect() {
       } else {
         window.pywebview.api.toggle_connect().then(function() {
           document.getElementById('connectBtn').textContent = '断开';
-    document.getElementById('connectBtn').className = 'px-3 py-1 rounded-lg text-xs font-medium transition-all bg-[#dc2626] text-white hover:bg-[#b91c1c]';
+    document.getElementById('connectBtn').className = 'px-3 py-1 rounded-lg text-xs font-medium transition-all bg-[#7f1d1d] text-[#fca5a5] hover:bg-[#991b1b]';
           addLog('status', '正在连接中转服务器...');
         });
       }
@@ -510,7 +510,7 @@ function connectRelay() {
   state.ws = new WebSocket('wss://' + url + '/device?psk=' + encodeURIComponent(key));
   state.ws.onopen = function() {
     document.getElementById('connectBtn').textContent = '断开';
-    document.getElementById('connectBtn').className = 'px-3 py-1 rounded-lg text-xs font-medium transition-all bg-[#dc2626] text-white hover:bg-[#b91c1c]';
+    document.getElementById('connectBtn').className = 'px-3 py-1 rounded-lg text-xs font-medium transition-all bg-[#7f1d1d] text-[#fca5a5] hover:bg-[#991b1b]';
     addLog('done', '中转服务器连接成功');
     document.getElementById('relayStatus').textContent = '已连接';
     document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
