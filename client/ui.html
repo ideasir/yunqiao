@@ -92,7 +92,7 @@ tailwind.config = {
     <!-- Agent 节点 -->
     <div class="rounded-xl bg-[#141414] border border-[#222222]">
       <div class="flex items-center gap-2 px-3 py-2.5 border-b border-[#1f1f1f]">
-        <div class="w-1.5 h-1.5 rounded-full bg-[#666] animate-pulse"></div>
+        <div class="w-1.5 h-1.5 rounded-full bg-[#666] animate-pulse" id="agentDot"></div>
         <span class="text-xs font-medium text-[#aaa]">上游 Agent</span>
         <span class="ml-auto text-[10px] text-[#555] font-mono">SSE</span>
       </div>
@@ -140,7 +140,7 @@ tailwind.config = {
     <!-- Client 节点 -->
     <div class="rounded-xl bg-[#141414] border border-[#222222]">
       <div class="flex items-center gap-2 px-3 py-2.5 border-b border-[#1f1f1f]">
-        <div class="w-1.5 h-1.5 rounded-full bg-[#666]"></div>
+        <div class="w-1.5 h-1.5 rounded-full bg-[#666]" id="clientDot"></div>
         <span class="text-xs font-medium text-[#aaa]">客户端（本地电脑）</span>
       </div>
       <div class="px-3 py-2 space-y-1.5 text-xs">
@@ -474,9 +474,9 @@ function connectRelay() {
     addLog('done', '中转服务器连接成功');
     document.getElementById('relayStatus').textContent = '已连接';
     document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
-    var clientDots = document.querySelectorAll('.rounded-xl.bg-\[\#141414\] .w-1\.5\.h-1\.5\.rounded-full');
-    if (clientDots.length > 0) {
-      clientDots[clientDots.length - 1].className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80]';
+    var clientDot = document.getElementById('clientDot');
+    if (clientDot) {
+      clientDot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80]';
     }
     state.ws.send(JSON.stringify({
       type: 'register', deviceName: 'web-ui', os: 'web', arch: 'web',
@@ -490,13 +490,13 @@ function connectRelay() {
         addLog('status', 'Agent 已配对');
         document.getElementById('agent状态').textContent = '已配对';
         document.getElementById('agent状态').style.color = '#4ade80';
-        var dots = document.querySelectorAll('.w-1\.5\.h-1\.5\.rounded-full');
-        if (dots.length > 0) dots[0].className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
+        var agentDot = document.getElementById('agentDot');
+        if (agentDot) agentDot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
       } else if (msg.type === 'agent_disconnected') {
         document.getElementById('agent状态').textContent = '已断开';
         document.getElementById('agent状态').style.color = '#bbb';
-        var dots = document.querySelectorAll('.w-1\.5\.h-1\.5\.rounded-full');
-        if (dots.length > 0) dots[0].className = 'w-1.5 h-1.5 rounded-full bg-[#666]';
+        var agentDot = document.getElementById('agentDot');
+        if (agentDot) agentDot.className = 'w-1.5 h-1.5 rounded-full bg-[#666]';
       } else if (msg.type === 'command_result' || msg.type === 'session_op_result') {
         trafficFlash();
       }
@@ -506,9 +506,9 @@ function connectRelay() {
     addLog('info', '中转服务器连接断开');
     document.getElementById('relayStatus').textContent = '未连接';
     document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
-    var clientDots = document.querySelectorAll('.rounded-xl.bg-\[\#141414\] .w-1\.5\.h-1\.5\.rounded-full');
-    if (clientDots.length > 0) {
-      clientDots[clientDots.length - 1].className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
+    var clientDot = document.getElementById('clientDot');
+    if (clientDot) {
+      clientDot.className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
     }
   };
   state.ws.onerror = function() {
