@@ -14,13 +14,25 @@ import uuid
 from pathlib import Path
 
 RELAY_URL = os.environ.get("RELAY_URL", "wss://yunqiao.very.im/device")
-RELAY_PSK = os.environ.get("RELAY_PSK")
 DEVICE_NAME = os.environ.get("DEVICE_NAME", platform.node())
 
+# 从配置文件读取 PSK
+CONFIG_DIR = Path(os.environ.get("YUNQIAO_CONFIG", str(Path.home() / ".yunqiao")))
+CONFIG_FILE = CONFIG_DIR / "config.json"
+RELAY_PSK = ""
+
+if CONFIG_FILE.exists():
+    try:
+        cfg = json.loads(CONFIG_FILE.read_text("utf-8"))
+        RELAY_PSK = cfg.get("psk", "")
+        if not RELAY_URL:
+            RELAY_URL = cfg.get("relayUrl", RELAY_URL)
+    except:
+        pass
+
 if not RELAY_PSK:
-    print("❌ 必须设置 RELAY_PSK 环境变量")
-    print("   set RELAY_PSK=your-psk")
-    sys.exit(1)
+    print("⚠️ 未找到 PSK 配置")
+    print("   请在客户端设置中配置 PSK 和中继地址")
 
 # ─── 会话管理 ────────────────────────────────
 YUNQIAO_DIR = Path.home() / ".yunqiao"
@@ -255,6 +267,19 @@ class Api:
 
     def get_logs(self):
         return api_get_logs()
+
+    def save_settings(self, psk, relay_url):
+        """保存设置"""
+        global RELAY_PSK, RELAY_URL
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        cfg = {"psk": psk, "relayUrl": relay_url, "deviceName": DEVICE_NAME}
+        CONFIG_FILE.write_text(json.dumps(cfg, indent=2), "utf-8")
+        RELAY_PSK = psk
+        RELAY_URL = relay_url
+        return {"success": True}
+
+    def get_settings(self):
+        return {"psk": RELAY_PSK, "relayUrl": RELAY_URL, "deviceName": DEVICE_NAME}
 
 
 def main():
