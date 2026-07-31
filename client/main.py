@@ -867,36 +867,46 @@ class App:
 
     # ─── 命令处理 ────────────────────────────
     def _run_cmd(self, ws, rid, command, timeout):
-        """执行命令（一键执行，保持 cwd）"""
-        import asyncio, subprocess
-        async def run():
+        """执行命令（同步 subprocess，线程安全）"""
+        import subprocess, time as tm
+        try:
+            cwd = state.get("workDir") or None
+            proc = subprocess.Popen(
+                command, shell=True,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                cwd=cwd,
+            )
             try:
-                cwd = state.get("workDir") or None
-                proc = await asyncio.create_subprocess_shell(
-                    command, stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE, cwd=cwd)
-                try:
-                    stdout, stderr = await asyncio.wait_for(
-                        proc.communicate(), timeout=timeout/1000)
-                    ec = proc.returncode or 0; killed = False
-                except asyncio.TimeoutError:
-                    proc.kill(); stdout, stderr = await proc.communicate()
-                    ec = 1; killed = True
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                loop.run_until_complete(ws.send(json.dumps({
-                    "type": "command_result", "requestId": rid,
-                    "payload": {
-                        "exitCode": ec,
-                        "stdout": (stdout or b"").decode("utf-8", errors="replace"),
-                        "stderr": (stderr or b"").decode("utf-8", errors="replace"),
-                        "killed": killed,
-                    },
-                })))
-                self.add_log("INFO", f"完成, 退出码: {ec}")
-            except Exception as e:
-                self.add_log("ERROR", f"执行失败: {e}")
-        asyncio.run(run())
+                stdout, stderr = proc.communicate(timeout=timeout/1000)
+                ec = proc.returncode or 0; killed = False
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                stdout, stderr = proc.communicate()
+                ec = 1; killed = True
+            import asyncio
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(ws.send(json.dumps({
+                "type": "command_result" if rid != "0" else "session_op_result",
+                "requestId": rid,
+                "payload": {
+                    "exitCode": ec,
+                    "stdout": (stdout or b"").decode("utf-8", errors="replace"),
+                    "stderr": (stderr or b"").decode("utf-8", errors="replace"),
+                    "killed": killed,
+                },
+            })))
+            self.add_log("INFO", f"完成, 退出码: {ec}")
+        except Exception as e:
+            import asyncio
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(ws.send(json.dumps({
+                "type": "command_result" if rid != "0" else "session_op_result",
+                "requestId": rid,
+                "payload": {"exitCode": 1, "stdout": "", "stderr": str(e), "killed": False},
+            })))
+            self.add_log("ERROR", f"执行失败: {e}")
 
     def _ensure_shell(self):
         """确保持久 shell 进程在运行"""
