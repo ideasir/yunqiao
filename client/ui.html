@@ -52,6 +52,12 @@ tailwind.config = {
 <!-- ─── 主体 ─── -->
 <div class="flex flex-1 overflow-hidden gap-0">
 
+  <!-- 左侧侧边栏 -->
+  <div class="flex flex-col items-center gap-1 py-2 px-1 flex-shrink-0" style="background: rgba(15,16,26,0.6); border-right: 1px solid rgba(255,255,255,0.04);">
+    <div class="w-7 h-7 flex items-center justify-center rounded-lg cursor-pointer text-sm font-bold transition-all" style="color: rgba(108,140,255,0.8);" onclick="createSession()" onmouseover="this.style.background='rgba(85,112,232,0.15)'" onmouseout="this.style.background='transparent'" title="新建会话">+</div>
+    <div class="flex flex-col gap-1 items-center flex-1 overflow-y-auto w-full px-0.5" id="sidebarList"></div>
+  </div>
+
   <!-- 左侧：对话/日志 -->
   <div class="flex-1 flex flex-col min-w-0" style="background: rgba(15,16,26,0.4);">
 
@@ -214,6 +220,23 @@ function configRelay() {
   }
 }
 function refreshSessions() { addLog('info', '会话列表已刷新'); }
+function renderSidebar() {
+  var list = document.getElementById('sidebarList');
+  if (!list) return;
+  list.innerHTML = '';
+  state.sessions.forEach(function(s) {
+    var item = document.createElement('div');
+    item.className = 'flex items-center justify-center rounded-lg cursor-pointer text-xs font-bold transition-all';
+    item.style.cssText = (s.id === state.currentSessionId ? 'background:rgba(85,112,232,0.15);color:#6c8cff;width:26px;height:26px;' : 'color:rgba(255,255,255,0.3);width:26px;height:26px;');
+    item.title = (s.name || 'unnamed') + ' - ' + (s.workDir || '');
+    item.textContent = (s.name || '?').slice(0, 1);
+    item.onmouseover = function() { if (s.id !== state.currentSessionId) this.style.background = 'rgba(255,255,255,0.05)'; };
+    item.onmouseout = function() { if (s.id !== state.currentSessionId) this.style.background = 'transparent'; };
+    item.onclick = function() { switchSession(s.id); };
+    list.appendChild(item);
+  });
+}
+
 function renderSessions() {
   var list = document.getElementById('sessionList');
   list.innerHTML = '';
@@ -228,12 +251,12 @@ function renderSessions() {
     list.appendChild(item);
   });
 }
-function switchSession(id) { state.currentSessionId = id; renderSessions(); addLog('info', '已切换到会话: ' + id); }
+function switchSession(id) { state.currentSessionId = id; renderSidebar(); renderSessions(); addLog('info', '已切换到会话: ' + id); }
 function closeSession(id) {
   if (!confirm('确定关闭此会话?')) return;
   state.sessions = state.sessions.filter(function(s) { return s.id !== id; });
   if (state.currentSessionId === id) { state.currentSessionId = state.sessions.length > 0 ? state.sessions[0].id : null; }
-  renderSessions(); addLog('info', '会话已关闭: ' + id);
+  renderSidebar(); renderSessions(); addLog('info', '会话已关闭: ' + id);
 }
 
 function update状态() {
