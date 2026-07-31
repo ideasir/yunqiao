@@ -10,9 +10,11 @@ tailwind.config = {
   theme: {
     extend: {
       colors: {
-        surface: { 50: '#f4f4f8', 100: '#e8e8f0', 200: '#c8c8d8', 300: '#a8a8c0', 400: '#8888a8', 500: '#686890', 600: '#484870', 700: '#2a2a42', 800: '#1a1a2e', 900: '#0f0f1e', 950: '#080810' },
-        brand: { 50: '#fdf4f0', 100: '#fae8dc', 200: '#f5d0b8', 300: '#f0b894', 400: '#eb9f6f', 500: '#e8874a', 600: '#d46e2e', 700: '#b05824', 800: '#8c451c', 900: '#683315' },
-        accent: { 50: '#f0f0ff', 100: '#dcdcff', 200: '#b8b8ff', 300: '#9494ff', 400: '#7070ff', 500: '#5555ee', 600: '#4444cc', 700: '#3636aa', 800: '#2a2a88', 900: '#1e1e66' },
+        panel: { 50: '#f8f9fc', 100: '#eef0f5', 200: '#d5d8e3', 300: '#b4b8cc', 400: '#8e93b0', 500: '#6e7394', 600: '#545879', 700: '#3d4159', 800: '#282b3d', 900: '#1a1c2a', 950: '#0f101a' },
+        brand: { 400: '#f0a050', 500: '#e8874a', 600: '#d46e2e' },
+        accent: { 400: '#6c8cff', 500: '#5570e8', 600: '#4458cc' },
+        success: { 400: '#4ade80', 500: '#22c55e' },
+        danger: { 400: '#f87171', 500: '#ef4444' },
       }
     }
   }
@@ -26,122 +28,127 @@ tailwind.config = {
   .font-mono { font-family: 'JetBrains Mono', 'Consolas', monospace; }
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: #2a2a42; border-radius: 2px; }
-  ::-webkit-scrollbar-thumb:hover { background: #484870; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
   @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
   @keyframes slide-up { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-  @keyframes glow-line { 0%,100% { opacity: 0.3; } 50% { opacity: 0.8; } }
   .animate-pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
   .animate-slide-up { animation: slide-up 0.2s ease; }
-  .animate-glow { animation: glow-line 3s ease-in-out infinite; }
 </style>
 </head>
-<body class="bg-surface-950 text-surface-100 h-screen flex flex-col overflow-hidden select-none">
+<body class="h-screen flex flex-col overflow-hidden" style="background: linear-gradient(135deg, #0f101a 0%, #1a1c2a 50%, #0f101a 100%);">
 
 <!-- ─── 标题栏 ─── -->
-<header class="flex items-center gap-3 px-4 py-2 bg-surface-900 flex-shrink-0">
-  <div class="w-5 h-5 bg-accent-500 rounded flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">~</div>
-  <span class="text-sm font-semibold text-surface-100">云桥 MCP</span>
-  <span class="text-xs text-surface-500 font-medium">v2.0</span>
+<header class="flex items-center gap-3 px-5 py-2.5 flex-shrink-0" style="background: rgba(15,16,26,0.8); border-bottom: 1px solid rgba(255,255,255,0.06);">
+  <div class="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0" style="background: linear-gradient(135deg, #5570e8, #6c8cff);">~</div>
+  <span class="text-sm font-semibold text-white/90">云桥 MCP</span>
+  <span class="text-xs text-white/30 font-medium">v2.0</span>
   <div class="flex-1"></div>
-  <div class="w-2 h-2 rounded-full bg-surface-500" id="connStatus"></div>
-  <button class="text-surface-500 hover:text-surface-200 text-sm px-1 py-0.5 rounded transition-colors" onclick="openSettings()" title="设置">⚙</button>
+  <div class="w-2 h-2 rounded-full bg-white/20" id="connStatus"></div>
+  <button class="text-white/30 hover:text-white/70 text-sm px-1 py-0.5 rounded transition-colors" onclick="openSettings()">⚙</button>
 </header>
 
 <!-- ─── 主体 ─── -->
 <div class="flex flex-1 overflow-hidden gap-0">
 
-  <!-- 左侧：终端 -->
-  <div class="flex-1 flex flex-col bg-surface-950 min-w-0">
+  <!-- 左侧：对话/日志 -->
+  <div class="flex-1 flex flex-col min-w-0" style="background: rgba(15,16,26,0.4);">
+
     <!-- 路径栏 -->
-    <div class="flex items-center gap-2 px-4 py-1.5 bg-surface-900 flex-shrink-0">
-      <span class="text-accent-500 text-sm font-bold">❯</span>
-      <span class="text-xs font-mono text-surface-400 flex-1 truncate" id="currentCwd">~</span>
-      <span class="text-xs text-surface-600" id="sessionInfo">-</span>
+    <div class="flex items-center gap-2 px-5 py-2 flex-shrink-0" style="border-bottom: 1px solid rgba(255,255,255,0.04);">
+      <span class="text-accent-400 text-sm font-bold">❯</span>
+      <span class="text-xs font-mono text-white/35 flex-1 truncate" id="currentCwd">~</span>
     </div>
 
     <!-- 日志区 -->
-    <div class="flex-1 overflow-y-auto px-4 py-2 font-mono text-sm leading-relaxed" id="sessionLog">
-      <div class="entry info flex gap-2 py-0.5 animate-slide-up"><span class="text-surface-600 flex-shrink-0 text-xs min-w-[56px]">--:--:--</span><span class="text-surface-500">云桥 MCP v2.0 终端版</span></div>
-      <div class="entry info flex gap-2 py-0.5 animate-slide-up"><span class="text-surface-600 flex-shrink-0 text-xs min-w-[56px]">--:--:--</span><span class="text-surface-500">输入命令开始操作</span></div>
+    <div class="flex-1 overflow-y-auto px-5 py-3 font-mono text-sm leading-relaxed" id="sessionLog">
+      <div class="entry info flex gap-2.5 py-0.5 animate-slide-up"><span class="text-white/20 flex-shrink-0 text-xs min-w-[56px]">--:--:--</span><span class="text-white/40">云桥 MCP v2.0</span></div>
+      <div class="entry info flex gap-2.5 py-0.5 animate-slide-up"><span class="text-white/20 flex-shrink-0 text-xs min-w-[56px]">--:--:--</span><span class="text-white/40">输入命令开始操作</span></div>
     </div>
 
     <!-- 输入区 -->
-    <div class="flex items-stretch flex-shrink-0">
-      <span class="flex items-center pl-4 pr-0 text-accent-500 text-sm font-bold select-none">❯</span>
-      <input type="text" id="cmdInput" class="flex-1 bg-transparent border-none text-surface-100 px-3 py-2 font-mono text-sm outline-none placeholder-surface-600" placeholder="输入命令..." spellcheck="false" onkeydown="if(event.key==='Enter')sendCommand()" />
+    <div class="flex items-stretch flex-shrink-0" style="border-top: 1px solid rgba(255,255,255,0.06);">
+      <span class="flex items-center pl-5 pr-0 text-accent-400 text-sm font-bold select-none">❯</span>
+      <input type="text" id="cmdInput" class="flex-1 bg-transparent border-none text-white/80 px-3 py-2.5 font-mono text-sm outline-none placeholder-white/20" placeholder="输入命令..." spellcheck="false" onkeydown="if(event.key==='Enter')sendCommand()" />
     </div>
   </div>
 
   <!-- 右侧：状态面板 -->
-  <aside class="w-56 flex flex-col bg-surface-900 overflow-y-auto flex-shrink-0 text-sm">
-    <!-- Agent -->
-    <section class="px-4 py-3">
-      <h3 class="text-xs font-semibold text-surface-500 uppercase tracking-wider mb-2">Agent</h3>
-      <div class="flex justify-between items-center py-1"><span class="text-surface-500">状态</span><span class="text-surface-300" id="agentStatus">待接入</span></div>
-      <div class="flex justify-between items-center py-1"><span class="text-surface-500">配对码</span><span class="font-mono text-accent-400 font-bold tracking-wider text-base" id="pairCode">------</span></div>
-      <div class="flex justify-between items-center py-1"><span class="text-surface-500">设备</span><span class="text-surface-300 truncate max-w-[120px]" id="deviceName">-</span></div>
-      <div class="flex gap-2 mt-2">
-        <button class="text-xs px-2.5 py-1 rounded bg-accent-500/10 text-accent-400 hover:bg-accent-500/20 transition-colors" onclick="copyPairCode()">复制</button>
-        <button class="text-xs px-2.5 py-1 rounded bg-surface-800 text-surface-400 hover:text-surface-200 hover:bg-surface-700 transition-colors" onclick="refreshPairCode()">刷新</button>
-      </div>
-    </section>
+  <aside class="w-64 flex flex-col gap-3 p-3 overflow-y-auto flex-shrink-0">
 
-    <!-- Relay -->
-    <section class="px-4 py-3">
-      <h3 class="text-xs font-semibold text-surface-500 uppercase tracking-wider mb-2">Relay</h3>
-      <div class="flex justify-between items-center py-1"><span class="text-surface-500">地址</span><span class="text-surface-300 font-mono text-xs" id="relayUrl">yunqiao.very.im</span></div>
-      <div class="flex justify-between items-center py-1"><span class="text-surface-500">延迟</span><span class="text-surface-300 font-mono" id="relayLatency">-- ms</span></div>
-    </section>
-
-    <!-- Client -->
-    <section class="px-4 py-3 flex-1">
-      <h3 class="text-xs font-semibold text-surface-500 uppercase tracking-wider mb-2">Client</h3>
-      <div class="flex justify-between items-center py-1"><span class="text-surface-500">目录</span><span class="text-surface-300 font-mono text-xs truncate max-w-[130px]" id="workDir">未设置</span></div>
-      <div class="flex justify-between items-center py-1"><span class="text-surface-500">平台</span><span class="text-surface-300" id="clientPlatform">-</span></div>
-      <div class="flex justify-between items-center py-1"><span class="text-surface-500">主机</span><span class="text-surface-300 truncate max-w-[120px]" id="clientHostname">-</span></div>
-      <div class="mt-2 pt-2" id="sessionList"></div>
-      <div class="flex gap-2 mt-2">
-        <button class="text-xs px-2.5 py-1 rounded bg-accent-500/10 text-accent-400 hover:bg-accent-500/20 transition-colors" onclick="createSession()">+ 新建会话</button>
-        <button class="text-xs px-2.5 py-1 rounded bg-surface-800 text-surface-400 hover:text-surface-200 hover:bg-surface-700 transition-colors" onclick="refreshSessions()">↻</button>
+    <!-- Agent 卡片 -->
+    <div class="rounded-xl p-4" style="background: rgba(26,28,42,0.8); border: 1px solid rgba(255,255,255,0.06);">
+      <div class="flex items-center gap-2 mb-3">
+        <div class="w-2 h-2 rounded-full bg-success-400 animate-pulse-dot"></div>
+        <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">Upstream Agent</span>
       </div>
-    </section>
+      <div class="space-y-1.5 text-sm">
+        <div class="flex justify-between items-center"><span class="text-white/35">Status</span><span class="text-white/70" id="agentStatus">Awaiting</span></div>
+        <div class="flex justify-between items-center"><span class="text-white/35">Pair Code</span><span class="font-mono text-brand-400 font-bold tracking-wider text-base" id="pairCode">------</span></div>
+        <div class="flex justify-between items-center"><span class="text-white/35">Device</span><span class="text-white/70 truncate max-w-[130px]" id="deviceName">-</span></div>
+      </div>
+      <div class="flex gap-2 mt-3 pt-3" style="border-top: 1px solid rgba(255,255,255,0.06);">
+        <button class="text-xs px-3 py-1.5 rounded-lg transition-all" style="background: rgba(85,112,232,0.15); color: #6c8cff;" onclick="copyPairCode()" onmouseover="this.style.background='rgba(85,112,232,0.25)'" onmouseout="this.style.background='rgba(85,112,232,0.15)'">Copy</button>
+        <button class="text-xs px-3 py-1.5 rounded-lg transition-all text-white/40 hover:text-white/70" style="background: rgba(255,255,255,0.05);" onclick="refreshPairCode()" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">Refresh</button>
+      </div>
+    </div>
+
+    <!-- Relay 卡片 -->
+    <div class="rounded-xl p-4" style="background: rgba(26,28,42,0.8); border: 1px solid rgba(255,255,255,0.06);">
+      <div class="flex items-center gap-2 mb-3">
+        <div class="w-2 h-2 rounded-full bg-success-400"></div>
+        <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">Relay Server</span>
+      </div>
+      <div class="space-y-1.5 text-sm">
+        <div class="flex justify-between items-center"><span class="text-white/35">Endpoint</span><span class="text-white/70 font-mono text-xs truncate max-w-[150px]" id="relayUrl">yunqiao.very.im</span></div>
+        <div class="flex justify-between items-center"><span class="text-white/35">Latency</span><span class="text-white/70 font-mono" id="relayLatency">-- ms</span></div>
+      </div>
+    </div>
+
+    <!-- Client 卡片 -->
+    <div class="rounded-xl p-4 flex-1" style="background: rgba(26,28,42,0.8); border: 1px solid rgba(255,255,255,0.06);">
+      <div class="flex items-center gap-2 mb-3">
+        <div class="w-2 h-2 rounded-full bg-white/20"></div>
+        <span class="text-xs font-semibold text-white/60 uppercase tracking-wider">Client</span>
+      </div>
+      <div class="space-y-1.5 text-sm">
+        <div class="flex justify-between items-center"><span class="text-white/35">Work Dir</span><span class="text-white/70 font-mono text-xs truncate max-w-[140px]" id="workDir">Not set</span></div>
+        <div class="flex justify-between items-center"><span class="text-white/35">Platform</span><span class="text-white/70" id="clientPlatform">-</span></div>
+        <div class="flex justify-between items-center"><span class="text-white/35">Hostname</span><span class="text-white/70 truncate max-w-[130px]" id="clientHostname">-</span></div>
+      </div>
+      <div class="mt-3 pt-3" style="border-top: 1px solid rgba(255,255,255,0.06);" id="sessionList"></div>
+      <div class="flex gap-2 mt-3">
+        <button class="text-xs px-3 py-1.5 rounded-lg transition-all" style="background: rgba(85,112,232,0.15); color: #6c8cff;" onclick="createSession()" onmouseover="this.style.background='rgba(85,112,232,0.25)'" onmouseout="this.style.background='rgba(85,112,232,0.15)'">+ New Session</button>
+        <button class="text-xs px-3 py-1.5 rounded-lg transition-all text-white/40 hover:text-white/70" style="background: rgba(255,255,255,0.05);" onclick="refreshSessions()" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">↻</button>
+      </div>
+    </div>
   </aside>
 </div>
 
 <script>
-// ─── 状态 ────────────────────────────────────
-const state = {
-  connected: false, pairCode: '------', ws: null,
-  sessions: [], currentSessionId: null,
-  deviceId: null, deviceName: '', cwd: '',
-  logs: {}, platform: '', hostname: '', workDir: '',
-};
+const state = { connected: false, pairCode: '------', ws: null, sessions: [], currentSessionId: null, deviceId: null, deviceName: '', cwd: '', logs: {}, platform: '', hostname: '', workDir: '' };
 
-// ─── 日志 ────────────────────────────────────
 function addLog(type, text) {
   const log = document.getElementById('sessionLog');
   const entry = document.createElement('div');
-  entry.className = 'entry ' + type + ' flex gap-2 py-0.5 animate-slide-up';
+  entry.className = 'entry ' + type + ' flex gap-2.5 py-0.5 animate-slide-up';
   const now = new Date();
   const time = now.toTimeString().slice(0, 8);
-  const colorMap = {cmd:'text-cyan-400',out:'text-green-400',err:'text-red-400',info:'text-surface-500',done:'text-green-400',file:'text-purple-400',code:'text-yellow-400',status:'text-orange-400'};
-  const color = colorMap[type] || 'text-surface-300';
+  const colors = {cmd:'text-blue-400',out:'text-green-400',err:'text-red-400',info:'text-white/40',done:'text-green-400',file:'text-purple-400',code:'text-yellow-400',status:'text-orange-400'};
+  const c = colors[type] || 'text-white/70';
   if (type === 'file' || type === 'code') {
-    entry.innerHTML = '<span class="text-surface-600 flex-shrink-0 text-xs min-w-[56px]">' + time + '</span><span class="' + color + '"><pre style="margin:0;font-family:inherit;white-space:pre-wrap">' + escHtml(text) + '</pre></span>';
+    entry.innerHTML = '<span class="text-white/20 flex-shrink-0 text-xs min-w-[56px]">' + time + '</span><span class="' + c + '"><pre style="margin:0;font-family:inherit;white-space:pre-wrap">' + esc(text) + '</pre></span>';
   } else {
-    entry.innerHTML = '<span class="text-surface-600 flex-shrink-0 text-xs min-w-[56px]">' + time + '</span><span class="' + color + '">' + escHtml(text) + '</span>';
+    entry.innerHTML = '<span class="text-white/20 flex-shrink-0 text-xs min-w-[56px]">' + time + '</span><span class="' + c + '">' + esc(text) + '</span>';
   }
   log.appendChild(entry);
   log.scrollTop = log.scrollHeight;
 }
+function esc(t) { var d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
 
-function escHtml(text) { const d = document.createElement('div'); d.textContent = text; return d.innerHTML; }
-
-// ─── 命令发送 ────────────────────────────────
 function sendCommand() {
-  const input = document.getElementById('cmdInput');
-  const text = input.value.trim();
+  var input = document.getElementById('cmdInput');
+  var text = input.value.trim();
   if (!text) return;
   input.value = '';
   addLog('cmd', '$ ' + text);
@@ -149,76 +156,72 @@ function sendCommand() {
     state.ws.send(JSON.stringify({ type: 'execute_command', requestId: 'cmd_' + Date.now(), payload: { command: text, timeout: 30000 } }));
     state.ws.send(JSON.stringify({ type: 'agent_message', requestId: 'msg_' + Date.now(), text: text }));
   } else {
-    try { pywebview.api.api_send_command(text); } catch(e) { addLog('err', '未连接到服务器'); }
+    try { pywebview.api.api_send_command(text); } catch(e) { addLog('err', 'Not connected'); }
   }
 }
 
-// ─── 配对码 ──────────────────────────────────
 function copyPairCode() {
   navigator.clipboard.writeText('云桥 配对码 ' + state.pairCode);
-  addLog('info', '配对码已复制');
+  addLog('info', 'Pair code copied');
 }
 function refreshPairCode() {
   state.pairCode = String(100000 + Math.floor(Math.random() * 900000));
-  document.getElementById('pairCode').textContent = state.pairCode;
-  addLog('info', '配对码已刷新: ' + state.pairCode);
+  var el = document.getElementById('pairCode'); if (el) el.textContent = state.pairCode;
+  addLog('info', 'Pair code refreshed: ' + state.pairCode);
 }
 
-// ─── 会话管理 ────────────────────────────────
 function createSession() {
-  const name = prompt('会话名称（可选）:', '工作区');
+  var name = prompt('Session name:', 'Workspace');
   if (name === null) return;
-  const dir = prompt('工作目录:', state.workDir || 'C:\\Users\\Administrator');
+  var dir = prompt('Work directory:', state.workDir || 'C:\\Users\\Administrator');
   if (dir === null) return;
-  const id = 's_' + Date.now().toString(36);
-  state.sessions.push({ id: id, name: name || '工作区', workDir: dir, cwd: dir, isDefault: state.sessions.length === 0 });
+  var id = 's_' + Date.now().toString(36);
+  state.sessions.push({ id: id, name: name || 'Workspace', workDir: dir, cwd: dir, isDefault: state.sessions.length === 0 });
   state.currentSessionId = id; state.workDir = dir;
   renderSessions(); updateStatus();
-  addLog('info', '会话已创建: ' + name + ' (' + id + ')');
+  addLog('info', 'Session created: ' + name + ' (' + id + ')');
 }
-function refreshSessions() { addLog('info', '会话列表已刷新'); }
+function refreshSessions() { addLog('info', 'Session list refreshed'); }
 function renderSessions() {
-  const list = document.getElementById('sessionList');
+  var list = document.getElementById('sessionList');
   list.innerHTML = '';
   state.sessions.forEach(function(s) {
-    const item = document.createElement('div');
-    item.className = 'flex items-center gap-1 py-1 px-1 rounded cursor-pointer text-xs transition-colors' + (s.id === state.currentSessionId ? ' bg-accent-500/10 text-accent-400' : ' text-surface-400 hover:text-surface-200 hover:bg-surface-800');
-    item.innerHTML = '<span class="flex-1 truncate">' + escHtml(s.name || 'unnamed') + '</span><span class="text-surface-600 hover:text-red-400 cursor-pointer" onclick="event.stopPropagation();closeSession(\'' + s.id + '\')">✕</span>';
+    var item = document.createElement('div');
+    item.className = 'flex items-center gap-1 py-1 px-1.5 rounded-lg cursor-pointer text-xs transition-all';
+    item.style.cssText = (s.id === state.currentSessionId ? 'background:rgba(85,112,232,0.1);color:#6c8cff;' : 'color:rgba(255,255,255,0.4);');
+    item.onmouseover = function() { if (s.id !== state.currentSessionId) this.style.background = 'rgba(255,255,255,0.05)'; };
+    item.onmouseout = function() { if (s.id !== state.currentSessionId) this.style.background = 'transparent'; };
+    item.innerHTML = '<span class="flex-1 truncate">' + esc(s.name || 'unnamed') + '</span><span class="text-white/20 hover:text-red-400 cursor-pointer" onclick="event.stopPropagation();closeSession(\'' + s.id + '\')">✕</span>';
     item.onclick = function() { switchSession(s.id); };
     list.appendChild(item);
   });
 }
-function switchSession(id) {
-  state.currentSessionId = id; renderSessions(); addLog('info', '切换到会话: ' + id);
-}
+function switchSession(id) { state.currentSessionId = id; renderSessions(); addLog('info', 'Switched to session: ' + id); }
 function closeSession(id) {
-  if (!confirm('确定关闭此会话?')) return;
+  if (!confirm('Close this session?')) return;
   state.sessions = state.sessions.filter(function(s) { return s.id !== id; });
   if (state.currentSessionId === id) { state.currentSessionId = state.sessions.length > 0 ? state.sessions[0].id : null; }
-  renderSessions(); addLog('info', '会话已关闭: ' + id);
+  renderSessions(); addLog('info', 'Session closed: ' + id);
 }
 
-// ─── UI 更新 ─────────────────────────────────
 function updateStatus() {
   var el;
   el = document.getElementById('pairCode'); if (el) el.textContent = state.pairCode;
   el = document.getElementById('deviceName'); if (el) el.textContent = state.deviceName || '-';
   el = document.getElementById('clientPlatform'); if (el) el.textContent = state.platform || '-';
   el = document.getElementById('clientHostname'); if (el) el.textContent = state.hostname || '-';
-  el = document.getElementById('workDir'); if (el) el.textContent = state.workDir || '未设置';
+  el = document.getElementById('workDir'); if (el) el.textContent = state.workDir || 'Not set';
   el = document.getElementById('currentCwd'); if (el) el.textContent = state.workDir || '~';
 }
 function setConnStatus(status) {
-  const dot = document.getElementById('connStatus');
-  if (status === 'connected') { dot.className = 'w-2 h-2 rounded-full bg-green-500 animate-pulse-dot'; }
-  else { dot.className = 'w-2 h-2 rounded-full bg-surface-500'; }
+  var dot = document.getElementById('connStatus');
+  dot.className = 'w-2 h-2 rounded-full ' + (status === 'connected' ? 'bg-green-400 animate-pulse-dot' : 'bg-white/20');
 }
 
-// ─── 初始化 ──────────────────────────────────
 (function() {
   refreshPairCode();
   updateStatus();
-  addLog('info', '欢迎使用云桥 MCP v2.0');
+  addLog('info', 'Welcome to 云桥 MCP v2.0');
   setConnStatus('disconnected');
 })();
 </script>
