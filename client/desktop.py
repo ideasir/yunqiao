@@ -105,7 +105,6 @@ def handle_message(data):
         global device_id
         device_id = data.get("deviceId", "")
         notify_ui("log", {"text": "注册成功"})
-        notify_ui("agent_status", {"status": "connected"})
     elif t == "agent_connected":
         notify_ui("agent_status", {"status": "connected"})
     elif t == "agent_disconnected":
