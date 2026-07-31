@@ -475,29 +475,41 @@ function setConn状态(status) {
 
 
 function toggleConnect() {
-  if (window.pywebview && window.pywebview.api) {
-    window.pywebview.api.get_status().then(function(s) {
-      if (s.connected) {
-        window.pywebview.api.toggle_connect().then(function() {
-          state.connected = false;
-          document.getElementById('connectBtn').textContent = '连接';
-              document.getElementById('connectBtn').style.background = '';
-    document.getElementById('connectBtn').style.color = '';
-          document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
-          document.getElementById('relayStatus').textContent = '未连接';
-          addLog('info', '已断开连接');
-        });
-      } else {
-        window.pywebview.api.toggle_connect().then(function() {
-          document.getElementById('connectBtn').textContent = '断开';
-    document.getElementById('connectBtn').style.background = '#7f1d1d';
-    document.getElementById('connectBtn').style.color = '#fca5a5';
-          addLog('status', '正在连接中转服务器...');
-        });
-      }
-    });
+  var btn = document.getElementById('connectBtn');
+  if (btn.textContent === '连接') {
+    if (window.pywebview && window.pywebview.api) {
+      window.pywebview.api.toggle_connect().then(function() {
+        btn.textContent = '断开';
+        btn.style.background = '#7f1d1d';
+        btn.style.color = '#fca5a5';
+        addLog('status', '正在连接中转服务器...');
+      });
+    } else {
+      connectRelay();
+    }
   } else {
-    connectRelay();
+    // 断开
+    if (state.ws) {
+      try { state.ws.close(); } catch(e) {}
+      state.ws = null;
+    }
+    if (window.pywebview && window.pywebview.api) {
+      window.pywebview.api.toggle_connect().then(function() {
+        btn.textContent = '连接';
+        btn.style.background = '';
+        btn.style.color = '';
+        document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
+        document.getElementById('relayStatus').textContent = '未连接';
+        addLog('info', '已断开连接');
+      });
+    } else {
+      btn.textContent = '连接';
+      btn.style.background = '';
+      btn.style.color = '';
+      document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
+      document.getElementById('relayStatus').textContent = '未连接';
+      addLog('info', '已断开连接');
+    }
   }
 }
 
@@ -553,6 +565,7 @@ function connectRelay() {
     } catch(e) {}
   };
   state.ws.onclose = function() {
+    state.ws = null;
     document.getElementById('connectBtn').textContent = '连接';
         document.getElementById('connectBtn').style.background = '';
     document.getElementById('connectBtn').style.color = '';
