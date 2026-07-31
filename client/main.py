@@ -321,13 +321,21 @@ class App:
         # 日志
         log_frame = tk.Frame(content, bg=C["log_bg"], padx=6, pady=4)
         log_frame.pack(fill=tk.BOTH, expand=True, pady=(2, 0))
-        tk.Label(log_frame, text="relay.log", bg=C["log_bg"], fg="#9da5b0",
-                 font=("Segoe UI", 9)).pack(anchor="w")
+        log_header = tk.Frame(log_frame, bg=C["log_bg"])
+        log_header.pack(fill=tk.X, anchor="w")
+        tk.Label(log_header, text="relay.log", bg=C["log_bg"], fg="#9da5b0",
+                 font=("Segoe UI", 9)).pack(side=tk.LEFT)
+        tk.Button(log_header, text="📋 复制日志", bg=C["log_bg"], fg="#9da5b0", bd=0,
+                  font=("Segoe UI", 9), cursor="hand2", activebackground=C["log_bg"],
+                  command=lambda: self._copy_text(self.log_text.get("1.0", "end-1c"))
+                  ).pack(side=tk.RIGHT)
         self.log_text = tk.Text(log_frame, bg=C["log_bg"], fg=C["log_fg"],
                                 font=("Consolas", 9), bd=0,
-                                highlightthickness=0)
+                                highlightthickness=0, state=tk.NORMAL,
+                                cursor="xterm", exportselection=True)
         self.log_text.pack(fill=tk.BOTH, expand=True)
         self.log_text.insert("1.0", "等待连接...")
+        self.log_text.tag_configure("sel", background="#264f78")
         # 日志右键菜单
         self.log_menu = tk.Menu(self.log_text, tearoff=0, bg=C["card"], fg=C["text"],
                                 activebackground=C["primary"], activeforeground="white")
