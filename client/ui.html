@@ -54,7 +54,7 @@ tailwind.config = {
 
   <!-- 左侧侧边栏 -->
   <div class="flex flex-col items-center gap-1 py-2 px-1 flex-shrink-0" style="background: rgba(15,16,26,0.6); border-right: 1px solid rgba(255,255,255,0.04);">
-    <div class="w-7 h-7 flex items-center justify-center rounded-lg cursor-pointer text-base font-bold transition-all" style="color: rgba(108,140,255,0.9); border: 1px dashed rgba(108,140,255,0.2);" onclick="createSession()" onmouseover="this.style.background='rgba(85,112,232,0.15)'" onmouseout="this.style.background='transparent'" title="新建会话">+</div>
+    <div class="w-7 h-7 flex items-center justify-center rounded-lg cursor-pointer text-base font-bold transition-all" style="color: rgba(108,140,255,0.9);" onclick="createSession()" onmouseover="this.style.background='rgba(85,112,232,0.15)'" onmouseout="this.style.background='transparent'" title="新建会话">+</div>
     <div class="w-5 h-px mb-1" style="background: rgba(255,255,255,0.06);"></div>
     <div class="flex flex-col gap-1 items-center flex-1 overflow-y-auto w-full px-0.5" id="sidebarList"></div>
   </div>
@@ -137,7 +137,7 @@ tailwind.config = {
 </div>
 
 <script>
-const state = { connected: false, pairCode: '------', ws: null, sessions: [], currentSessionId: null, deviceId: null, deviceName: '', cwd: '', logs: {}, platform: '', hostname: '', workDir: '' };
+const state = { connected: false, pairCode: '------', ws: null, sessions: [], currentSessionId: null, deviceId: null, deviceName: '', cwd: '', logs: {}, platform: '', hostname: '', workDir: '', relayKey: '' };
 
 function addLog(type, text) {
   const log = document.getElementById('sessionLog');
@@ -218,10 +218,14 @@ function connectRelay() {
 function configRelay() {
   var currentUrl = document.getElementById('relayUrl').textContent;
   var url = prompt('中转服务器地址:', currentUrl);
-  if (url && url.trim()) {
-    document.getElementById('relayUrl').textContent = url.trim();
-    addLog('info', '中转服务器地址已更新: ' + url.trim());
+  if (!url || !url.trim()) return;
+  document.getElementById('relayUrl').textContent = url.trim();
+  var key = prompt('中转服务器 Key:', '');
+  if (key && key.trim()) {
+    state.relayKey = key.trim();
+    addLog('info', '中转服务器 Key 已更新');
   }
+  addLog('info', '中转服务器配置已更新: ' + url.trim());
 }
 function refreshSessions() { addLog('info', '会话列表已刷新'); }
 function renderSidebar() {
