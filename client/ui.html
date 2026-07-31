@@ -237,10 +237,40 @@ function saveSessionModal() {
   }, 200);
 }
 function browseSessionDir() {
-  var dir = prompt('请输入工作目录路径:', document.getElementById('modalSessionDir').value || 'C:\\Users\\Administrator');
-  if (dir && dir.trim()) {
-    document.getElementById('modalSessionDir').value = dir.trim();
-  }
+  // 创建隐藏的文件夹选择器
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.setAttribute('webkitdirectory', '');
+  input.setAttribute('directory', '');
+  input.setAttribute('multiple', '');
+  input.style.display = 'none';
+  input.onchange = function(e) {
+    if (input.files && input.files.length > 0) {
+      // 取第一个文件的路径，去掉文件名部分
+      var path = input.files[0].webkitRelativePath || input.files[0].name;
+      var dirPath = input.files[0].webkitRelativePath ? 
+        path.split('/').slice(0, -1).join('/') : path;
+      // 在 webkit 浏览器中，我们只能得到相对路径
+      // 用之前的路径前缀 + 选择的文件夹名
+      var fullPath = input.files[0].webkitRelativePath;
+      if (fullPath) {
+        var parts = fullPath.split('/');
+        if (parts.length > 1) {
+          // 尝试保留用户之前的基路径
+          var oldDir = document.getElementById('modalSessionDir').value || '';
+          var baseDir = oldDir.substring(0, oldDir.lastIndexOf('\\'));
+          if (baseDir) {
+            document.getElementById('modalSessionDir').value = baseDir + '\\' + parts[0];
+          } else {
+            document.getElementById('modalSessionDir').value = 'C:\\' + parts[0];
+          }
+        }
+      }
+    }
+    document.body.removeChild(input);
+  };
+  document.body.appendChild(input);
+  input.click();
 }
 function refreshSessions() { addLog('info', '会话列表已刷新'); }
 function renderSidebar() {
