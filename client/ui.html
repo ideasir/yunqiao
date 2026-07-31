@@ -54,7 +54,8 @@ tailwind.config = {
 
   <!-- 左侧侧边栏 -->
   <div class="flex flex-col items-center gap-1 py-2 px-1 flex-shrink-0" style="background: rgba(15,16,26,0.6); border-right: 1px solid rgba(255,255,255,0.04);">
-    <div class="w-7 h-7 flex items-center justify-center rounded-lg cursor-pointer text-sm font-bold transition-all" style="color: rgba(108,140,255,0.8);" onclick="createSession()" onmouseover="this.style.background='rgba(85,112,232,0.15)'" onmouseout="this.style.background='transparent'" title="新建会话">+</div>
+    <div class="w-7 h-7 flex items-center justify-center rounded-lg cursor-pointer text-base font-bold transition-all" style="color: rgba(108,140,255,0.9); border: 1px dashed rgba(108,140,255,0.2);" onclick="createSession()" onmouseover="this.style.background='rgba(85,112,232,0.15)'" onmouseout="this.style.background='transparent'" title="新建会话">+</div>
+    <div class="w-5 h-px mb-1" style="background: rgba(255,255,255,0.06);"></div>
     <div class="flex flex-col gap-1 items-center flex-1 overflow-y-auto w-full px-0.5" id="sidebarList"></div>
   </div>
 
@@ -128,10 +129,8 @@ tailwind.config = {
         <div class="flex justify-between items-center"><span class="text-white/35">平台</span><span class="text-white/70" id="client平台">-</span></div>
         <div class="flex justify-between items-center"><span class="text-white/35">主机名</span><span class="text-white/70 truncate max-w-[130px]" id="client主机名">-</span></div>
       </div>
-      <div class="mt-3 pt-3" style="border-top: 1px solid rgba(255,255,255,0.06);" id="sessionList"></div>
-      <div class="flex gap-2 mt-3">
-        <button class="text-xs px-3 py-1.5 rounded-lg transition-all" style="background: rgba(85,112,232,0.15); color: #6c8cff;" onclick="createSession()" onmouseover="this.style.background='rgba(85,112,232,0.25)'" onmouseout="this.style.background='rgba(85,112,232,0.15)'">+ 新建会话</button>
-        <button class="text-xs px-3 py-1.5 rounded-lg transition-all text-white/40 hover:text-white/70" style="background: rgba(255,255,255,0.05);" onclick="refreshSessions()" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">↻</button>
+      <div class="mt-2 pt-2" style="border-top: 1px solid rgba(255,255,255,0.06);">
+        <div class="text-xs text-white/30">会话在左侧边栏管理</div>
       </div>
     </div>
   </aside>
