@@ -867,18 +867,33 @@ class App:
 
     # ─── 命令处理 ────────────────────────────
     def _run_cmd(self, ws, rid, command, timeout):
-        """使用持久 shell 执行命令 (4空格缩进版本)"""
-        import asyncio
+        """执行命令（一键执行，保持 cwd）"""
+        import asyncio, subprocess
         async def run():
             try:
-                result = await self._exec_persistent(command, timeout)
+                cwd = state["workDir"] if state["workDir"] else None
+                proc = await asyncio.create_subprocess_shell(
+                    command, stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE, cwd=cwd)
+                try:
+                    stdout, stderr = await asyncio.wait_for(
+                        proc.communicate(), timeout=timeout/1000)
+                    ec = proc.returncode or 0; killed = False
+                except asyncio.TimeoutError:
+                    proc.kill(); stdout, stderr = await proc.communicate()
+                    ec = 1; killed = True
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 loop.run_until_complete(ws.send(json.dumps({
                     "type": "command_result", "requestId": rid,
-                    "payload": result,
+                    "payload": {
+                        "exitCode": ec,
+                        "stdout": (stdout or b"").decode("utf-8", errors="replace"),
+                        "stderr": (stderr or b"").decode("utf-8", errors="replace"),
+                        "killed": killed,
+                    },
                 })))
-                self.add_log("INFO", f"完成, 退出码: {result.get('exitCode', '?')}")
+                self.add_log("INFO", f"完成, 退出码: {ec}")
             except Exception as e:
                 self.add_log("ERROR", f"执行失败: {e}")
         asyncio.run(run())
