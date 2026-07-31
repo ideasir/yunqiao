@@ -39,7 +39,7 @@ tailwind.config = {
 <body class="bg-surface-950 text-surface-100 h-screen flex flex-col overflow-hidden select-none">
 
 <!-- ─── 标题栏 ─── -->
-<header class="flex items-center gap-3 px-4 py-2 bg-surface-900 border-b border-surface-700 flex-shrink-0">
+<header class="flex items-center gap-3 px-4 py-2 bg-surface-900 flex-shrink-0">
   <div class="w-5 h-5 bg-accent-500 rounded flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">~</div>
   <span class="text-sm font-semibold text-surface-100">云桥 MCP</span>
   <span class="text-xs text-surface-500 font-medium">v2.0</span>
@@ -54,7 +54,7 @@ tailwind.config = {
   <!-- 左侧：终端 -->
   <div class="flex-1 flex flex-col bg-surface-950 min-w-0">
     <!-- 路径栏 -->
-    <div class="flex items-center gap-2 px-4 py-1.5 bg-surface-900 border-b border-surface-700 flex-shrink-0">
+    <div class="flex items-center gap-2 px-4 py-1.5 bg-surface-900 flex-shrink-0">
       <span class="text-accent-500 text-sm font-bold">❯</span>
       <span class="text-xs font-mono text-surface-400 flex-1 truncate" id="currentCwd">~</span>
       <span class="text-xs text-surface-600" id="sessionInfo">-</span>
@@ -67,43 +67,43 @@ tailwind.config = {
     </div>
 
     <!-- 输入区 -->
-    <div class="flex items-stretch border-t border-surface-700 flex-shrink-0">
+    <div class="flex items-stretch flex-shrink-0">
       <span class="flex items-center pl-4 pr-0 text-accent-500 text-sm font-bold select-none">❯</span>
       <input type="text" id="cmdInput" class="flex-1 bg-transparent border-none text-surface-100 px-3 py-2 font-mono text-sm outline-none placeholder-surface-600" placeholder="输入命令..." spellcheck="false" onkeydown="if(event.key==='Enter')sendCommand()" />
     </div>
   </div>
 
   <!-- 右侧：状态面板 -->
-  <aside class="w-56 flex flex-col bg-surface-900 border-l border-surface-700 overflow-y-auto flex-shrink-0 text-sm">
+  <aside class="w-56 flex flex-col bg-surface-900 overflow-y-auto flex-shrink-0 text-sm">
     <!-- Agent -->
-    <section class="px-4 py-3 border-b border-surface-700">
+    <section class="px-4 py-3">
       <h3 class="text-xs font-semibold text-surface-500 uppercase tracking-wider mb-2">Agent</h3>
       <div class="flex justify-between items-center py-1"><span class="text-surface-500">状态</span><span class="text-surface-300" id="agentStatus">待接入</span></div>
       <div class="flex justify-between items-center py-1"><span class="text-surface-500">配对码</span><span class="font-mono text-accent-400 font-bold tracking-wider text-base" id="pairCode">------</span></div>
       <div class="flex justify-between items-center py-1"><span class="text-surface-500">设备</span><span class="text-surface-300 truncate max-w-[120px]" id="deviceName">-</span></div>
       <div class="flex gap-2 mt-2">
-        <button class="text-xs px-2.5 py-1 rounded bg-accent-500/10 text-accent-400 border border-accent-500/20 hover:bg-accent-500/20 transition-colors" onclick="copyPairCode()">复制</button>
-        <button class="text-xs px-2.5 py-1 rounded bg-surface-800 text-surface-400 border border-surface-700 hover:text-surface-200 hover:border-surface-600 transition-colors" onclick="refreshPairCode()">刷新</button>
+        <button class="text-xs px-2.5 py-1 rounded bg-accent-500/10 text-accent-400 hover:bg-accent-500/20 transition-colors" onclick="copyPairCode()">复制</button>
+        <button class="text-xs px-2.5 py-1 rounded bg-surface-800 text-surface-400 hover:text-surface-200 hover:bg-surface-700 transition-colors" onclick="refreshPairCode()">刷新</button>
       </div>
     </section>
 
     <!-- Relay -->
-    <section class="px-4 py-3 border-b border-surface-700">
+    <section class="px-4 py-3">
       <h3 class="text-xs font-semibold text-surface-500 uppercase tracking-wider mb-2">Relay</h3>
       <div class="flex justify-between items-center py-1"><span class="text-surface-500">地址</span><span class="text-surface-300 font-mono text-xs" id="relayUrl">yunqiao.very.im</span></div>
       <div class="flex justify-between items-center py-1"><span class="text-surface-500">延迟</span><span class="text-surface-300 font-mono" id="relayLatency">-- ms</span></div>
     </section>
 
     <!-- Client -->
-    <section class="px-4 py-3 border-b border-surface-700 flex-1">
+    <section class="px-4 py-3 flex-1">
       <h3 class="text-xs font-semibold text-surface-500 uppercase tracking-wider mb-2">Client</h3>
       <div class="flex justify-between items-center py-1"><span class="text-surface-500">目录</span><span class="text-surface-300 font-mono text-xs truncate max-w-[130px]" id="workDir">未设置</span></div>
       <div class="flex justify-between items-center py-1"><span class="text-surface-500">平台</span><span class="text-surface-300" id="clientPlatform">-</span></div>
       <div class="flex justify-between items-center py-1"><span class="text-surface-500">主机</span><span class="text-surface-300 truncate max-w-[120px]" id="clientHostname">-</span></div>
-      <div class="mt-2 pt-2 border-t border-surface-700" id="sessionList"></div>
+      <div class="mt-2 pt-2" id="sessionList"></div>
       <div class="flex gap-2 mt-2">
-        <button class="text-xs px-2.5 py-1 rounded bg-accent-500/10 text-accent-400 border border-accent-500/20 hover:bg-accent-500/20 transition-colors" onclick="createSession()">+ 新建会话</button>
-        <button class="text-xs px-2.5 py-1 rounded bg-surface-800 text-surface-400 border border-surface-700 hover:text-surface-200 hover:border-surface-600 transition-colors" onclick="refreshSessions()">↻</button>
+        <button class="text-xs px-2.5 py-1 rounded bg-accent-500/10 text-accent-400 hover:bg-accent-500/20 transition-colors" onclick="createSession()">+ 新建会话</button>
+        <button class="text-xs px-2.5 py-1 rounded bg-surface-800 text-surface-400 hover:text-surface-200 hover:bg-surface-700 transition-colors" onclick="refreshSessions()">↻</button>
       </div>
     </section>
   </aside>
