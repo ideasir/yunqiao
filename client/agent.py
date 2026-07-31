@@ -440,6 +440,18 @@ async def handle_command(ws, msg_type, request_id, payload):
             )
         return
 
+    if msg_type == "agent_message":
+        text = payload.get("text", "")
+        print(f"[agent] 收到消息: {text}")
+        await ws.send(
+            json.dumps({
+                "type": "agent_message_result",
+                "requestId": request_id,
+                "success": True,
+            })
+        )
+        return
+
     if msg_type == "get_device_info":
         await ws.send(
             json.dumps(
