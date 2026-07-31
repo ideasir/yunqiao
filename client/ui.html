@@ -514,8 +514,15 @@ function setConn状态(status) {
 }
 
 (function() {
-  refreshPairCode();
-  updateStatus();
+  // 从后端获取初始配对码，不刷新（避免前后端不一致）
+  if (window.pywebview && window.pywebview.api) {
+    window.pywebview.api.get_status().then(function(s) {
+      state.pairCode = s.pairCode;
+      updateStatus();
+    });
+  } else {
+    refreshPairCode();
+  }
   addLog('info', '欢迎使用云桥 MCP v2.0');
   setConn状态('disconnected');
 })();
