@@ -6,31 +6,30 @@
 <title>云桥 MCP v2.0</title>
 <style>
   :root {
-    --glass-bg: rgba(255, 255, 255, 0.06);
-    --glass-bg2: rgba(255, 255, 255, 0.04);
-    --glass-border: rgba(255, 255, 255, 0.10);
-    --glass-border-hover: rgba(255, 255, 255, 0.18);
-    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    --text: #e8e8f0;
-    --text2: rgba(255, 255, 255, 0.55);
-    --text3: rgba(255, 255, 255, 0.30);
+    --bg: #0d1117;
+    --bg2: #161b22;
+    --bg3: #1c2128;
+    --border: #30363d;
+    --border-hover: #484f58;
+    --text: #e6edf3;
+    --text2: #8b949e;
+    --text3: #484f58;
     --primary: #f3a04c;
-    --primary-glow: rgba(243, 160, 76, 0.3);
+    --primary-glow: rgba(243, 160, 76, 0.25);
     --accent: #e58522;
-    --success: #40b43e;
-    --success-glow: rgba(64, 180, 62, 0.3);
-    --warning: #eba400;
-    --danger: #e6444e;
-    --danger-glow: rgba(230, 68, 78, 0.3);
-    --radius: 12px;
-    --radius-sm: 8px;
-    --radius-lg: 16px;
-    --bg-gradient: linear-gradient(135deg, #0f0c29, #1a1a3e, #24243e);
+    --success: #3fb950;
+    --success-glow: rgba(63, 185, 80, 0.25);
+    --warning: #d29922;
+    --danger: #f85149;
+    --danger-glow: rgba(248, 81, 73, 0.25);
+    --radius: 10px;
+    --radius-sm: 6px;
+    --radius-lg: 14px;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     font-family: 'Segoe UI', -apple-system, 'PingFang SC', sans-serif;
-    background: var(--bg-gradient);
+    background: var(--bg);
     color: var(--text);
     height: 100vh;
     display: flex;
@@ -44,21 +43,18 @@
     align-items: center;
     gap: 10px;
     padding: 10px 16px;
-    background: var(--glass-bg);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border-bottom: 1px solid var(--glass-border);
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
   }
   .titlebar .logo {
-    background: linear-gradient(135deg, var(--primary), var(--accent));
+    background: var(--primary);
     color: #fff;
     font-weight: 700;
     padding: 4px 10px;
-    border-radius: var(--radius-sm);
+    border-radius: 4px;
     font-size: 14px;
     letter-spacing: 1px;
-    box-shadow: 0 2px 12px var(--primary-glow);
   }
   .titlebar h1 {
     font-size: 15px;
@@ -69,9 +65,8 @@
     font-size: 11px;
     padding: 3px 12px;
     border-radius: 20px;
-    background: rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(10px);
-    border: 1px solid var(--glass-border);
+    background: var(--bg3);
+    border: 1px solid var(--border);
     color: var(--text2);
   }
   .titlebar .status-badge.online {
@@ -85,9 +80,8 @@
     color: var(--text3);
   }
   .titlebar button {
-    background: var(--glass-bg);
-    backdrop-filter: blur(10px);
-    border: 1px solid var(--glass-border);
+    background: var(--bg3);
+    border: 1px solid var(--border);
     color: var(--text2);
     padding: 5px 14px;
     border-radius: var(--radius-sm);
@@ -96,8 +90,8 @@
     transition: all 0.2s;
   }
   .titlebar button:hover {
-    background: var(--glass-bg);
-    border-color: var(--glass-border-hover);
+    background: var(--bg3);
+    border-color: var(--border-hover);
     color: var(--text);
   }
 
@@ -115,20 +109,18 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    background: var(--glass-bg);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid var(--glass-border);
+    background: var(--bg2);
+    border: 1px solid var(--border);
     border-radius: var(--radius);
     overflow: hidden;
     min-width: 0;
-    box-shadow: var(--glass-shadow);
+
   }
   .session-tabs {
     display: flex;
     align-items: center;
-    background: var(--glass-bg2);
-    border-bottom: 1px solid var(--glass-border);
+    background: var(--bg3);
+    border-bottom: 1px solid var(--border);
     padding: 0 4px;
     flex-shrink: 0;
     overflow-x: auto;
@@ -152,7 +144,7 @@
   .session-tab.active {
     color: var(--primary);
     border-bottom-color: var(--primary);
-    background: rgba(243, 160, 76, 0.08);
+    background: rgba(243, 160, 76, 0.12);
   }
   .session-tab .close {
     font-size: 14px;
@@ -241,8 +233,8 @@
   }
   .session-input input {
     flex: 1;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid var(--glass-border);
+    background: var(--bg);
+    border: 1px solid var(--border);
     color: var(--text);
     padding: 7px 12px;
     border-radius: var(--radius-sm);
@@ -255,7 +247,7 @@
 
   .session-input input::placeholder { color: var(--text3); }
   .session-input button {
-    background: linear-gradient(135deg, var(--primary), var(--accent));
+    background: var(--primary);
     border: none;
     color: #fff;
     padding: 7px 18px;
@@ -264,7 +256,6 @@
     font-size: 12px;
     font-weight: 600;
     transition: all 0.2s;
-    box-shadow: 0 2px 8px var(--primary-glow);
   }
   .session-input button:hover { transform: translateY(-1px); box-shadow: 0 4px 16px var(--primary-glow); }
 
@@ -331,9 +322,8 @@
     border: 1px solid var(--glass-border);
   }
   .btn {
-    background: var(--glass-bg);
-    backdrop-filter: blur(10px);
-    border: 1px solid var(--glass-border);
+    background: var(--bg3);
+    border: 1px solid var(--border);
     color: var(--text2);
     padding: 5px 12px;
     border-radius: var(--radius-sm);
@@ -343,26 +333,24 @@
     transition: all 0.2s;
   }
   .btn:hover {
-    background: var(--glass-bg);
-    border-color: var(--glass-border-hover);
+    background: var(--bg3);
+    border-color: var(--border-hover);
     color: var(--text);
   }
   .btn.primary {
-    background: linear-gradient(135deg, var(--primary), var(--accent));
+    background: var(--primary);
     color: #fff;
     border: none;
-    box-shadow: 0 2px 8px var(--primary-glow);
   }
   .btn.primary:hover { transform: translateY(-1px); box-shadow: 0 4px 16px var(--primary-glow); }
   .btn.danger {
-    background: linear-gradient(135deg, var(--danger), #c0392b);
+    background: var(--danger);
     color: #fff;
     border: none;
-    box-shadow: 0 2px 8px var(--danger-glow);
   }
   .btn.danger:hover { transform: translateY(-1px); }
   .btn.success {
-    background: linear-gradient(135deg, var(--success), #2ecc71);
+    background: var(--success);
     color: #fff;
     border: none;
   }
