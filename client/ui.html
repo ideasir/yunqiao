@@ -391,8 +391,10 @@
 <div class="main">
   <!-- 左侧：会话内容 -->
   <div class="left-panel">
-    <div class="session-tabs" id="sessionTabs">
-      <div class="session-tab add-tab" onclick="createSession()" title="新建会话">+</div>
+    <div class="session-sidebar" id="sessionSidebar">
+      <div class="sidebar-add" onclick="createSession()" title="新建会话">+</div>
+      <div class="sidebar-list" id="sidebarList">
+      </div>
     </div>
     <div class="session-content">
       <div class="session-header">
@@ -613,6 +615,20 @@ function refreshSessions() {
   addLog('info', '会话列表已刷新');
 }
 
+function renderSidebar() {
+  const list = document.getElementById('sidebarList');
+  list.innerHTML = '';
+  state.sessions.forEach(s => {
+    const item = document.createElement('div');
+    item.className = `sidebar-item${s.id === state.currentSessionId ? ' active' : ''}`;
+    const name = (s.name || '?').slice(0, 2);
+    item.title = `${s.name || 'unnamed'} - ${s.workDir || ''}`;
+    item.innerHTML = `${name}<span class="close" onclick="event.stopPropagation();closeSession('${s.id}')">✕</span>`;
+    item.onclick = () => switchSession(s.id);
+    list.appendChild(item);
+  });
+}
+
 function renderSessions() {
   const list = document.getElementById('sessionList');
   list.innerHTML = '';
@@ -630,11 +646,15 @@ function renderSessions() {
 
 function switchSession(id) {
   state.currentSessionId = id;
+  renderSidebar();
   renderSessions();
   addLog('info', `切换到会话: ${id}`);
 }
 
 function closeSession(id) {
+  state.currentSessionId = id;
+  renderSidebar();
+  renderSessions();
   addLog('info', `关闭会话: ${id}`);
 }
 
@@ -707,6 +727,7 @@ function updateStatus() {
 connect();
 refreshPairCode();
 updateStatus();
+renderSidebar();
 setInterval(() => {
   document.getElementById('relayLatency').textContent =
     `${Math.floor(Math.random() * 20 + 5)} ms`;
