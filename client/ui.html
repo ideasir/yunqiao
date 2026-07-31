@@ -91,7 +91,7 @@ tailwind.config = {
   <aside class="w-64 flex flex-col gap-0 p-0 overflow-y-auto flex-shrink-0 select-none bg-[#0d0d0d] " style="padding: 12px;">
 
     <!-- Agent 节点 -->
-    <div class="rounded-xl bg-[#141414] border border-[#222222]" id="agentCard">
+    <div class="rounded-xl bg-[#141414] border border-[#222222]">
       <div class="flex items-center gap-2 px-3 py-2.5 border-b border-[#1f1f1f]">
         <div class="w-1.5 h-1.5 rounded-full bg-[#666] animate-pulse" id="agentDot"></div>
         <span class="text-xs font-medium text-[#aaa]">上游 Agent</span>
@@ -115,10 +115,9 @@ tailwind.config = {
     </div>
 
     <!-- Relay 节点 -->
-    <div class="rounded-xl bg-[#141414] border border-[#222222]" id="relayCard">
+    <div class="rounded-xl bg-[#141414] border border-[#222222]">
       <div class="flex items-center gap-2 px-3 py-2.5 border-b border-[#1f1f1f]">
         <div class="w-1.5 h-1.5 rounded-full bg-[#666]" id="relayDot"></div>
-        <div class="w-1.5 h-1.5 rounded-full hidden" id="relayAgentDot" style="background: #3b82f6;"></div>
         <span class="text-xs font-medium text-[#aaa]">中转服务器</span>
         <span class="ml-auto text-[10px] text-[#555] font-mono">WSS/HTTPS</span>
       </div>
@@ -140,7 +139,7 @@ tailwind.config = {
     </div>
 
     <!-- Client 节点 -->
-    <div class="rounded-xl bg-[#141414] border border-[#222222]" id="clientCard">
+    <div class="rounded-xl bg-[#141414] border border-[#222222]">
       <div class="flex items-center gap-2 px-3 py-2.5 border-b border-[#1f1f1f]">
         <div class="w-1.5 h-1.5 rounded-full bg-[#666]" id="clientDot"></div>
         <span class="text-xs font-medium text-[#aaa]">客户端（本地电脑）</span>
@@ -239,9 +238,17 @@ function copyPairCode() {
   addLog('info', '配对码已复制');
 }
 function refreshPairCode() {
-  state.pairCode = String(100000 + Math.floor(Math.random() * 900000));
-  var el = document.getElementById('pairCode'); if (el) el.textContent = state.pairCode;
-  addLog('info', '配对码已刷新: ' + state.pairCode);
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.refresh_pair_code) {
+    window.pywebview.api.refresh_pair_code().then(function(result) {
+      state.pairCode = result.pairCode;
+      var el = document.getElementById('pairCode'); if (el) el.textContent = state.pairCode;
+      addLog('info', '配对码已刷新: ' + state.pairCode);
+    });
+  } else {
+    state.pairCode = String(100000 + Math.floor(Math.random() * 900000));
+    var el = document.getElementById('pairCode'); if (el) el.textContent = state.pairCode;
+    addLog('info', '配对码已刷新: ' + state.pairCode);
+  }
 }
 
 function openSessionModal() {
@@ -448,7 +455,6 @@ function updateStatus() {
 }
 function handleBridge(action, data) {
   if (action === 'log') { addLog('info', data.text); }
-  else if (action === 'connect_relay') { connectRelay(); }
   else if (action === 'command_result') {
     var p = data.payload;
     if (p && p.exitCode !== undefined) {
@@ -460,43 +466,13 @@ function handleBridge(action, data) {
   }
   else if (action === 'agent_status') {
     var s = document.getElementById('agent状态');
-    if (data.status === 'connected') {
-      s.textContent = '已配对'; s.style.color = '#4ade80';
-      var agentDot = document.getElementById('agentDot');
-      if (agentDot) agentDot.className = 'w-1.5 h-1.5 rounded-full bg-[#3b82f6] animate-pulse';
-      var relayAgentDot = document.getElementById('relayAgentDot');
-      if (relayAgentDot) {
-        relayAgentDot.classList.remove('hidden');
-        relayAgentDot.className = 'w-1.5 h-1.5 rounded-full animate-pulse';
-        relayAgentDot.style.background = '#3b82f6';
-      }
-    } else {
-      s.textContent = '待接入'; s.style.color = '#bbb';
-      var agentDot = document.getElementById('agentDot');
-      if (agentDot) agentDot.className = 'w-1.5 h-1.5 rounded-full bg-[#666]';
-      var relayAgentDot = document.getElementById('relayAgentDot');
-      if (relayAgentDot) {
-        relayAgentDot.classList.add('hidden');
-        relayAgentDot.className = 'w-1.5 h-1.5 rounded-full hidden';
-      }
-    }
+    if (data.status === 'connected') { s.textContent = '已配对'; s.style.color = '#4ade80'; }
+    else { s.textContent = '待接入'; s.style.color = '#bbb'; }
   }
   else if (action === 'relay_status') {
     var dot = document.getElementById('relayDot');
-    if (data.status === 'connected') {
-      dot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
-      var clientDot = document.getElementById('clientDot');
-      if (clientDot) clientDot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
-    } else {
-      dot.className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
-      var clientDot = document.getElementById('clientDot');
-      if (clientDot) clientDot.className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
-      var relayAgentDot = document.getElementById('relayAgentDot');
-      if (relayAgentDot) {
-        relayAgentDot.classList.add('hidden');
-        relayAgentDot.className = 'w-1.5 h-1.5 rounded-full hidden';
-      }
-    }
+    if (data.status === 'connected') { dot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse'; }
+    else { dot.className = 'w-1.5 h-1.5 rounded-full bg-[#444]'; }
   }
 }
 function setConn状态(status) {
@@ -514,9 +490,6 @@ function setConn状态(status) {
 
 
 function connectRelay() {
-  if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-    return; // 已经连接了
-  }
   var url = document.getElementById('relayUrl').textContent;
   var key = state.relayKey;
   if (!key) { addLog('error', '请先配置中转服务器 Key'); return; }
@@ -531,7 +504,7 @@ function connectRelay() {
     document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
     var clientDot = document.getElementById('clientDot');
     if (clientDot) {
-      clientDot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
+      clientDot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80]';
     }
     state.ws.send(JSON.stringify({
       type: 'register', deviceName: 'web-ui', os: 'web', arch: 'web',
@@ -546,24 +519,13 @@ function connectRelay() {
         document.getElementById('agent状态').textContent = '已配对';
         document.getElementById('agent状态').style.color = '#4ade80';
         var agentDot = document.getElementById('agentDot');
-        if (agentDot) agentDot.className = 'w-1.5 h-1.5 rounded-full bg-[#3b82f6] animate-pulse';
-        var relayAgentDot = document.getElementById('relayAgentDot');
-        if (relayAgentDot) {
-          relayAgentDot.classList.remove('hidden');
-          relayAgentDot.className = 'w-1.5 h-1.5 rounded-full animate-pulse';
-          relayAgentDot.style.background = '#3b82f6';
-        }
-          } else if (msg.type === 'agent_disconnected') {
+        if (agentDot) agentDot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
+      } else if (msg.type === 'agent_disconnected') {
         document.getElementById('agent状态').textContent = '已断开';
         document.getElementById('agent状态').style.color = '#bbb';
         var agentDot = document.getElementById('agentDot');
         if (agentDot) agentDot.className = 'w-1.5 h-1.5 rounded-full bg-[#666]';
-        var relayAgentDot = document.getElementById('relayAgentDot');
-        if (relayAgentDot) {
-          relayAgentDot.classList.add('hidden');
-          relayAgentDot.className = 'w-1.5 h-1.5 rounded-full hidden';
-        }
-        } else if (msg.type === 'command_result' || msg.type === 'session_op_result') {
+      } else if (msg.type === 'command_result' || msg.type === 'session_op_result') {
         trafficFlash();
       }
     } catch(e) {}
@@ -576,14 +538,6 @@ function connectRelay() {
     if (clientDot) {
       clientDot.className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
     }
-    var agentDot = document.getElementById('agentDot');
-    if (agentDot) agentDot.className = 'w-1.5 h-1.5 rounded-full bg-[#666]';
-    var relayAgentDot = document.getElementById('relayAgentDot');
-    if (relayAgentDot) {
-      relayAgentDot.classList.add('hidden');
-      relayAgentDot.className = 'w-1.5 h-1.5 rounded-full hidden';
-    }
-    // 断开 → 全部恢复默认
   };
   state.ws.onerror = function() {
     addLog('err', '中转服务器连接失败');
