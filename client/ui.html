@@ -248,8 +248,22 @@ function saveSessionModal() {
 }
 function browseSessionDir() {
   var input = document.getElementById('modalSessionDir');
+  var btn = event ? event.target : null;
+  // 按钮视觉反馈
+  if (btn) {
+    var origText = btn.textContent;
+    btn.textContent = '✓';
+    btn.style.background = '#333';
+    setTimeout(function() {
+      btn.textContent = origText;
+    }, 800);
+  }
   input.focus();
   input.select();
+  // 提示示例
+  if (!input.value) {
+    addLog('info', '请输入工作目录路径，如 C:\\Users\\Administrator\\project');
+  }
 }
 function refreshSessions() { addLog('info', '会话列表已刷新'); }
 var ctxSessionId = null;
@@ -521,7 +535,7 @@ function saveConfigModal() {
         <label class="text-xs text-[#888] block mb-1">工作目录</label>
         <div class="flex gap-2">
           <input type="text" id="modalSessionDir" class="flex-1 bg-[#0d0d0d] border border-[#333] rounded-lg px-3 py-2 text-xs text-[#ededed] outline-none font-mono transition-colors focus:border-[#555]" placeholder="C:\Users\Administrator" />
-          <button class="text-xs px-3 py-2 rounded-lg bg-[#333] text-[#aaa] hover:bg-[#444] hover:text-[#ededed] transition-all" onclick="browseSessionDir()">浏览</button>
+          <button class="text-xs px-3 py-2 rounded-lg bg-[#333] text-[#aaa] hover:bg-[#444] hover:text-[#ededed] transition-all" onclick="browseSessionDir(event)">浏览</button>
         </div>
       </div>
     </div>
