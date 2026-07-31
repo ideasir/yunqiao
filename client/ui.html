@@ -279,18 +279,28 @@ function saveSessionModal() {
 }
 function browseSessionDir(e) {
   var input = document.getElementById('modalSessionDir');
-  if (!input) return;
+  var btn = e ? e.target : null;
+  if (btn) { btn.textContent = '...'; btn.style.opacity = '0.5'; }
+  
+  // 尝试原生文件夹选择器
+  try {
+    if (window.showDirectoryPicker) {
+      window.showDirectoryPicker().then(function(handle) {
+        document.getElementById('modalSessionDir').value = handle.name;
+        if (btn) { btn.textContent = '浏览'; btn.style.opacity = '1'; }
+      }).catch(function() {
+        if (btn) { btn.textContent = '浏览'; btn.style.opacity = '1'; }
+        input.focus();
+        input.select();
+      });
+      return;
+    }
+  } catch(e) {}
+  
+  // 降级：手动输入
+  if (btn) { btn.textContent = '浏览'; btn.style.opacity = '1'; }
   input.focus();
   input.select();
-  // 视觉反馈：输入框短暂高亮
-  input.style.borderColor = '#555';
-  setTimeout(function() { input.style.borderColor = ''; }, 1000);
-  if (e && e.target) {
-    var btn = e.target;
-    var orig = btn.textContent;
-    btn.textContent = '✓';
-    setTimeout(function() { btn.textContent = orig; }, 800);
-  }
 }
 function refreshSessions() { addLog('info', '会话列表已刷新'); }
 var ctxSessionId = null;
