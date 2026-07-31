@@ -35,6 +35,7 @@ const ALLOWED_FILE_PREFIX = process.env.ALLOWED_FILE_PREFIX || '';
 const devices = new Map();
 const pendingRequests = new Map();
 const transports = new Map();
+const agentMessages = [];  // 客户端发往智能体的消息队列
 
 function sendJSON(ws, data) {
   if (ws.readyState === WebSocket.OPEN) {
@@ -351,6 +352,20 @@ function createMcpServer() {
     return { content: [{ type: 'text', text: `Error: ${o.error}` }], isError: true };
   });
 
+  server.registerTool('get_client_messages', {
+    description: '获取客户端发来的消息（你可以在客户端 UI 上给我发消息）',
+    inputSchema: z.object({}),
+  }, async () => {
+    const msgs = agentMessages.splice(0);  // 取完清空
+    if (msgs.length === 0) {
+      return { content: [{ type: 'text', text: '没有新消息' }] };
+    }
+    const text = msgs.map(m =>
+      `[${new Date(m.time).toLocaleTimeString()}] ${m.deviceName}: ${m.text}`
+    ).join('\n');
+    return { content: [{ type: 'text', text }] };
+  });
+
   server.registerTool('get_device_info', {
     description: '获取远程电脑的系统信息（OS、CPU、内存等）',
     inputSchema: z.object({
@@ -477,6 +492,21 @@ wss.on('connection', (ws, req) => {
       });
       console.error(`[device] registered: ${name} (${deviceId}) code:${authCode || 'none'}`);
       sendJSON(ws, { type: 'register_result', requestId, success: true, deviceId });
+      return;
+    }
+
+    if (type === 'agent_message') {
+      const device = devices.get(deviceId);
+      if (device) {
+        agentMessages.push({
+          id: randomUUID().slice(0, 8),
+          text: msg.text || '',
+          deviceName: device.name,
+          time: new Date().toISOString(),
+        });
+        console.error(`[message] from ${device.name}: ${(msg.text || '').slice(0, 50)}`);
+        sendJSON(ws, { type: 'agent_message_result', requestId, success: true });
+      }
       return;
     }
 
