@@ -247,22 +247,51 @@ function saveSessionModal() {
   }, 200);
 }
 function browseSessionDir(e) {
-  var input = document.getElementById('modalSessionDir');
   var btn = e ? e.target : null;
-  // 按钮视觉反馈
   if (btn) {
     var origText = btn.textContent;
-    btn.textContent = '✓';
-    btn.style.background = '#333';
-    setTimeout(function() {
-      btn.textContent = origText;
-    }, 800);
+    btn.textContent = '...';
+    btn.style.background = '#444';
   }
-  input.focus();
-  input.select();
-  // 提示示例
-  if (!input.value) {
-    addLog('info', '请输入工作目录路径，如 C:\\Users\\Administrator\\project');
+  // 方式1: 使用 File System Access API (Chrome 86+)
+  try {
+    if (window.showDirectoryPicker) {
+      window.showDirectoryPicker().then(function(handle) {
+        // 获取目录路径提示
+        document.getElementById('modalSessionDir').value = handle.name;
+        addLog('info', '已选择目录: ' + handle.name);
+        if (btn) { btn.textContent = origText; btn.style.background = ''; }
+      }).catch(function(err) {
+        if (err.name !== 'AbortError') {
+          fallbackBrowse();
+        }
+        if (btn) { btn.textContent = origText; btn.style.background = ''; }
+      });
+      return;
+    }
+  } catch(e) {}
+  // 方式2: webkitdirectory (Chrome/Edge)
+  fallbackBrowse();
+  function fallbackBrowse() {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.setAttribute('webkitdirectory', '');
+    input.setAttribute('directory', '');
+    input.style.display = 'none';
+    input.onchange = function() {
+      if (input.files && input.files.length > 0) {
+        var path = input.files[0].webkitRelativePath || '';
+        if (path) {
+          var folderName = path.split('/')[0];
+          document.getElementById('modalSessionDir').value = folderName;
+          addLog('info', '已选择目录: ' + folderName);
+        }
+      }
+      document.body.removeChild(input);
+      if (btn) { btn.textContent = origText; btn.style.background = ''; }
+    };
+    document.body.appendChild(input);
+    input.click();
   }
 }
 function refreshSessions() { addLog('info', '会话列表已刷新'); }
