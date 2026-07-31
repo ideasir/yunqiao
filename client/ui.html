@@ -36,7 +36,7 @@ tailwind.config = {
 <body class="h-screen flex flex-col overflow-hidden bg-[#0a0a0a]">
 
 <!-- ─── 标题栏 ─── -->
-<header class="flex items-center gap-3 px-5 py-2.5 flex-shrink-0 select-none bg-[#111111] border-b border-[#222222]">
+<header class="flex items-center gap-3 px-5 py-2.5 flex-shrink-0 select-none bg-[#0a0a0a] border-b border-[#1a1a1a]">
   <div class="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold text-black bg-[#ededed] flex-shrink-0 shadow-sm">~</div>
   <span class="text-sm font-medium text-[#ededed]">云桥 MCP</span>
   <span class="text-xs text-[#666] font-mono">v2.0</span>
@@ -59,7 +59,7 @@ tailwind.config = {
   <div class="flex-1 flex flex-col min-w-0 bg-[#0a0a0a]">
 
     <!-- 路径栏 -->
-    <div class="flex items-center gap-2 px-5 py-2 flex-shrink-0 select-none bg-[#0e0e0e] border-b border-[#1a1a1a]">
+    <div class="flex items-center gap-2 px-5 py-2 flex-shrink-0 select-none bg-[#0a0a0a] border-b border-[#1a1a1a]">
       <span class="text-[#666] text-sm font-bold">❯</span>
       <span class="text-xs font-mono text-[#666] flex-1 truncate" id="currentCwd">~</span>
     </div>
@@ -71,7 +71,7 @@ tailwind.config = {
     </div>
 
     <!-- 输入区 -->
-    <div class="flex items-stretch flex-shrink-0 bg-[#111111] border-t border-[#222222]">
+    <div class="flex items-stretch flex-shrink-0 bg-[#0a0a0a] border-t border-[#1a1a1a]">
       <span class="flex items-center pl-5 pr-1 text-[#888] text-sm font-bold select-none">❯</span>
       <input type="text" id="cmdInput" class="flex-1 bg-transparent border-none text-[#ededed] px-3 py-3 font-mono text-xs outline-none placeholder-[#444]" placeholder="输入命令..." spellcheck="false" onkeydown="if(event.key==='Enter')sendCommand()" />
     </div>
