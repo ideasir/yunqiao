@@ -180,11 +180,14 @@
     min-width: 60px;
   }
   .session-log .entry .msg { flex: 1; word-break: break-all; }
-  .session-log .entry.cmd .msg { color: #7ec8e3; }
-  .session-log .entry.out .msg { color: #a8d8a8; }
-  .session-log .entry.err .msg { color: #e8a8a8; }
-  .session-log .entry.info .msg { color: var(--text2); }
-  .session-log .entry.done .msg { color: var(--success); }
+  .session-log .entry.cmd .msg { color: #7ec8e3; }       /* 命令 */
+  .session-log .entry.out .msg { color: #a8d8a8; }       /* 输出结果 */
+  .session-log .entry.err .msg { color: #e8a8a8; }       /* 错误 */
+  .session-log .entry.info .msg { color: var(--text2); }  /* 系统信息 */
+  .session-log .entry.done .msg { color: var(--success); } /* 完成 */
+  .session-log .entry.file .msg { color: #d4b8e8; }      /* 文件内容 */
+  .session-log .entry.code .msg { color: #f0e8c8; }       /* 代码 */
+  .session-log .entry.status .msg { color: var(--warning); } /* 状态变更 */
 
   .session-input {
     display: flex;
@@ -337,6 +340,8 @@
       </div>
       <div class="session-log" id="sessionLog">
         <div class="entry info"><span class="time">--:--:--</span><span class="msg">欢迎使用云桥 MCP v2.0</span></div>
+        <div class="entry info"><span class="time">--:--:--</span><span class="msg">命令/输出/文件内容/日志全部显示在此区域，颜色区分类型</span></div>
+        <div class="entry info"><span class="time">--:--:--</span><span class="msg">🟦 命令 | 🟩 输出 | 🟥 错误 | 🟪 文件 | 🟨 状态 | ⬜ 日志</span></div>
         <div class="entry info"><span class="time">--:--:--</span><span class="msg">连接客户端后，在下方输入命令</span></div>
       </div>
       <div class="session-input">
@@ -479,7 +484,12 @@ function addLog(type, text) {
   entry.className = `entry ${type}`;
   const now = new Date();
   const time = now.toTimeString().slice(0, 8);
-  entry.innerHTML = `<span class="time">${time}</span><span class="msg">${escapeHtml(text)}</span>`;
+  // 文件内容用 pre 保留格式
+  if (type === 'file' || type === 'code') {
+    entry.innerHTML = `<span class="time">${time}</span><span class="msg"><pre style="margin:0;font-family:inherit;white-space:pre-wrap">${escapeHtml(text)}</pre></span>`;
+  } else {
+    entry.innerHTML = `<span class="time">${time}</span><span class="msg">${escapeHtml(text)}</span>`;
+  }
   log.appendChild(entry);
   log.scrollTop = log.scrollHeight;
 }
