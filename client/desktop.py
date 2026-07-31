@@ -338,12 +338,31 @@ class Api:
     def get_settings(self):
         return {"psk": RELAY_PSK, "relayUrl": RELAY_URL, "deviceName": DEVICE_NAME}
 
+    def toggle_connect(self):
+        """连接/断开切换"""
+        global WS
+        if WS:
+            # 断开
+            import asyncio
+            try:
+                asyncio.run_coroutine_threadsafe(WS.close(), loop)
+            except:
+                pass
+            WS = None
+            notify_ui("relay_status", {"status": "disconnected"})
+            notify_ui("log", {"text": "已断开连接"})
+            return {"connected": False}
+        else:
+            # 连接
+            threading.Thread(target=start_ws, daemon=True).start()
+            notify_ui("log", {"text": "正在连接..."})
+            return {"connected": True}
+
     def refresh_pair_code(self):
         """前端刷新配对码时调用，同步到后端和中继"""
         global pair_code, WS, loop
         import random
         pair_code = str(random.randint(100000, 999999))
-        # 通知中继更新配对码
         if WS and loop:
             import asyncio
             asyncio.run_coroutine_threadsafe(
@@ -395,9 +414,6 @@ def start_ws():
 
 def main():
     import webview
-
-    t = threading.Thread(target=start_ws, daemon=True)
-    t.start()
 
     ui_path = os.path.join(os.path.dirname(__file__), "ui.html")
     window = webview.create_window(
