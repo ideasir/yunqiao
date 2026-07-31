@@ -127,7 +127,7 @@ tailwind.config = {
         <div class="flex justify-between"><span class="text-[#666]">连接</span><span class="text-[#bbb]" id="relayStatus">已连接</span></div>
       </div>
       <div class="flex gap-1.5 px-3 py-2 border-t border-[#1f1f1f]">
-        <button class="flex-1 text-xs py-1 rounded-lg bg-[#222] text-[#ededed] hover:bg-[#2a2a2a] transition-all font-medium" onclick="connectRelay()">连接</button>
+        <button class="flex-1 text-xs py-1 rounded-lg bg-[#222] text-[#ededed] hover:bg-[#2a2a2a] transition-all font-medium" onclick="toggleConnect()" id="connectBtn">连接</button>
         <button class="text-xs py-1 px-2 rounded-lg bg-[#1a1a1a] text-[#777] hover:text-[#ededed] transition-all" onclick="configRelay()">配置</button>
       </div>
     </div>
@@ -488,6 +488,29 @@ function setConn状态(status) {
 })();
 
 
+
+function toggleConnect() {
+  if (window.pywebview && window.pywebview.api) {
+    window.pywebview.api.get_status().then(function(s) {
+      if (s.connected) {
+        window.pywebview.api.toggle_connect().then(function() {
+          state.connected = false;
+          document.getElementById('connectBtn').textContent = '连接';
+          document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
+          document.getElementById('relayStatus').textContent = '未连接';
+          addLog('info', '已断开连接');
+        });
+      } else {
+        window.pywebview.api.toggle_connect().then(function() {
+          document.getElementById('connectBtn').textContent = '断开';
+          addLog('status', '正在连接中转服务器...');
+        });
+      }
+    });
+  } else {
+    connectRelay();
+  }
+}
 
 function connectRelay() {
   var url = document.getElementById('relayUrl').textContent;
