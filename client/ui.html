@@ -71,10 +71,11 @@ tailwind.config = {
     <div class="flex items-center gap-2 px-5 py-2 flex-shrink-0 select-none bg-[#0a0a0a] ">
       <span class="text-[#666] text-sm font-bold">❯</span>
       <span class="text-xs font-mono text-[#aaa] flex-1 truncate" id="currentCwd">~</span>
+      <button onclick="copyLog()" class="text-[10px] text-[#555] hover:text-[#aaa] transition-colors cursor-pointer bg-transparent border-0" title="复制日志">📋</button>
     </div>
 
     <!-- 日志区 -->
-    <div class="flex-1 overflow-y-auto px-5 py-3 font-mono text-xs leading-relaxed" id="sessionLog">
+    <div class="flex-1 overflow-y-auto px-5 py-3 font-mono text-xs leading-relaxed select-text" id="sessionLog" style="user-select: text; -webkit-user-select: text;">
       <div class="entry info flex gap-3 py-1 animate-slide-up"><span class="text-[#777] flex-shrink-0 min-w-[60px]">--:--:--</span><span class="text-[#ccc]">云桥 MCP v2.0 运行中</span></div>
       <div class="entry info flex gap-3 py-1 animate-slide-up"><span class="text-[#777] flex-shrink-0 min-w-[60px]">--:--:--</span><span class="text-[#bbb]">输入命令开始操作</span></div>
     </div>
@@ -198,6 +199,25 @@ function addLog(type, text) {
   log.scrollTop = log.scrollHeight;
 }
 function esc(t) { var d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+function copyLog() {
+  var log = document.getElementById('sessionLog');
+  var text = '';
+  for (var i = 0; i < log.children.length; i++) {
+    text += log.children[i].textContent + '\n';
+  }
+  navigator.clipboard.writeText(text).then(function() {
+    addLog('info', '日志已复制到剪贴板');
+  }).catch(function() {
+    // fallback
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    addLog('info', '日志已复制');
+  });
+}
 
 function sendCommand() {
   var input = document.getElementById('cmdInput');
