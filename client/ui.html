@@ -281,22 +281,7 @@ function createSession() {
   openSessionModal();
 }
 
-function openSessionModal() {
-  document.getElementById('modalSessionName').value = '工作区 ' + (state.sessions.length + 1);
-  document.getElementById('modalSessionDir').value = state.workDir || 'C:\\Users\\Administrator';
-  var overlay = document.getElementById('sessionModal');
-  var content = document.getElementById('sessionModalContent');
-  overlay.style.opacity = '1';
-  overlay.style.pointerEvents = 'auto';
-  setTimeout(function() {
-    content.style.transform = 'scale(1) translateY(0)';
-    content.style.opacity = '1';
-  }, 10);
-  setTimeout(function() {
-    document.getElementById('modalSessionName').focus();
-    document.getElementById('modalSessionName').select();
-  }, 100);
-}
+
 function saveSessionModal() {
   var name = document.getElementById('modalSessionName').value.trim() || '工作区';
   var dir = document.getElementById('modalSessionDir').value.trim() || 'C:\\Users\\Administrator';
