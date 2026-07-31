@@ -481,7 +481,8 @@ function toggleConnect() {
         window.pywebview.api.toggle_connect().then(function() {
           state.connected = false;
           document.getElementById('connectBtn').textContent = '连接';
-              document.getElementById('connectBtn').className = 'px-3 py-1 rounded-lg text-xs font-medium transition-all bg-[#1a1a1a] text-[#ededed] hover:bg-[#2a2a2a]';
+              document.getElementById('connectBtn').style.background = '';
+    document.getElementById('connectBtn').style.color = '';
           document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
           document.getElementById('relayStatus').textContent = '未连接';
           addLog('info', '已断开连接');
@@ -489,7 +490,8 @@ function toggleConnect() {
       } else {
         window.pywebview.api.toggle_connect().then(function() {
           document.getElementById('connectBtn').textContent = '断开';
-    document.getElementById('connectBtn').className = 'px-3 py-1 rounded-lg text-xs font-medium transition-all bg-[#7f1d1d] text-[#fca5a5] hover:bg-[#991b1b]';
+    document.getElementById('connectBtn').style.background = '#7f1d1d';
+    document.getElementById('connectBtn').style.color = '#fca5a5';
           addLog('status', '正在连接中转服务器...');
         });
       }
@@ -510,7 +512,8 @@ function connectRelay() {
   state.ws = new WebSocket('wss://' + url + '/device?psk=' + encodeURIComponent(key));
   state.ws.onopen = function() {
     document.getElementById('connectBtn').textContent = '断开';
-    document.getElementById('connectBtn').className = 'px-3 py-1 rounded-lg text-xs font-medium transition-all bg-[#7f1d1d] text-[#fca5a5] hover:bg-[#991b1b]';
+    document.getElementById('connectBtn').style.background = '#7f1d1d';
+    document.getElementById('connectBtn').style.color = '#fca5a5';
     addLog('done', '中转服务器连接成功');
     document.getElementById('relayStatus').textContent = '已连接';
     document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
@@ -551,7 +554,8 @@ function connectRelay() {
   };
   state.ws.onclose = function() {
     document.getElementById('connectBtn').textContent = '连接';
-        document.getElementById('connectBtn').className = 'px-3 py-1 rounded-lg text-xs font-medium transition-all bg-[#1a1a1a] text-[#ededed] hover:bg-[#2a2a2a]';
+        document.getElementById('connectBtn').style.background = '';
+    document.getElementById('connectBtn').style.color = '';
     addLog('info', '中转服务器连接断开');
     document.getElementById('relayStatus').textContent = '未连接';
     document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
