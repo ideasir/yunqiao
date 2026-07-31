@@ -35,7 +35,13 @@ tailwind.config = {
   .animate-pulse { animation: pulse 2s ease-in-out infinite; }
   .animate-slide-up { animation: slide-up 0.2s ease; }
   @keyframes border-breathe { 0%,100% { border-color: #22c55e; } 50% { border-color: #166534; } }
+  @keyframes border-breathe-dark { 0%,100% { border-color: #059669; } 50% { border-color: #064e3b; } }
+  @keyframes border-breathe-purple { 0%,100% { border-color: #a855f7; } 50% { border-color: #581c87; } }
+  @keyframes border-breathe-blue { 0%,100% { border-color: #3b82f6; } 50% { border-color: #1e3a5f; } }
   .border-breathe { animation: border-breathe 2s ease-in-out infinite; }
+  .border-breathe-dark { animation: border-breathe-dark 2s ease-in-out infinite; }
+  .border-breathe-purple { animation: border-breathe-purple 2s ease-in-out infinite; }
+  .border-breathe-blue { animation: border-breathe-blue 2s ease-in-out infinite; }
   @keyframes border-bottom-breathe { 0%,100% { border-bottom-color: #22c55e; } 50% { border-bottom-color: #166534; } }
   .border-bottom-breathe { animation: border-bottom-breathe 2s ease-in-out infinite; }
 </style>
@@ -122,6 +128,7 @@ tailwind.config = {
     <div class="rounded-xl bg-[#141414] border border-[#222222]" id="relayCard">
       <div class="flex items-center gap-2 px-3 py-2.5 border-b border-[#1f1f1f]">
         <div class="w-1.5 h-1.5 rounded-full bg-[#666]" id="relayDot"></div>
+        <div class="w-1.5 h-1.5 rounded-full hidden" id="relayAgentDot" style="background: #a855f7;"></div>
         <span class="text-xs font-medium text-[#aaa]">中转服务器</span>
         <span class="ml-auto text-[10px] text-[#555] font-mono">WSS/HTTPS</span>
       </div>
@@ -464,23 +471,46 @@ function handleBridge(action, data) {
     var s = document.getElementById('agent状态');
     if (data.status === 'connected') {
       s.textContent = '已配对'; s.style.color = '#4ade80';
-      setCardBorder('relayCard', true);
-      setCardBorder('agentCard', true);
+      var agentDot = document.getElementById('agentDot');
+      if (agentDot) agentDot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
+      var relayAgentDot = document.getElementById('relayAgentDot');
+      if (relayAgentDot) {
+        relayAgentDot.classList.remove('hidden');
+        relayAgentDot.className = 'w-1.5 h-1.5 rounded-full animate-pulse';
+        relayAgentDot.style.background = '#a855f7';
+      }
+      setCardBorder('relayCard', true, 'border-breathe-purple');
+      setCardBorder('agentCard', true, 'border-breathe-blue');
     } else {
       s.textContent = '待接入'; s.style.color = '#bbb';
+      var agentDot = document.getElementById('agentDot');
+      if (agentDot) agentDot.className = 'w-1.5 h-1.5 rounded-full bg-[#666]';
+      var relayAgentDot = document.getElementById('relayAgentDot');
+      if (relayAgentDot) {
+        relayAgentDot.classList.add('hidden');
+        relayAgentDot.className = 'w-1.5 h-1.5 rounded-full hidden';
+      }
       setCardBorder('relayCard', false);
       setCardBorder('agentCard', false);
-      setCardBottomBorder('relayCard', true);
+      setCardBorder('clientCard', true, 'border-breathe-dark');
     }
   }
   else if (action === 'relay_status') {
     var dot = document.getElementById('relayDot');
     if (data.status === 'connected') {
       dot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
-      setCardBorder('clientCard', true);
-      setCardBottomBorder('relayCard', true);
+      var clientDot = document.getElementById('clientDot');
+      if (clientDot) clientDot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
+      setCardBorder('clientCard', true, 'border-breathe-dark');
     } else {
       dot.className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
+      var clientDot = document.getElementById('clientDot');
+      if (clientDot) clientDot.className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
+      var relayAgentDot = document.getElementById('relayAgentDot');
+      if (relayAgentDot) {
+        relayAgentDot.classList.add('hidden');
+        relayAgentDot.className = 'w-1.5 h-1.5 rounded-full hidden';
+      }
       setCardBorder('clientCard', false);
       setCardBorder('relayCard', false);
       setCardBorder('agentCard', false);
@@ -501,22 +531,22 @@ function setConn状态(status) {
 
 
 
-function setCardBorder(cardId, connected) {
+function setCardBorder(cardId, connected, borderClass) {
   var card = document.getElementById(cardId);
   if (!card) return;
-  card.classList.remove('border-breathe', 'border-bottom-breathe', 'border-[#222222]');
+  card.classList.remove('border-breathe', 'border-breathe-dark', 'border-breathe-purple', 'border-breathe-blue', 'border-bottom-breathe', 'border-[#222222]');
   if (connected) {
-    card.classList.add('border-breathe');
+    card.classList.add(borderClass || 'border-breathe');
   } else {
     card.classList.add('border-[#222222]');
   }
 }
-function setCardBottomBorder(cardId, connected) {
+function setCardBottomBorder(cardId, connected, borderClass) {
   var card = document.getElementById(cardId);
   if (!card) return;
-  card.classList.remove('border-breathe', 'border-bottom-breathe', 'border-[#222222]');
+  card.classList.remove('border-breathe', 'border-breathe-dark', 'border-breathe-purple', 'border-breathe-blue', 'border-bottom-breathe', 'border-[#222222]');
   if (connected) {
-    card.classList.add('border-bottom-breathe');
+    card.classList.add(borderClass || 'border-bottom-breathe');
   } else {
     card.classList.add('border-[#222222]');
   }
@@ -537,11 +567,10 @@ function connectRelay() {
     document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
     var clientDot = document.getElementById('clientDot');
     if (clientDot) {
-      clientDot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80]';
+      clientDot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
     }
-    // 客户端连上中转 → client 边框呼吸绿 + relay 下边框呼吸绿
-    setCardBorder('clientCard', true);
-    setCardBottomBorder('relayCard', true);
+    // 客户端连上→ client 墨绿色呼吸边框 + relay 呼吸灯
+    setCardBorder('clientCard', true, 'border-breathe-dark');
     state.ws.send(JSON.stringify({
       type: 'register', deviceName: 'web-ui', os: 'web', arch: 'web',
       hostname: location.hostname, authCode: state.pairCode
@@ -556,19 +585,30 @@ function connectRelay() {
         document.getElementById('agent状态').style.color = '#4ade80';
         var agentDot = document.getElementById('agentDot');
         if (agentDot) agentDot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
-        // Agent 连上 → relay 边框呼吸绿 + agent 边框呼吸绿
-        setCardBorder('relayCard', true);
-        setCardBorder('agentCard', true);
+        // Agent 连上 → relay 紫色呼吸灯 + relay 紫色边框 + agent 深蓝边框
+        var relayAgentDot = document.getElementById('relayAgentDot');
+        if (relayAgentDot) {
+          relayAgentDot.classList.remove('hidden');
+          relayAgentDot.className = 'w-1.5 h-1.5 rounded-full animate-pulse';
+          relayAgentDot.style.background = '#a855f7';
+        }
+        setCardBorder('relayCard', true, 'border-breathe-purple');
+        setCardBorder('agentCard', true, 'border-breathe-blue');
       } else if (msg.type === 'agent_disconnected') {
         document.getElementById('agent状态').textContent = '已断开';
         document.getElementById('agent状态').style.color = '#bbb';
         var agentDot = document.getElementById('agentDot');
         if (agentDot) agentDot.className = 'w-1.5 h-1.5 rounded-full bg-[#666]';
-        // Agent 断开 → relay 恢复下边框呼吸绿 + agent 边框取消
+        // Agent 断开 → 隐藏紫色呼吸灯 + relay 恢复 + agent 恢复
+        var relayAgentDot = document.getElementById('relayAgentDot');
+        if (relayAgentDot) {
+          relayAgentDot.classList.add('hidden');
+          relayAgentDot.className = 'w-1.5 h-1.5 rounded-full hidden';
+        }
         setCardBorder('relayCard', false);
         setCardBorder('agentCard', false);
-        // 如果客户端还在连接，relay 保持下边框呼吸绿
-        setCardBottomBorder('relayCard', true);
+        // 如果客户端还在连接，client 保持墨绿色呼吸边框
+        setCardBorder('clientCard', true, 'border-breathe-dark');
       } else if (msg.type === 'command_result' || msg.type === 'session_op_result') {
         trafficFlash();
       }
@@ -582,7 +622,14 @@ function connectRelay() {
     if (clientDot) {
       clientDot.className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
     }
-    // 断开连接 → 全部恢复默认边框
+    var agentDot = document.getElementById('agentDot');
+    if (agentDot) agentDot.className = 'w-1.5 h-1.5 rounded-full bg-[#666]';
+    var relayAgentDot = document.getElementById('relayAgentDot');
+    if (relayAgentDot) {
+      relayAgentDot.classList.add('hidden');
+      relayAgentDot.className = 'w-1.5 h-1.5 rounded-full hidden';
+    }
+    // 断开 → 全部恢复默认
     setCardBorder('clientCard', false);
     setCardBorder('relayCard', false);
     setCardBorder('agentCard', false);
