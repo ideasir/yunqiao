@@ -85,7 +85,7 @@ function scheduleActivityPush(userId) {
 // ─── 异步任务 ───────────────────────────────────
 const TASK_TIMEOUT = parseInt(process.env.TASK_TIMEOUT || '1800000', 10);       // 运行超时，默认 30 分钟
 const TASK_RESULT_TTL = parseInt(process.env.TASK_RESULT_TTL || '900000', 10);  // 结果保留，默认 15 分钟
-const TASK_MAX_CONCURRENT = parseInt(process.env.TASK_MAX_CONCURRENT || '3', 10); // 每设备并发上限
+const TASK_MAX_CONCURRENT = parseInt(process.env.TASK_MAX_CONCURRENT || '10', 10); // 每设备并发上限
 const SSE_IDLE_TIMEOUT = parseInt(process.env.SSE_IDLE_TIMEOUT || '600000', 10);  // SSE 空闲超时（默认 10 分钟），防僵尸连接占满连接数
 const tasks = new Map();  // taskId -> { userId, deviceId, command, status, ... }
 
@@ -108,6 +108,7 @@ const sseCleanup = setInterval(() => {
       transports.delete(sid);
       try { entry.transport.close(); } catch {}
       broadcastToDevices({ type: 'agent_disconnected' }, entry.userId);
+      scheduleActivityPush(entry.userId);  // 僵尸清理后更新活跃度（否则灯残留一直闪）
       console.error(`[sse] 空闲连接已清理: ${sid}`);
     }
   }

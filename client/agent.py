@@ -547,10 +547,19 @@ class Agent:
             session = self.sessions.get_current()
             cwd = session.cwd if session else os.getcwd()
             result = await self._exec_cmd(command, timeout, cwd)
-            await self._send("task_result", None, {"taskId": task_id, **result})
+            await self._send_task_result(task_id, result)
             self._emit(self.on_log, f"[任务] {task_id[:8]} 完成: exitCode={result.get('exitCode')} ({result.get('duration')}ms)")
         except Exception as e:
-            await self._send("task_result", None, {"taskId": task_id, "exitCode": 1, "stdout": "", "stderr": str(e), "killed": False})
+            await self._send_task_result(task_id, {"exitCode": 1, "stdout": "", "stderr": str(e), "killed": False})
+
+    async def _send_task_result(self, task_id, result):
+        """taskId 放顶层（relay 按 msg.taskId 匹配），payload 是结果"""
+        if self._ws:
+            await self._ws.send(json.dumps({
+                "type": "task_result",
+                "taskId": task_id,
+                "payload": result,
+            }))
     
     def _check_path(self, path):
         """检查路径是否在允许范围内（管理员白名单 + 工作区）"""
