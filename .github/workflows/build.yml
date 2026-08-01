@@ -28,10 +28,10 @@ jobs:
 
       - name: Build exe
         run: |
-          pyinstaller --onefile --windowed --name "云桥MCP" main.py
+          pyinstaller --onefile --windowed --name "云桥" desktop.py
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: 云桥MCP
-          path: client/dist/云桥MCP.exe
+          name: 云桥
+          path: client/dist/云桥.exe
