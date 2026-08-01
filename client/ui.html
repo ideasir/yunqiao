@@ -465,7 +465,6 @@ function updateStatus() {
 }
 function handleBridge(action, data) {
   if (action === 'log') { addLog('info', data.text); }
-  else if (action === 'connect_relay') { connectRelay(); }
   else if (action === 'command_result') {
     var p = data.payload;
     if (p && p.exitCode !== undefined) {
@@ -501,25 +500,29 @@ function handleBridge(action, data) {
   else if (action === 'relay_status') {
     var dot = document.getElementById('relayDot');
     var btn = document.getElementById('connectBtn');
+    var status = document.getElementById('relayStatus');
     if (data.status === 'connected') {
       dot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
-      var clientDot = document.getElementById('clientDot');
-      if (clientDot) clientDot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
+      status.textContent = '已连接';
+      status.style.color = '#4ade80';
       btn.textContent = '断开';
       btn.style.background = '#7f1d1d';
       btn.style.color = '#fca5a5';
+      var cd = document.getElementById('clientDot');
+      if (cd) cd.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
+      addLog('done', '中转服务器已连接');
     } else {
-      dot.className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
-      var clientDot = document.getElementById('clientDot');
-      if (clientDot) clientDot.className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
-      var relayAgentDot = document.getElementById('relayAgentDot');
-      if (relayAgentDot) {
-        relayAgentDot.classList.add('hidden');
-        relayAgentDot.className = 'w-1.5 h-1.5 rounded-full hidden';
-      }
+      dot.className = 'w-1.5 h-1.5 rounded-full bg-[#666]';
+      status.textContent = '未连接';
+      status.style.color = '#bbb';
       btn.textContent = '连接';
       btn.style.background = '#222';
       btn.style.color = '#ededed';
+      var cd = document.getElementById('clientDot');
+      if (cd) cd.className = 'w-1.5 h-1.5 rounded-full bg-[#666]';
+      var rad = document.getElementById('relayAgentDot');
+      if (rad) { rad.classList.add('hidden'); }
+      addLog('info', '中转服务器已断开');
     }
   }
 }
@@ -538,107 +541,9 @@ function setConn状态(status) {
 
 
 function toggleConnect() {
-  var btn = document.getElementById('connectBtn');
-  if (btn.textContent === '连接') {
-    addLog('status', '正在连接中转服务器...');
-  }
   window.pywebview.api.toggle_connect();
 }
 
-function connectRelay() {
-  var url = document.getElementById('relayUrl').textContent;
-  var key = state.relayKey;
-  if (!key) { addLog('error', '请先配置中转服务器 Key'); return; }
-  addLog('status', '正在连接中转服务器: ' + url);
-  if (state.ws) {
-    try { state.ws.close(); } catch(e) {}
-  }
-  var wsUrl = url;
-  if (!wsUrl.startsWith('ws://') && !wsUrl.startsWith('wss://')) wsUrl = 'wss://' + wsUrl;
-  if (!wsUrl.endsWith('/device')) wsUrl = wsUrl + '/device';
-  state.ws = new WebSocket(wsUrl + '?key=' + encodeURIComponent(key));
-  state.ws.onopen = function() {
-    document.getElementById('connectBtn').textContent = '断开';
-    document.getElementById('connectBtn').style.background = '#7f1d1d';
-    document.getElementById('connectBtn').style.color = '#fca5a5';
-    addLog('done', '中转服务器连接成功');
-    document.getElementById('relayStatus').textContent = '已连接';
-    // 非 pywebview 模式（浏览器）才由 connectRelay 更新灯
-    if (!window.pywebview) {
-      document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
-      var clientDot = document.getElementById('clientDot');
-      if (clientDot) clientDot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
-    }
-    state.ws.send(JSON.stringify({
-      type: 'register', deviceName: 'web-ui', os: 'web', arch: 'web',
-      hostname: location.hostname, authCode: state.pairCode
-    }));
-  };
-  state.ws.onmessage = function(e) {
-    // 从后端更新配对码
-    if (window.pywebview && window.pywebview.api) {
-      window.pywebview.api.get_status().then(function(s) {
-        state.pairCode = s.pairCode;
-        var el = document.getElementById('pairCode'); if (el) el.textContent = state.pairCode;
-      });
-    }
-    try {
-      var msg = JSON.parse(e.data);
-      if (msg.type === 'agent_connected') {
-        addLog('status', 'Agent 已配对');
-        document.getElementById('agent状态').textContent = '已配对';
-        document.getElementById('agent状态').style.color = '#4ade80';
-        var agentDot = document.getElementById('agentDot');
-        if (agentDot) agentDot.className = 'w-1.5 h-1.5 rounded-full bg-[#3b82f6] animate-pulse';
-        if (!window.pywebview) {
-          var relayAgentDot = document.getElementById('relayAgentDot');
-          if (relayAgentDot) {
-            relayAgentDot.classList.remove('hidden');
-            relayAgentDot.className = 'w-1.5 h-1.5 rounded-full animate-pulse';
-            relayAgentDot.style.background = '#3b82f6';
-          }
-        }
-      } else if (msg.type === 'agent_disconnected') {
-        document.getElementById('agent状态').textContent = '已断开';
-        document.getElementById('agent状态').style.color = '#bbb';
-        var agentDot = document.getElementById('agentDot');
-        if (agentDot) agentDot.className = 'w-1.5 h-1.5 rounded-full bg-[#666]';
-        if (!window.pywebview) {
-          var relayAgentDot = document.getElementById('relayAgentDot');
-          if (relayAgentDot) {
-            relayAgentDot.classList.add('hidden');
-            relayAgentDot.className = 'w-1.5 h-1.5 rounded-full hidden';
-          }
-        }
-      } else if (msg.type === 'command_result' || msg.type === 'session_op_result') {
-        trafficFlash();
-      }
-    } catch(e) {}
-  };
-  state.ws.onclose = function() {
-    state.ws = null;
-    document.getElementById('connectBtn').textContent = '连接';
-        document.getElementById('connectBtn').style.background = '';
-    document.getElementById('connectBtn').style.color = '';
-    addLog('info', '中转服务器连接断开');
-    document.getElementById('relayStatus').textContent = '未连接';
-    // 非 pywebview 模式（浏览器）才由 connectRelay 更新灯
-    if (!window.pywebview) {
-      document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
-      var clientDot = document.getElementById('clientDot');
-      if (clientDot) clientDot.className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
-      var relayAgentDot = document.getElementById('relayAgentDot');
-      if (relayAgentDot) {
-        relayAgentDot.classList.add('hidden');
-        relayAgentDot.className = 'w-1.5 h-1.5 rounded-full hidden';
-      }
-    }
-  };
-  state.ws.onerror = function() {
-    addLog('err', '中转服务器连接失败');
-  };
-}
-var trafficTimer = null;
 function trafficFlash() {
   var relayDot = document.getElementById('relayDot');
   if (trafficTimer) clearTimeout(trafficTimer);
