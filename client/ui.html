@@ -95,7 +95,7 @@ tailwind.config = {
       <div class="flex items-center gap-2 px-3 py-2.5 border-b border-[#1f1f1f]">
         <div class="w-1.5 h-1.5 rounded-full bg-[#666]" id="agentDot"></div>
         <span class="text-xs font-medium text-[#aaa]">上游 Agent</span>
-        <span class="ml-auto text-[10px] text-[#555] font-mono">MCP/SSE</span>
+        <span class="ml-auto text-[10px] text-[#555] font-mono" id="agentProto">MCP/SSE</span>
       </div>
       <div class="px-3 py-2 space-y-1.5 text-xs">
         <div class="flex justify-between"><span class="text-[#666]">状态</span><span class="text-[#bbb]" id="agent状态">待接入</span></div>
@@ -120,7 +120,7 @@ tailwind.config = {
         <div class="w-1.5 h-1.5 rounded-full bg-[#666]" id="relayDot"></div>
         <div class="w-1.5 h-1.5 rounded-full hidden" id="relayAgentDot" style="background: #3b82f6;"></div>
         <span class="text-xs font-medium text-[#aaa]">中转服务器</span>
-        <span class="ml-auto text-[10px] text-[#555] font-mono">SSE + WSS</span>
+        <span class="ml-auto text-[10px] text-[#555] font-mono" id="relayProto">SSE + WSS</span>
       </div>
       <div class="px-3 py-2 space-y-1.5 text-xs">
         <div class="flex justify-between"><span class="text-[#666]">地址</span><span class="text-[#bbb] font-mono text-[11px] truncate max-w-[140px]" id="relayUrl">yunqiao.very.im</span></div>
@@ -144,6 +144,7 @@ tailwind.config = {
       <div class="flex items-center gap-2 px-3 py-2.5 border-b border-[#1f1f1f]">
         <div class="w-1.5 h-1.5 rounded-full bg-[#666]" id="clientDot"></div>
         <span class="text-xs font-medium text-[#aaa]">客户端（本地电脑）</span>
+        <span class="ml-auto text-[10px] text-[#555] font-mono" id="clientProto">WSS</span>
       </div>
       <div class="px-3 py-2 space-y-1.5 text-xs">
         <div class="flex justify-between"><span class="text-[#666]">工作目录</span><span class="text-[#bbb] font-mono text-[11px] truncate max-w-[130px]" id="workDir">未设置</span></div>
@@ -496,6 +497,9 @@ function handleBridge(action, data) {
         relayAgentDot.className = 'w-1.5 h-1.5 rounded-full animate-pulse';
         relayAgentDot.style.background = '#3b82f6';
       }
+      // 点亮 Agent 协议标签
+      var ap = document.getElementById('agentProto');
+      if (ap) { ap.style.color = '#3b82f6'; ap.style.textShadow = '0 0 8px rgba(59,130,246,0.3)'; }
     } else {
       s.textContent = '待接入'; s.style.color = '#bbb';
       var agentDot = document.getElementById('agentDot');
@@ -505,6 +509,9 @@ function handleBridge(action, data) {
         relayAgentDot.classList.add('hidden');
         relayAgentDot.className = 'w-1.5 h-1.5 rounded-full hidden';
       }
+      // 熄灭 Agent 协议标签
+      var ap = document.getElementById('agentProto');
+      if (ap) { ap.style.color = '#555'; ap.style.textShadow = ''; }
     }
   }
   else if (action === 'relay_status') {
@@ -522,6 +529,11 @@ function handleBridge(action, data) {
       if (cd) cd.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
       refreshPairCode();
       addLog('done', '中转服务器已连接');
+      // 点亮协议标签
+      var rp = document.getElementById('relayProto');
+      if (rp) { rp.style.color = '#4ade80'; rp.style.textShadow = '0 0 8px rgba(74,222,128,0.3)'; }
+      var cp = document.getElementById('clientProto');
+      if (cp) { cp.style.color = '#4ade80'; cp.style.textShadow = '0 0 8px rgba(74,222,128,0.3)'; }
     } else {
       dot.className = 'w-1.5 h-1.5 rounded-full bg-[#666]';
       status.textContent = '未连接';
@@ -534,6 +546,11 @@ function handleBridge(action, data) {
       var rad = document.getElementById('relayAgentDot');
       if (rad) { rad.classList.add('hidden'); }
       addLog('info', '中转服务器已断开');
+      // 熄灭协议标签
+      var rp = document.getElementById('relayProto');
+      if (rp) { rp.style.color = '#555'; rp.style.textShadow = ''; }
+      var cp = document.getElementById('clientProto');
+      if (cp) { cp.style.color = '#555'; cp.style.textShadow = ''; }
     }
   }
 }
