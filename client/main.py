@@ -25,10 +25,6 @@ from tkinter import ttk, messagebox
 CONFIG_DIR = Path(os.environ.get("YUNQIAO_CONFIG", str(Path.home() / ".yunqiao")))
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 CONFIG_FILE = CONFIG_DIR / "config.json"
-SESSIONS_DIR = CONFIG_DIR / "sessions"
-SESSIONS_INDEX = CONFIG_DIR / "sessions.json"
-SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
-DEFAULT_RELAY = "wss://yunqiao.very.im/device"
 
 # ─── 配色 ────────────────────────────────────
 C = {
@@ -43,7 +39,7 @@ C = {
 # ─── 状态 ────────────────────────────────────
 state = {
     "connected": False, "latency": 0, "deviceId": "", "deviceName": platform.node(),
-    "pairCode": "", "psk": "", "relayUrl": DEFAULT_RELAY,
+    "pairCode": "", "key": "", "relayUrl": "",
     "logs": [], "activities": [], "ws_client": None, "workDir": "", "directMode": True,
 }
 
@@ -56,8 +52,8 @@ def load_config():
 
 def save_config():
     CONFIG_FILE.write_text(json.dumps({
-        "psk": state["psk"], "relayUrl": state["relayUrl"],
-        "deviceName": state["deviceName"], "workDir": state["workDir"], "directMode": state.get("directMode", True),
+        "key": state["key"], "relayUrl": state["relayUrl"],
+        "deviceName": state["deviceName"], "workDir": state["workDir"],
     }, indent=2))
 
 def gen_code():
@@ -94,7 +90,6 @@ class App:
         self.root = tk.Tk()
         self.root.title("云桥 MCP")
         self.root.geometry("400x680")
-        self._shell = None  # 持久 shell 进程
         # 主窗口居中（延迟执行确保渲染完成）
         def center_main():
             sw = self.root.winfo_screenwidth()
@@ -107,22 +102,16 @@ class App:
         self.root.configure(bg=C["bg"])
 
         cfg = load_config()
-        state["psk"] = cfg.get("psk", "")
-        state["relayUrl"] = cfg.get("relayUrl", DEFAULT_RELAY)
+        state["key"] = cfg.get("key", "")
+        state["relayUrl"] = cfg.get("relayUrl", "")
         state["deviceName"] = cfg.get("deviceName", platform.node())
         state["workDir"] = cfg.get("workDir", "")
-        state["directMode"] = cfg.get("directMode", True)
-        state["autoConnect"] = cfg.get("autoConnect", True)
         state["pairCode"] = gen_code()
-        self.agent_status = None
-        self.agent_last = 0
 
         self.build_ui()
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
-        if not state["psk"]:
+        if not state["key"]:
             self.root.after(500, self.open_settings)
-        # 加载会话
-        self.root.after(200, self.refresh_sessions)
 
     # ─── UI 构建 ────────────────────────────
     def build_ui(self):
@@ -166,7 +155,6 @@ class App:
         self.status_label = tk.Label(self.status_frame, text="初始化中...",
                                      bg=C["bg"], fg=C["text2"], font=("Segoe UI", 13))
         self.status_label.pack(side=tk.LEFT)
-        self._make_copyable(self.status_label)
 
         # 当前连接卡片
         self.conn_card = self.make_card(content, "当前连接")
@@ -195,20 +183,16 @@ class App:
             dl = tk.Label(nf, text=desc, bg=C["int4"], fg=C["text2"],
                        font=("Segoe UI", 9))
             dl.pack()
-            self._make_copyable(dl)
             self.node_labels.append(dl)
 
         # 状态行
         stat = tk.Frame(self.conn_card, bg=C["card"])
         stat.pack(fill=tk.X, pady=(4, 0))
-        self.device_label = tk.Label(stat, text=state["deviceName"], bg=C["card"], fg=C["text"],
-                               font=("Segoe UI", 11, "bold"))
-        self.device_label.pack(side=tk.LEFT)
-        self._make_copyable(self.device_label)
+        tk.Label(stat, text=state["deviceName"], bg=C["card"], fg=C["text"],
+                 font=("Segoe UI", 11, "bold")).pack(side=tk.LEFT)
         self.latency_label = tk.Label(stat, text="延迟 -- ms", bg=C["card"], fg=C["text2"],
                                       font=("Segoe UI", 10))
         self.latency_label.pack(side=tk.LEFT, padx=8)
-        self._make_copyable(self.latency_label)
         self.status_badge = tk.Label(stat, text="未连接", bg=C["int8"], fg=C["text2"],
                                      font=("Segoe UI", 9), padx=6, pady=1)
         self.status_badge.pack(side=tk.RIGHT)
@@ -235,7 +219,6 @@ class App:
         self.act_label = tk.Label(self.act_frame, text="暂无活动", bg=C["card"], fg=C["text3"],
                                   font=("Segoe UI", 10))
         self.act_label.pack(pady=4)
-        self._make_copyable(self.act_label)
 
         # 配对码
         pair_card = self.make_card(content, "Agent 配对码")
@@ -246,7 +229,6 @@ class App:
         self.pair_badge = tk.Label(pf, text="", bg=C["card"], fg=C["text2"],
                                    font=("Segoe UI", 9), padx=6, pady=1)
         self.pair_badge.pack(side=tk.RIGHT)
-        self._make_copyable(self.pair_badge)
 
         pair_body = tk.Frame(pair_card, bg=C["card"])
         pair_body.pack(fill=tk.X, pady=2)
@@ -254,7 +236,6 @@ class App:
                                    bg=C["card"], fg=C["accent"],
                                    font=("Courier New", 20, "bold"))
         self.code_label.pack()
-        self._make_copyable(self.code_label)
         tk.Label(pair_body, text="将此配对码发给智能体，用于建立连接",
                  bg=C["card"], fg=C["text2"], font=("Segoe UI", 9)).pack()
         # Agent 工作区
@@ -265,7 +246,6 @@ class App:
         self.workdir_label = tk.Label(wd_frame, text=state["workDir"] or "未设置工作目录",
                                       bg=C["int4"], fg=C["text"], font=("Segoe UI", 10))
         self.workdir_label.pack(side=tk.LEFT)
-        self._make_copyable(self.workdir_label)
         tk.Button(wd_frame, text="📁 浏览", bg=C["int8"], fg=C["text"], bd=0,
                   font=("Segoe UI", 9), padx=8, pady=2,
                   command=self.browse_workdir).pack(side=tk.RIGHT)
@@ -282,75 +262,20 @@ class App:
                   font=("Segoe UI", 10), padx=10, pady=3,
                   cursor="hand2", command=self.refresh_code).pack(fill=tk.X)
 
-        # ─── 会话管理面板 ────────────────────
-        sess_card = self.make_card(content, "工作区管理")
-        # 会话列表（可滚动，最多显示 3 条 + 计数）
-        sess_frame = tk.Frame(sess_card, bg=C["card"])
-        sess_frame.pack(fill=tk.X, pady=2)
-        self.sess_info = tk.Label(sess_frame, text="加载中...", bg=C["card"], fg=C["text2"],
-                                   font=("Segoe UI", 10), anchor="w", justify="left")
-        self.sess_info.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        self._make_copyable(self.sess_info)
-        sess_btn = tk.Frame(sess_card, bg=C["card"])
-        sess_btn.pack(fill=tk.X)
-        tk.Button(sess_btn, text="➕ 新建会话", bg=C["primary"], fg="white", bd=0,
-                  font=("Segoe UI", 9), padx=8, pady=2,
-                  command=self.create_session_dialog).pack(side=tk.LEFT, padx=(0, 4))
-        tk.Button(sess_btn, text="🔄 刷新", bg=C["int8"], fg=C["text"], bd=0,
-                  font=("Segoe UI", 9), padx=8, pady=2,
-                  command=self.refresh_sessions).pack(side=tk.LEFT, padx=(0, 4))
-        tk.Button(sess_btn, text="❌ 关闭当前", bg=C["danger"], fg="white", bd=0,
-                  font=("Segoe UI", 9), padx=8, pady=2,
-                  command=self.close_session).pack(side=tk.LEFT)
-
-        # 发消息给Agent
-        msg_frame = tk.Frame(content, bg=C["panel"], padx=6, pady=3)
-        msg_frame.pack(fill=tk.X, pady=(1, 0))
-        tk.Label(msg_frame, text="给智能体发消息", bg=C["panel"], fg=C["text2"],
-                 font=("Segoe UI", 9, "bold")).pack(anchor="w")
-        msg_input_frame = tk.Frame(msg_frame, bg=C["panel"])
-        msg_input_frame.pack(fill=tk.X, pady=(2, 0))
-        self.msg_entry = tk.Entry(msg_input_frame, font=("Segoe UI", 10),
-                                  bg=C["int4"], fg=C["text"], bd=1,
-                                  relief="solid")
-        self.msg_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
-        self.msg_entry.bind("<Return>", lambda e: self.send_to_agent())
-        tk.Button(msg_input_frame, text="发送", bg=C["primary"], fg="white", bd=0,
-                  font=("Segoe UI", 9), padx=8, pady=2,
-                  command=self.send_to_agent).pack(side=tk.RIGHT)
-
         # 日志
         log_frame = tk.Frame(content, bg=C["log_bg"], padx=6, pady=4)
         log_frame.pack(fill=tk.BOTH, expand=True, pady=(2, 0))
-        log_header = tk.Frame(log_frame, bg=C["log_bg"])
-        log_header.pack(fill=tk.X, anchor="w")
-        tk.Label(log_header, text="relay.log", bg=C["log_bg"], fg="#9da5b0",
-                 font=("Segoe UI", 9)).pack(side=tk.LEFT)
-        tk.Button(log_header, text="📋 复制日志", bg=C["log_bg"], fg="#9da5b0", bd=0,
-                  font=("Segoe UI", 9), cursor="hand2", activebackground=C["log_bg"],
-                  command=lambda: self._copy_text(self.log_text.get("1.0", "end-1c"))
-                  ).pack(side=tk.RIGHT)
+        tk.Label(log_frame, text="relay.log", bg=C["log_bg"], fg="#9da5b0",
+                 font=("Segoe UI", 9)).pack(anchor="w")
         self.log_text = tk.Text(log_frame, bg=C["log_bg"], fg=C["log_fg"],
                                 font=("Consolas", 9), bd=0,
-                                highlightthickness=0, state=tk.NORMAL,
-                                cursor="xterm", exportselection=True)
+                                highlightthickness=0)
         self.log_text.pack(fill=tk.BOTH, expand=True)
         self.log_text.insert("1.0", "等待连接...")
-        self.log_text.tag_configure("sel", background="#264f78")
-        # 日志右键菜单
-        self.log_menu = tk.Menu(self.log_text, tearoff=0, bg=C["card"], fg=C["text"],
-                                activebackground=C["primary"], activeforeground="white")
-        self.log_menu.add_command(label="复制", command=self._copy_log_selection,
-                                  accelerator="Ctrl+C")
-        self.log_text.bind("<Button-3>", self._show_log_menu)
-        self.log_text.bind("<Button-2>", self._show_log_menu)
 
         # 版本
-        tk.Label(content, text="云桥 MCP v2.0.0（会话管理）", bg=C["bg"], fg=C["text3"],
+        tk.Label(content, text="云桥 MCP v1.0.0", bg=C["bg"], fg=C["text3"],
                  font=("Segoe UI", 9)).pack(pady=(2, 0))
-
-        # 加载会话列表
-        self.root.after(100, self.refresh_sessions)
 
     def make_card(self, parent, title):
         card = tk.Frame(parent, bg=C["card"], padx=6, pady=3)
@@ -359,47 +284,10 @@ class App:
                  font=("Segoe UI", 10, "bold")).pack(anchor="w")
         return card
 
-    def _update_status_ui(self, color, label):
-        try:
-            self.status_dot.itemconfig(self.dot, fill=color)
-            self.status_label.configure(text=label)
-            self.status_badge.configure(text=label, bg=color, fg="white")
-        except tk.TclError:
-            pass
-
-    # ─── 复制辅助 ────────────────────────────
-    def _make_copyable(self, widget):
-        """让 tk.Label 支持右键复制文本"""
-        widget.bind("<Button-3>", lambda e: self._copy_text(widget.cget("text")))
-        widget.bind("<Button-2>", lambda e: self._copy_text(widget.cget("text")))
-
-    def _copy_text(self, text):
-        self.root.clipboard_clear()
-        self.root.clipboard_append(text)
-        self.add_log("INFO", f"已复制: {text[:30]}")
-
-    def _show_log_menu(self, event):
-        """显示日志右键菜单"""
-        try:
-            self.log_menu.tk_popup(event.x_root, event.y_root)
-        finally:
-            self.log_menu.grab_release()
-
-    def _copy_log_selection(self):
-        """复制日志中选中的文本"""
-        try:
-            text = self.log_text.get("sel.first", "sel.last")
-            if text:
-                self._copy_text(text)
-        except tk.TclError:
-            # 没有选中内容，复制整个日志
-            text = self.log_text.get("1.0", "end-1c")
-            if text:
-                self._copy_text(text)
-
     # ─── 配对码 ────────────────────────────
     def copy_code(self):
-        text = f"云桥 配对码 {state['pairCode']}"
+        mcp_url = state["relayUrl"].replace("/device", "/mcp").replace("ws://", "http://").replace("wss://", "https://")
+        text = f"云桥地址: {mcp_url}\n配对码: {state['pairCode']}"
         self.root.clipboard_clear()
         self.root.clipboard_append(text)
         self.pair_badge.configure(text="已复制", bg=C["success"], fg="white")
@@ -411,7 +299,7 @@ class App:
     def copy_skills_cmd(self):
         """复制连接地址+skills命令给Agent安装"""
         code = state["pairCode"]
-        server_url = state.get("relayUrl", "wss://yunqiao.very.im/device")
+        server_url = state["relayUrl"]
         mcp_url = server_url.replace("/device", "/mcp").replace("ws://", "http://").replace("wss://", "https://")
         skills_url = "https://raw.githubusercontent.com/ideasir/yunqiao-mcp/main/skills/mcp-client.mjs"
         text = f"安装 skills: {skills_url}\n连接地址: {mcp_url}\n配对码: {code}"
@@ -421,137 +309,9 @@ class App:
         self.root.after(3000, lambda: self.first_use_btn.configure(
             text="首次使用请点击这里", fg=C["accent"]))
 
-    def send_to_agent(self):
-        """发送消息给智能体"""
-        text = self.msg_entry.get().strip()
-        if not text:
-            return
-        self.msg_entry.delete(0, tk.END)
-        self.add_log("INFO", f"发送给智能体: {text[:50]}")
-        # 通过 WSS 发送
-        ws = state.get("ws_client")
-        if ws:
-            self._send(ws, {
-                "type": "agent_message", "requestId": "msg_" + str(int(time.time())),
-                "text": text,
-            })
-        else:
-            self.add_log("ERROR", "发送失败：未连接")
-
     def refresh_code(self):
         state["pairCode"] = gen_code()
         self.code_label.configure(text=state["pairCode"])
-
-    # ─── 会话管理 ──────────────────────────
-    def _load_sessions(self):
-        """从磁盘加载会话列表"""
-        sessions = []
-        if SESSIONS_INDEX.exists():
-            try:
-                data = json.loads(SESSIONS_INDEX.read_text("utf-8"))
-                default_id = data.get("defaultSessionId")
-                for sid in data.get("sessions", []):
-                    sfile = SESSIONS_DIR / f"{sid}.json"
-                    if sfile.exists():
-                        sd = json.loads(sfile.read_text("utf-8"))
-                        sd["isDefault"] = sd["id"] == default_id
-                        sessions.append(sd)
-            except:
-                pass
-        return sessions
-
-    def refresh_sessions(self):
-        """刷新会话列表显示（最多显示 3 条 + 计数）"""
-        sessions = self._load_sessions()
-        if not sessions:
-            self.sess_info.configure(text="没有会话。点击「新建会话」创建。")
-            return
-        lines = []
-        total = len(sessions)
-        show = sessions[:3]
-        for s in show:
-            prefix = "👉" if s.get("isDefault") else "  "
-            lines.append(f"{prefix} {s.get('name', 'unnamed')} ({s['id']})")
-            lines.append(f"  目录: {s.get('workDir', '?')}")
-        if total > 3:
-            lines.append(f"  ... 还有 {total - 3} 个会话")
-        self.sess_info.configure(text="\n".join(lines))
-
-    def create_session_dialog(self):
-        """新建会话弹窗"""
-        win = tk.Toplevel(self.root)
-        win.title("新建工作区")
-        win.resizable(False, False)
-        win.configure(bg=C["panel"])
-        win.transient(self.root)
-        win.grab_set()
-        sw = self.root.winfo_screenwidth()
-        sh = self.root.winfo_screenheight()
-        win.geometry(f"320x180+{(sw-320)//2}+{(sh-180)//2}")
-
-        tk.Label(win, text="工作目录", bg=C["panel"], fg=C["text"],
-                 font=("Segoe UI", 10)).pack(pady=(10, 2), anchor="w", padx=10)
-        dir_entry = tk.Entry(win, font=("Segoe UI", 10))
-        dir_entry.insert(0, state.get("workDir", "C:\\Users\\Administrator"))
-        dir_entry.pack(fill=tk.X, padx=10, pady=2)
-
-        tk.Label(win, text="会话名称（可选）", bg=C["panel"], fg=C["text"],
-                 font=("Segoe UI", 10)).pack(pady=(2, 2), anchor="w", padx=10)
-        name_entry = tk.Entry(win, font=("Segoe UI", 10))
-        name_entry.pack(fill=tk.X, padx=10, pady=2)
-
-        def do_create():
-            work_dir = dir_entry.get().strip()
-            name = name_entry.get().strip() or None
-            if not work_dir:
-                return
-            # 本地创建会话文件
-            sid = str(random.randint(10000000, 99999999))
-            sdata = {
-                "id": sid,
-                "name": name or f"workspace_{sid[:4]}",
-                "workDir": work_dir,
-                "cwd": work_dir,
-                "createdAt": time.time(),
-                "lastActive": time.time(),
-            }
-            sfile = SESSIONS_DIR / f"{sid}.json"
-            sfile.write_text(json.dumps(sdata, indent=2), "utf-8")
-            # 更新索引
-            idx = {"defaultSessionId": sid, "sessions": [sid]}
-            if SESSIONS_INDEX.exists():
-                try:
-                    old = json.loads(SESSIONS_INDEX.read_text("utf-8"))
-                    old["sessions"].append(sid)
-                    old["defaultSessionId"] = sid
-                    idx = old
-                except:
-                    pass
-            SESSIONS_INDEX.write_text(json.dumps(idx, indent=2), "utf-8")
-            win.destroy()
-            self.refresh_sessions()
-
-        tk.Button(win, text="创建", bg=C["primary"], fg="white", bd=0,
-                  font=("Segoe UI", 10), padx=20, pady=3,
-                  command=do_create).pack(pady=10)
-
-    def close_session(self):
-        """关闭当前默认会话"""
-        if not SESSIONS_INDEX.exists():
-            return
-        try:
-            data = json.loads(SESSIONS_INDEX.read_text("utf-8"))
-            default_id = data.get("defaultSessionId")
-            if default_id and default_id in data.get("sessions", []):
-                sfile = SESSIONS_DIR / f"{default_id}.json"
-                if sfile.exists():
-                    sfile.unlink()
-                data["sessions"] = [s for s in data["sessions"] if s != default_id]
-                data["defaultSessionId"] = data["sessions"][0] if data["sessions"] else None
-                SESSIONS_INDEX.write_text(json.dumps(data, indent=2), "utf-8")
-                self.refresh_sessions()
-        except:
-            pass
 
     # ─── 设置弹窗 ──────────────────────────
     def open_settings(self):
@@ -567,11 +327,11 @@ class App:
         sh = self.root.winfo_screenheight()
         win.geometry(f"320x280+{(sw-320)//2}+{(sh-280)//2}")
 
-        has_config = bool(state["psk"] and state["relayUrl"])
+        has_config = bool(state["key"] and state["relayUrl"])
 
         fields = [
             ("中继地址", "relay", state["relayUrl"] if has_config else ""),
-            ("PSK 密钥", "psk", state["psk"]),
+            ("连接密钥", "key", state["key"]),
             ("设备名称", "name", state["deviceName"]),
         ]
         # 连接模式
@@ -588,31 +348,22 @@ class App:
         tk.Radiobutton(mode_btnf, text="系统代理", variable=self.direct_var,
                        value=False, bg=C["panel"], fg=C["text"],
                        font=("Segoe UI", 9), selectcolor=C["panel"]).pack(side=tk.LEFT)
-        # 自动连接开关
-        auto_frame = tk.Frame(win, bg=C["panel"])
-        auto_frame.pack(fill=tk.X, padx=12, pady=(4, 0))
-        self.auto_connect_var = tk.BooleanVar(value=state.get("autoConnect", True))
-        tk.Checkbutton(auto_frame, text="启动后自动连接", variable=self.auto_connect_var,
-                       bg=C["panel"], fg=C["text"], font=("Segoe UI", 9),
-                       selectcolor=C["panel"]).pack(anchor="w")
         entries = {}
 
         def save():
             url = entries["relay"].get().strip()
-            psk = entries["psk"].get().strip()
+            key = entries["key"].get().strip()
             name = entries["name"].get().strip() or platform.node()
-            if not url or not psk:
-                messagebox.showwarning("提示", "请填写中继地址和 PSK")
+            if not url or not key:
+                messagebox.showwarning("提示", "请填写中继地址和连接密钥")
                 return
             state["relayUrl"] = url
-            state["psk"] = psk
+            state["key"] = key
             state["deviceName"] = name
             state["directMode"] = self.direct_var.get()
-            state["autoConnect"] = self.auto_connect_var.get()
             save_config()
             win.destroy()
-            if state["autoConnect"]:
-                self.start_connect()
+            self.start_connect()
 
         entries = {}
         entry_widgets = []
@@ -624,7 +375,7 @@ class App:
             e = tk.Entry(ef, bg="white", fg=C["text"],
                          font=("Segoe UI", 9), bd=1, relief="solid")
             e.insert(0, val)
-            if key == "psk":
+            if key == "key":
                 e.configure(show="*")
             e.pack(fill=tk.X, side=tk.LEFT, expand=True)
 
@@ -665,19 +416,7 @@ class App:
                       font=("Segoe UI", 9), padx=12, pady=3, command=save).pack(side=tk.RIGHT, padx=6)
 
 
-    def _ws_connect_args(self, psk):
-        """兼容不同 websockets 版本的请求头参数名"""
-        try:
-            import inspect
-            sig = inspect.signature(websockets.connect)
-            if 'additional_headers' in sig.parameters:
-                return {'additional_headers': {"X-PSK": psk}}
-        except:
-            pass
-        return {'extra_headers': {"X-PSK": psk}}
-
     def start_connect(self):
-        self._loop = None
         self.set_status("connecting", "连接中...")
         self.connect_btn.configure(text="断开", fg=C["danger"], bg=C["int8"])
         if state.get("directMode", True):
@@ -687,17 +426,6 @@ class App:
         t = threading.Thread(target=self._ws_loop, daemon=True)
         t.start()
 
-
-    def _send(self, ws, data):
-        """线程安全地通过 ws 发送数据（ws 属于主事件循环）"""
-        try:
-            loop = self._loop
-            if loop is None:
-                return
-            asyncio.run_coroutine_threadsafe(ws.send(json.dumps(data)), loop)
-        except Exception as e:
-            self.add_log("ERROR", f"发送失败: {e}")
-
     def toggle_connect(self):
         """切换连接/断开"""
         if state["ws_client"] and state["connected"]:
@@ -706,11 +434,7 @@ class App:
             state["connected"] = False
             ws = state["ws_client"]
             state["ws_client"] = None
-            try:
-                if self._loop:
-                    asyncio.run_coroutine_threadsafe(ws.close(), self._loop)
-                else:
-                    asyncio.run(ws.close())
+            try: asyncio.run(ws.close())
             except: pass
             self.set_status("disconnected", "未连接")
             self.connect_btn.configure(text="连接", fg=C["success"], bg=C["int8"])
@@ -720,7 +444,7 @@ class App:
                 self.node_labels[2].configure(text="待接入", fg=C["text2"])
         else:
             # 连接
-            if not state["psk"]:
+            if not state["key"]:
                 self.open_settings()
                 return
             self.start_connect()
@@ -730,16 +454,16 @@ class App:
 
     async def _ws_client(self):
         url = state["relayUrl"]
-        psk = state["psk"]
+        key = state["key"]
         while True:
             try:
                 self.add_log("INFO", f"正在连接 {url}...")
                 t0 = time.time()
-                self._loop = asyncio.get_running_loop()
-                # 用自定义请求头传递PSK（兼容不同 websockets 版本）
-                ws_kwargs = self._ws_connect_args(psk)
+                                # 用自定义请求头传递密钥
+                import websockets.client as ws_client
+                ws_headers = {"X-Key": key}
                 async with websockets.connect(
-                    url, **ws_kwargs,
+                    url, extra_headers={"X-Key": key},
                 ) as ws:
                     state["ws_client"] = ws
                     state["connected"] = True
@@ -762,8 +486,7 @@ class App:
                         if t == "register_result" and data.get("success"):
                             state["deviceId"] = data.get("deviceId", "")
                             self.add_log("INFO", f"注册成功")
-                            if len(self.node_labels) >= 3:
-                                self.node_labels[2].configure(text="未配对", fg=C["text3"])
+                            # 上游 Agent 保持"等待配对"，只有智能体用配对码成功调用后才变绿
 
                         elif t == "execute_command":
                             cmd = payload.get("command", "")
@@ -786,10 +509,7 @@ class App:
                         elif t == "agent_connected":
                             self.add_log("INFO", "Agent 配对成功")
                             if len(self.node_labels) >= 3:
-                                self.node_labels[2].configure(text="已配对", fg=C["success"])
-                            if hasattr(self, 'status_light') and hasattr(self, 'light'):
-                                self.status_light.itemconfig(self.light, fill=C["success"])
-                                self._light_blinking = False
+                                self.node_labels[2].configure(text="配对成功", fg=C["success"])
                             if hasattr(self, 'status_light') and hasattr(self, 'light'):
                                 self.status_light.itemconfig(self.light, fill=C["success"])
                                 self._light_blinking = False
@@ -811,15 +531,6 @@ class App:
                         elif t == "get_device_info":
                             threading.Thread(target=self._get_info,
                                 args=(ws, rid), daemon=True).start()
-
-                        elif t == "agent_message_result":
-                            self.add_log("INFO", "消息已发送到服务器")
-
-                        elif t == "session_op":
-                            op = payload.get("op", "")
-                            self.add_log("INFO", f"会话操作: {op}")
-                            threading.Thread(target=self._handle_session_op,
-                                args=(ws, rid, payload), daemon=True).start()
 
             except websockets.ConnectionClosed:
                 self.root.after(0, lambda: self.set_status("reconnecting", "重连中..."))
@@ -844,7 +555,9 @@ class App:
                   "disconnected": "未连接"}
         color = colors.get(status, C["text3"])
         label = labels.get(status, text)
-        self.root.after(0, lambda: self._update_status_ui(color, label))
+        self.status_dot.itemconfig(self.dot, fill=color)
+        self.status_label.configure(text=label)
+        self.status_badge.configure(text=label, bg=color, fg="white")
         # 更新Agent活动状态灯
         if hasattr(self, 'status_light') and hasattr(self, 'light'):
             if status == "connected":
@@ -877,7 +590,7 @@ class App:
         if len(self.node_labels) >= 3:
             self.node_labels[0].configure(text="已连接 ✅", fg=C["success"])
             self.node_labels[1].configure(text="已连接 ✅", fg=C["success"])
-            self.node_labels[2].configure(text="未连接", fg=C["text3"])
+            self.node_labels[2].configure(text="等待配对码", fg=C["warning"])
 
         # 配对码状态
         self.pair_badge.configure(text="", bg=C["card"])
@@ -886,7 +599,28 @@ class App:
         ts = time.strftime("%H:%M:%S")
         colors = {"INFO": C["log_fg"], "WARN": "#f5b36b", "ERROR": "#e77070"}
         tag = f"log_{level}"
-        self.root.after(0, lambda: self._update_log_ui(ts, level, msg, tag))
+        self.log_text.insert("end", f"[{ts}] {level} {msg}\n", tag)
+        self.log_text.see("end")
+        # 更新 Agent 活动（只显示执行消息，不显示完成/退出码）
+        if hasattr(self, 'act_label') and "执行:" in msg:
+            self.act_label.configure(text=f"▶ {msg.replace('执行: ', '')}", fg=C["success"])
+        # 更新工具网格
+        self.update_tool_grid(msg)
+        # 检查是否是命令执行（智能体在线）
+        if "执行" in msg or "命令" in msg:
+            if hasattr(self, 'agent_status'):
+                self.agent_status.configure(text="🤖 在线", fg=C["success"])
+                self.agent_last = time.time()
+            # Agent 配对成功，更新上游节点状态和指示灯
+            if len(self.node_labels) >= 3:
+                self.node_labels[2].configure(text="已接入", fg=C["success"])
+            if hasattr(self, 'status_light') and hasattr(self, 'light'):
+                self.status_light.itemconfig(self.light, fill=C["success"])
+                self._light_blinking = False
+
+        elif "完成" in msg or "退出码" in msg:
+            if hasattr(self, 'agent_last'):
+                self.agent_last = time.time()
 
     def update_tool_grid(self, msg):
         """解析工具调用并累积更新工具网格"""
@@ -894,16 +628,7 @@ class App:
         if not hasattr(self, 'tool_frame') or not hasattr(self, 'tool_history'):
             return
 
-        if not hasattr(self, 'tool_frame') or not hasattr(self, 'tool_history'):
-            return
-        self.root.after(0, lambda: self._update_tool_grid_impl(msg))
-        return
-
-    def _update_tool_grid_impl(self, msg):
-        """Actual tool grid update (called via after(0))."""
-        import re
-        if not hasattr(self, 'tool_frame') or not hasattr(self, 'tool_history'):
-            return
+        # 判断是开始执行还是完成
         is_exec = "执行" in msg or "调用" in msg
         is_done = "完成" in msg or "退出码" in msg
 
@@ -982,311 +707,88 @@ class App:
             self.root.after(500, toggle)
         toggle()
 
-    def _update_log_ui(self, ts, level, msg, tag):
-        try:
-            self.log_text.config(state=tk.NORMAL)
-            self.log_text.insert("end", f"[{ts}] {level} {msg}\n", tag)
-            self.log_text.see("end")
-            if "执行:" in msg:
-                if hasattr(self, 'act_label'):
-                    self.act_label.configure(text=f"▶ {msg.replace('执行: ', '')}", fg=C["success"])
-                if hasattr(self, 'status_light') and hasattr(self, 'light'):
-                    self.status_light.itemconfig(self.light, fill=C["success"])
-                    self._light_blinking = False
-            if "完成" in msg or "退出码" in msg:
-                if hasattr(self, 'act_label'):
-                    self.act_label.configure(text="暂无活动", fg=C["text3"])
-                if hasattr(self, 'status_light') and hasattr(self, 'light'):
-                    self.status_light.itemconfig(self.light, fill=C["text3"])
-                    self._light_blinking = False
-            self.update_tool_grid(msg)
-        except tk.TclError:
-            pass
-
     # ─── 命令处理 ────────────────────────────
     def _run_cmd(self, ws, rid, command, timeout):
-        """执行命令（同步 subprocess，线程安全）"""
-        import subprocess, time as tm
-        try:
-            cwd = state.get("workDir") or None
-            proc = subprocess.Popen(
-                command, shell=True,
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                cwd=cwd,
-            )
+        import asyncio, subprocess
+        async def run():
             try:
-                stdout, stderr = proc.communicate(timeout=timeout/1000)
-                ec = proc.returncode or 0; killed = False
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                stdout, stderr = proc.communicate()
-                ec = 1; killed = True
-            self._send(ws, {
-                "type": "command_result" if rid != "0" else "session_op_result",
-                "requestId": rid,
-                "payload": {
-                    "exitCode": ec,
-                    "stdout": (stdout or b"").decode("utf-8", errors="replace"),
-                    "stderr": (stderr or b"").decode("utf-8", errors="replace"),
-                    "killed": killed,
-                },
-            })
-            self.add_log("INFO", f"完成, 退出码: {ec}")
-        except Exception as e:
-            self._send(ws, {
-                "type": "command_result" if rid != "0" else "session_op_result",
-                "requestId": rid,
-                "payload": {"exitCode": 1, "stdout": "", "stderr": str(e), "killed": False},
-            })
-            self.add_log("ERROR", f"执行失败: {e}")
+                cwd = state["workDir"] if state["workDir"] else None
+                proc = await asyncio.create_subprocess_shell(
+                    command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                    cwd=cwd)
+                try:
+                    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout/1000)
+                    ec = proc.returncode or 0; killed = False
+                except asyncio.TimeoutError:
+                    proc.kill(); stdout, stderr = await proc.communicate()
+                    ec = 1; killed = True
+                await ws.send(json.dumps({
+                    "type": "command_result", "requestId": rid,
+                    "payload": {
+                        "exitCode": ec,
+                        "stdout": (stdout or b"").decode("utf-8", errors="replace"),
+                        "stderr": (stderr or b"").decode("utf-8", errors="replace"),
+                        "killed": killed,
+                    },
+                }))
+                self.add_log("INFO", f"完成, 退出码: {ec}")
+            except Exception as e:
+                self.add_log("ERROR", f"执行失败: {e}")
+        asyncio.run(run())
 
-    def _ensure_shell(self):
-        """确保持久 shell 进程在运行"""
-        import subprocess
-        if self._shell is not None and self._shell.returncode is None:
-            return
-        work_dir = state.get("workDir") or None
-        self._shell = subprocess.Popen(
-            ["powershell", "-NoExit", "-Command", "-"],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT, cwd=work_dir,
-        )
-
-    async def _exec_persistent(self, command, timeout=30000):
-        """在持久 shell 中执行命令"""
-        import time as time_module
-        self._ensure_shell()
-        marker = f"__CMD_DONE_{int(time_module.time() * 1000000)}__"
-        full_cmd = f"{command}\nWrite-Host \"{marker}\"\n"
-        self._shell.stdin.write(full_cmd.encode("utf-8"))
-        self._shell.stdin.flush()
-        stdout_lines = []
-        import asyncio
-        loop = asyncio.get_event_loop()
-        deadline = time_module.time() + timeout / 1000
-        while time_module.time() < deadline:
-            line = await loop.run_in_executor(None, self._shell.stdout.readline)
-            decoded = line.decode("utf-8", errors="replace").rstrip("\r\n")
-            if marker in decoded:
-                break
-            stdout_lines.append(decoded)
-        return {"exitCode": 0, "stdout": "\n".join(stdout_lines), "stderr": "", "killed": False}
     def _read_file(self, ws, rid, path):
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                content = f.read()
-            self._send(ws, {
-                "type": "file_result", "requestId": rid,
-                "payload": {"success": True, "content": content, "path": path},
-            })
-            self.add_log("INFO", f"读取文件: {path}")
-        except Exception as e:
-            self._send(ws, {
-                "type": "file_result", "requestId": rid,
-                "payload": {"success": False, "error": str(e), "path": path},
-            })
-            self.add_log("ERROR", f"读取失败: {e}")
+        import asyncio
+        async def run():
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    content = f.read()
+                await ws.send(json.dumps({
+                    "type": "file_result", "requestId": rid,
+                    "payload": {"success": True, "content": content, "path": path},
+                }))
+                self.add_log("INFO", f"读取文件: {path}")
+            except Exception as e:
+                await ws.send(json.dumps({
+                    "type": "file_result", "requestId": rid,
+                    "payload": {"success": False, "error": str(e), "path": path},
+                }))
+                self.add_log("ERROR", f"读取失败: {e}")
+        asyncio.run(run())
 
     def _write_file(self, ws, rid, path, content):
-        try:
-            dirpath = os.path.dirname(path)
-            if dirpath:
-                os.makedirs(dirpath, exist_ok=True)
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(content)
-            self._send(ws, {
-                "type": "file_result", "requestId": rid,
-                "payload": {"success": True, "path": path},
-            })
-            self.add_log("INFO", f"写入文件: {path}")
-        except Exception as e:
-            self._send(ws, {
-                "type": "file_result", "requestId": rid,
-                "payload": {"success": False, "error": str(e), "path": path},
-            })
-            self.add_log("ERROR", f"写入失败: {e}")
-
-    def _handle_session_op(self, ws, rid, payload):
-        """处理会话管理操作"""
-        from pathlib import Path
-        op = payload.get("op", "")
-        try:
-            if op == "create":
-                work_dir = payload.get("workDir", "")
-                name = payload.get("name")
-                # 检查是否已有同目录的会话，有则复用
-                import random
-                existing = None
-                idx_file = Path.home() / ".yunqiao" / "sessions.json"
-                if idx_file.exists():
-                    try:
-                        data = json.loads(idx_file.read_text("utf-8"))
-                        for sid in data.get("sessions", []):
-                            sfile = Path.home() / ".yunqiao" / "sessions" / f"{sid}.json"
-                            if sfile.exists():
-                                sd = json.loads(sfile.read_text("utf-8"))
-                                if sd.get("workDir") == work_dir:
-                                    existing = sd
-                                    # 设为默认
-                                    data["defaultSessionId"] = sid
-                                    idx_file.write_text(json.dumps(data, indent=2), "utf-8")
-                                    break
-                    except: pass
-                if existing:
-                    self._send(ws, {
-                        "type": "session_op_result", "requestId": rid,
-                        "payload": existing,
-                    })
-                    self.add_log("INFO", f"复用会话: {existing['name']} ({existing['id']})")
-                    return
-                # 新建会话
-                sid = ''.join(random.choices('0123456789abcdef', k=8))
-                sdata = {
-                    "id": sid,
-                    "name": name or f"workspace_{sid[:4]}",
-                    "workDir": work_dir,
-                    "cwd": work_dir,
-                    "createdAt": __import__('time').time(),
-                    "lastActive": __import__('time').time(),
-                }
-                sfile = Path.home() / ".yunqiao" / "sessions" / f"{sid}.json"
-                sfile.parent.mkdir(parents=True, exist_ok=True)
-                sfile.write_text(json.dumps(sdata, indent=2), "utf-8")
-                # 更新索引
-                idx = {"defaultSessionId": sid, "sessions": [sid]}
-                if idx_file.exists():
-                    try:
-                        old = json.loads(idx_file.read_text("utf-8"))
-                        old["sessions"].append(sid)
-                        old["defaultSessionId"] = sid
-                        idx = old
-                    except: pass
-                idx_file.write_text(json.dumps(idx, indent=2), "utf-8")
-                self._send(ws, {
-                    "type": "session_op_result", "requestId": rid,
-                    "payload": sdata,
-                })
-                self.add_log("INFO", f"会话已创建: {sdata['name']} ({sid})")
-
-            elif op == "exec":
-                command = payload.get("command", "")
-                timeout = payload.get("timeout", 30000)
-                self.add_log("INFO", f"会话执行: {command[:50]}")
-                # 读取当前会话的 cwd 作为工作目录
-                cwd = None
-                idx_file = Path.home() / ".yunqiao" / "sessions.json"
-                if idx_file.exists():
-                    try:
-                        data = json.loads(idx_file.read_text("utf-8"))
-                        default_id = data.get("defaultSessionId")
-                        if default_id:
-                            sfile = Path.home() / ".yunqiao" / "sessions" / f"{default_id}.json"
-                            if sfile.exists():
-                                sd = json.loads(sfile.read_text("utf-8"))
-                                cwd = sd.get("cwd") or sd.get("workDir")
-                    except: pass
-                if cwd:
-                    state["workDir"] = cwd
-                self._run_cmd(ws, rid, command, timeout)
-
-            elif op == "read_file":
-                path = payload.get("path", "")
-                self._read_file(ws, rid, path)
-
-            elif op == "write_file":
-                path = payload.get("path", "")
-                content = payload.get("content", "")
-                self._write_file(ws, rid, path, content)
-
-            elif op == "list":
-                sessions = []
-                idx_file = Path.home() / ".yunqiao" / "sessions.json"
-                if idx_file.exists():
-                    try:
-                        data = json.loads(idx_file.read_text("utf-8"))
-                        default_id = data.get("defaultSessionId")
-                        for sid in data.get("sessions", []):
-                            sfile = Path.home() / ".yunqiao" / "sessions" / f"{sid}.json"
-                            if sfile.exists():
-                                sd = json.loads(sfile.read_text("utf-8"))
-                                sd["isDefault"] = sd["id"] == default_id
-                                sessions.append(sd)
-                    except: pass
-                self._send(ws, {
-                    "type": "session_op_result", "requestId": rid,
-                    "payload": {"sessions": sessions},
-                })
-
-            elif op == "close":
-                import os
-                sid = payload.get("sessionId")
-                if not sid:
-                    idx_file = Path.home() / ".yunqiao" / "sessions.json"
-                    if idx_file.exists():
-                        data = json.loads(idx_file.read_text("utf-8"))
-                        sid = data.get("defaultSessionId")
-                if sid:
-                    sfile = Path.home() / ".yunqiao" / "sessions" / f"{sid}.json"
-                    if sfile.exists():
-                        sfile.unlink()
-                    idx_file = Path.home() / ".yunqiao" / "sessions.json"
-                    if idx_file.exists():
-                        data = json.loads(idx_file.read_text("utf-8"))
-                        data["sessions"] = [s for s in data["sessions"] if s != sid]
-                        data["defaultSessionId"] = data["sessions"][0] if data["sessions"] else None
-                        idx_file.write_text(json.dumps(data, indent=2), "utf-8")
-                self._send(ws, {
-                    "type": "session_op_result", "requestId": rid,
-                    "payload": {"success": True},
-                })
-                self.add_log("INFO", "会话已关闭")
-
-            elif op == "switch":
-                sid = payload.get("sessionId", "")
-                idx_file = Path.home() / ".yunqiao" / "sessions.json"
-                if idx_file.exists():
-                    data = json.loads(idx_file.read_text("utf-8"))
-                    if sid in data.get("sessions", []):
-                        data["defaultSessionId"] = sid
-                        idx_file.write_text(json.dumps(data, indent=2), "utf-8")
-                        sfile = Path.home() / ".yunqiao" / "sessions" / f"{sid}.json"
-                        sd = {}
-                        if sfile.exists():
-                            sd = json.loads(sfile.read_text("utf-8"))
-                        self._send(ws, {
-                            "type": "session_op_result", "requestId": rid,
-                            "payload": {"success": True, "sessionId": sid, "name": sd.get("name", ""), "workDir": sd.get("workDir", "")},
-                        })
-                        self.add_log("INFO", f"已切换到会话: {sid}")
-                        return
-                self._send(ws, {
-                    "type": "session_op_result", "requestId": rid,
-                    "payload": {"success": False, "error": f"会话 {sid} 不存在"},
-                })
-
-            else:
-                self._send(ws, {
-                    "type": "session_op_result", "requestId": rid,
-                    "payload": {"success": False, "error": f"未知操作: {op}"},
-                })
-        except Exception as e:
-            self._send(ws, {
-                "type": "session_op_result", "requestId": rid,
-                "payload": {"success": False, "error": str(e)},
-            })
+        import asyncio
+        async def run():
+            try:
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(content)
+                await ws.send(json.dumps({
+                    "type": "file_result", "requestId": rid,
+                    "payload": {"success": True, "path": path},
+                }))
+                self.add_log("INFO", f"写入文件: {path}")
+            except Exception as e:
+                await ws.send(json.dumps({
+                    "type": "file_result", "requestId": rid,
+                    "payload": {"success": False, "error": str(e), "path": path},
+                }))
+                self.add_log("ERROR", f"写入失败: {e}")
+        asyncio.run(run())
 
     def _get_info(self, ws, rid):
-        """获取设备信息"""
-        self._send(ws, {
-            "type": "device_info", "requestId": rid,
-            "payload": {
-                "hostname": platform.node(), "platform": sys.platform,
-                "arch": platform.machine(), "cpus": os.cpu_count() or 0,
-                "uptime": time.time(), "homedir": str(Path.home()),
-                "userInfo": {"username": os.getlogin()},
-            },
-        })
-        self.add_log("INFO", "已返回系统信息")
+        import asyncio
+        async def run():
+            await ws.send(json.dumps({
+                "type": "device_info", "requestId": rid,
+                "payload": {
+                    "hostname": platform.node(), "platform": sys.platform,
+                    "arch": platform.machine(), "cpus": os.cpu_count() or 0,
+                    "uptime": time.time(), "homedir": str(Path.home()),
+                    "userInfo": {"username": os.getlogin()},
+                },
+            }))
+            self.add_log("INFO", "已返回系统信息")
+        asyncio.run(run())
 
     def browse_workdir(self):
         from tkinter import filedialog
@@ -1300,10 +802,7 @@ class App:
         if state["ws_client"]:
             try:
                 import asyncio
-                if self._loop:
-                    asyncio.run_coroutine_threadsafe(state["ws_client"].close(), self._loop)
-                else:
-                    asyncio.run(state["ws_client"].close())
+                asyncio.run(state["ws_client"].close())
             except: pass
         self.root.destroy()
 
@@ -1313,22 +812,3 @@ class App:
 
 if __name__ == "__main__":
     App().run()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

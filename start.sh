@@ -23,7 +23,7 @@ usage() {
   echo "  agent  - 启动私人电脑代理"
   echo ""
   echo "环境变量:"
-  echo "  RELAY_PSK           预共享密钥（必填，需与 agent 一致）"
+  echo "  RELAY_KEY           预共享密钥（必填，需与 agent 一致）"
   echo "  PORT                监听端口（默认 9876）"
   echo "  ALLOWED_COMMANDS    允许的命令前缀（逗号分隔，默认不限）"
   echo "  ALLOWED_FILE_PREFIX 允许的文件路径前缀（默认不限）"
@@ -33,9 +33,9 @@ usage() {
 }
 
 check_env() {
-  if [ -z "$RELAY_PSK" ]; then
-    export RELAY_PSK="change-me-to-a-secure-random-string"
-    echo "[warn] RELAY_PSK not set, using default (insecure!)" >&2
+  if [ -z "$RELAY_KEY" ]; then
+    export RELAY_KEY="change-me-to-a-secure-random-string"
+    echo "[warn] RELAY_KEY not set, using default (insecure!)" >&2
   fi
 }
 
@@ -48,7 +48,7 @@ start_server() {
     echo "[server] allowed file prefix: $ALLOWED_FILE_PREFIX" >&2
   fi
   echo "[server] starting on port ${PORT:-9876}..." >&2
-  exec node "$SCRIPT_DIR/relay/server.js"
+  exec node "$SCRIPT_DIR/server/src/index.js"
 }
 
 start_agent() {
@@ -57,9 +57,8 @@ start_agent() {
     exit 1
   fi
   check_env
-  PYTHON_BIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
   echo "[agent] connecting to $RELAY_URL..." >&2
-  exec "$PYTHON_BIN" "$SCRIPT_DIR/client/agent.py"
+  exec node "$SCRIPT_DIR/local-agent/src/index.js"
 }
 
 case "${1:-}" in

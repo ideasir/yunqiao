@@ -19,13 +19,25 @@ import threading
 import subprocess
 import queue
 import random
+from urllib.parse import urlparse, urlunparse
 
 # ─── 配置 ───────────────────────────────────────
-RELAY_URL = os.environ.get("RELAY_URL", "wss://yunqiao.very.im/device")
-RELAY_PSK = os.environ.get("RELAY_PSK")
-if not RELAY_PSK:
-    print("❌ 必须设置 RELAY_PSK 环境变量")
+RELAY_URL = os.environ.get("RELAY_URL")
+if not RELAY_URL:
+    print("❌ 必须设置 RELAY_URL 环境变量（云桥 WebSocket 地址）")
     sys.exit(1)
+RELAY_KEY = os.environ.get("RELAY_KEY")
+if not RELAY_KEY:
+    print("❌ 必须设置 RELAY_KEY 环境变量")
+    sys.exit(1)
+
+# 从 RELAY_URL 推导 MCP 地址（wss://xxx/device → https://xxx/mcp）
+def derive_mcp_url(relay_url):
+    parsed = urlparse(relay_url)
+    scheme = 'https' if parsed.scheme == 'wss' else 'http'
+    return urlunparse((scheme, parsed.netloc, '/mcp', '', '', ''))
+
+MCP_URL = derive_mcp_url(RELAY_URL)
 DEVICE_NAME = os.environ.get("DEVICE_NAME", platform.node())
 RECONNECT_DELAY = int(os.environ.get("RECONNECT_DELAY", "5000"))
 
@@ -77,21 +89,12 @@ def refresh_code():
 
 
 async def ws_client():
-    url = RELAY_URL
     add_activity("system", f"正在连接服务器 {RELAY_URL}...")
-    # 兼容不同 websockets 版本的请求头参数名
-    try:
-        import inspect
-        sig = inspect.signature(websockets.connect)
-        ws_kwargs = {'additional_headers': {"X-PSK": RELAY_PSK}} if 'additional_headers' in sig.parameters else {'extra_headers': {"X-PSK": RELAY_PSK}}
-    except:
-        ws_kwargs = {'extra_headers': {"X-PSK": RELAY_PSK}}
-    ws_kwargs['ping_interval'] = 10
 
     while True:
         try:
             t_start = time.time()
-            async with websockets.connect(url, **ws_kwargs) as ws:
+            async with websockets.connect(RELAY_URL, extra_headers={"X-Key": RELAY_KEY}, ping_interval=10) as ws:
                 latency = (time.time() - t_start) * 1000
                 server_status["connected"] = True
                 server_status["latency"] = round(latency, 1)
@@ -341,10 +344,23 @@ def build_ui():
         new_code = refresh_code()
         code_label.config(text=f"🔐 验证码: {new_code}")
 
+    def copy_code():
+        clip_text = f"云桥地址: {MCP_URL}\n配对码: {AUTH_CODE}"
+        root.clipboard_clear()
+        root.clipboard_append(clip_text)
+        add_activity("system", f"已复制到剪贴板")
+        copy_btn.config(text="✅ 已复制")
+        root.after(2000, lambda: copy_btn.config(text="📋 复制"))
+
     refresh_btn = tk.Button(code_frame, text="🔄 重新生成", command=refresh_click,
                             bg=BG_DARK, fg=FG, font=("Segoe UI", 9),
                             relief=tk.FLAT, padx=10, cursor="hand2")
-    refresh_btn.pack(side=tk.RIGHT, padx=15, pady=8)
+    refresh_btn.pack(side=tk.RIGHT, padx=5, pady=8)
+
+    copy_btn = tk.Button(code_frame, text="📋 复制", command=copy_code,
+                         bg=BG_DARK, fg=GREEN, font=("Segoe UI", 9, "bold"),
+                         relief=tk.FLAT, padx=10, cursor="hand2")
+    copy_btn.pack(side=tk.RIGHT, padx=5, pady=8)
 
     # ─── 系统托盘 ───
     def on_minimize():
@@ -402,7 +418,7 @@ def build_ui():
         elif uptime < 3600:
             uptime_label.config(text=f"运行时间: {int(uptime//60)}m {int(uptime%60)}s")
         else:
-            uptime_label.config(text=f"运行时间: {int(uptime//3600)}h {int(uptime%3600//60)}m")
+            uptime_label.config(text=f"运行时间: {int(uptime//3600)}h {int(uptime%60//60)}m")
 
         # 处理队列中的刷新
         try:

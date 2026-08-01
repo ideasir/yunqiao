@@ -9,15 +9,6 @@
 
 ---
 
-## 特性
-
-- **会话管理 (v2.0)** — 持久化工作区，隔离不同项目，cwd 保持
-- **安全可靠** — PSK + 配对码双验证，命令/文件白名单
-- **轻量路由** — 中转服务器无状态，挂了换个地址继续用
-- **兼容旧版** — 旧工具保留，新工具更简洁
-
----
-
 ## 目录
 
 - [快速开始](#快速开始)
@@ -27,7 +18,6 @@
   - [2. 客户机代理](#2-客户机代理)
   - [3. 智能体 Skill](#3-智能体-skill)
 - [工具参考](#工具参考)
-- [会话管理](#会话管理)
 - [安全](#安全)
 - [开发](#开发)
 
@@ -40,7 +30,7 @@
 **1. 在中转服务器上**
 
 ```bash
-# 已部署到 yunqiao.very.im，直接用
+# 已部署到 your-server.com，直接用
 ```
 
 **2. 在你电脑上**
@@ -51,7 +41,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-打开设置（⚙），填入中继地址和 PSK，点击「保存并连接」。
+打开设置（⚙），填入中继地址和 密钥，点击「保存并连接」。
 
 **3. 在 AI Agent 端**
 
@@ -66,32 +56,36 @@ node skills/mcp-client.mjs <配对码> list
 ## 架构
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                    AI Agent (沙箱)                            │
-│  工具: create_session, exec, read_file, write_file, ...      │
-└──────────────────────┬───────────────────────────────────────┘
-                       │ MCP/SSE (短连接)
-                       ▼
-┌──────────────────────────────────────────────────────────────┐
-│              中转服务器 (yunqiao.very.im)                     │
-│  - MCP 端点: /mcp (SSE)                                      │
-│  - 客户端: /device (WSS)                                     │
-│  - 无状态，只做路由转发                                       │
-└──────────────────────┬───────────────────────────────────────┘
-                       │ WSS (长连接)
-                       ▼
-┌──────────────────────────────────────────────────────────────┐
-│              客户机 (你的 Windows/Linux/Mac)                   │
-│  ┌──────────────────────────────────────────────────────┐    │
-│  │ 会话管理器 (Session Manager)                          │    │
-│  │  ├─ 工作区 A: C:\project_a                           │    │
-│  │  ├─ 工作区 B: D:\project_b                           │    │
-│  │  └─ (当前默认，智能体操作自动指向此会话)               │    │
-│  │                                                      │    │
-│  │ 持久化: ~/.yunqiao/sessions/001.json                 │    │
-│  └──────────────────────────────────────────────────────┘    │
-└──────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│                     AI Agent (沙箱)                       │
+│  node skills/mcp-client.mjs <配对码> call <工具> <参数>  │
+└──────────────┬──────────────────────────────────────────┘
+               │ MCP/SSE (HTTPS)
+               ▼
+┌─────────────────────────────────────────────────────────┐
+│                  中转服务器 (VPS)                         │
+│  your-server.com:443                                     │
+│  ├─ /mcp    → MCP Server (SSE)                           │
+│  └─ /device → WebSocket Relay (WSS)                      │
+└──────────────┬──────────────────────────────────────────┘
+               │ WebSocket (WSS)
+               ▼
+┌─────────────────────────────────────────────────────────┐
+│                  你的电脑 (Windows/Linux/macOS)           │
+│  python main.py                                          │
+│  ┌─────────────────────────────────────────────────┐     │
+│  │ 配对码: 984979                                   │     │
+│  │ [📋 复制并发送给 Agent]                          │     │
+│  └─────────────────────────────────────────────────┘     │
+└─────────────────────────────────────────────────────────┘
 ```
+
+### 工作流程
+
+1. **客户机**启动 → 连接中继服务器 → 生成 **6 位配对码**
+2. **把配对码发给 AI Agent**（复制按钮自动复制 `云桥 配对码 984979`）
+3. **AI Agent** 用配对码通过 MCP 协议连接中继 → 找到你的设备
+4. **配对完成** → Agent 可以远程执行命令、读写文件、查系统信息
 
 ---
 
@@ -105,21 +99,21 @@ node skills/mcp-client.mjs <配对码> list
 cd relay
 npm install
 
-# 生成 PSK（首次启动自动生成）
+# 首次启动自动生成 密钥
 export PORT=9876
 node server.js
 ```
 
-配合 Nginx + Let's Encrypt 配置 HTTPS：
+建议用 Nginx 反代 + Let's Encrypt 配置 HTTPS：
 
 ```nginx
 # /etc/nginx/sites-available/yunqiao
 server {
     listen 443 ssl;
-    server_name yunqiao.very.im;
+    server_name your-server.com;
 
-    ssl_certificate /etc/letsencrypt/live/yunqiao.very.im/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/yunqiao.very.im/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/your-server.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/your-server.com/privkey.pem;
 
     # MCP 端点（SSE）
     location /mcp {
@@ -131,7 +125,7 @@ server {
         proxy_buffering off;
     }
 
-    # WebSocket 设备通道
+    # WebSocket 中继
     location /device {
         proxy_pass http://127.0.0.1:9876;
         proxy_http_version 1.1;
@@ -143,11 +137,15 @@ server {
 }
 ```
 
-> **中转地址:** `wss://yunqiao.very.im/device`
+> **生产环境已部署**：`wss://your-server.com/device`
+
+---
 
 ### 2. 客户机代理
 
-在你的电脑上运行：
+在你需要远程控制的电脑上运行。
+
+#### 桌面客户端（推荐）
 
 ```bash
 cd client
@@ -155,24 +153,38 @@ pip install -r requirements.txt
 python main.py
 ```
 
-#### 无头模式（无 GUI）
+打开后会看到一个窗口：
+
+| 区域 | 说明 |
+|------|------|
+| **连接状态** | 顶部状态灯 + 延迟显示 |
+| **当前连接** | 本地客户端 → 中转服务器 → 上游 Agent 拓扑 |
+| **Agent 活动** | 工具网格（执行中的工具绿色闪烁，完成的变灰） |
+| **配对码** | 6 位数字，右键复制 |
+| **日志** | 实时显示连接和操作日志 |
+
+**首次使用**：点击 ⚙ 设置，填入中继地址和 密钥。
+
+#### 轻量后台版（无界面）
 
 ```bash
-set RELAY_PSK=your-psk
-set RELAY_URL=wss://yunqiao.very.im/device
+set RELAY_密钥=your-密钥
+set RELAY_URL=wss://your-server.com/device
 python agent.py
 ```
 
-#### 开机自启（Windows）
+#### 打包 exe
 
 ```bash
 pip install pyinstaller
 pyinstaller --onefile --windowed --name "云桥MCP" main.py
 ```
 
+---
+
 ### 3. 智能体 Skill
 
-AI Agent 使用 MCP 客户端连接：
+给 AI Agent 使用的 MCP 客户端。
 
 ```bash
 # 列出工具
@@ -181,20 +193,20 @@ node skills/mcp-client.mjs <配对码> list
 # 列出设备
 node skills/mcp-client.mjs <配对码> call list_devices '{}'
 
-# 创建会话（推荐使用新工具）
-node skills/mcp-client.mjs <配对码> call create_session '{"workDir":"D:\\project"}'
+# 远程执行命令
+node skills/mcp-client.mjs <配对码> call execute_command '{"deviceId":"xxx","command":"dir"}'
 
-# 在会话中执行命令
-node skills/mcp-client.mjs <配对码> call exec '{"command":"git status"}'
-
-# 读取文件（相对路径基于会话 cwd）
-node skills/mcp-client.mjs <配对码> call read_file '{"path":"src/main.rs"}'
+# 读取文件
+node skills/mcp-client.mjs <配对码> call read_file '{"deviceId":"xxx","path":"C:\\path\\to\\file.txt"}'
 
 # 写入文件
-node skills/mcp-client.mjs <配对码> call write_file '{"path":"src/main.rs","content":"..."}'
+node skills/mcp-client.mjs <配对码> call write_file '{"deviceId":"xxx","path":"C:\\path\\to\\file.txt","content":"hello"}'
+
+# 获取系统信息
+node skills/mcp-client.mjs <配对码> call get_device_info '{"deviceId":"xxx"}'
 ```
 
-设置环境变量自动带配对码：
+也支持通过环境变量设置配对码：
 
 ```bash
 export MCP_AUTH_CODE=984979
@@ -205,92 +217,34 @@ node skills/mcp-client.mjs list
 
 ## 工具参考
 
-### 新版工具（推荐，v2.0）
+### MCP 工具
 
 | 工具 | 说明 | 参数 |
 |------|------|------|
-| `create_session` | 创建新会话并设为当前默认 | workDir, name?, code |
-| `exec` | 在当前会话执行命令（保持 cwd） | command, timeout?, code |
-| `read_file` | 读文件（相对路径基于会话 cwd） | path, code |
-| `write_file` | 写文件（相对路径基于会话 cwd） | path, content, code |
-| `close_session` | 关闭当前会话 | code |
-| `list_sessions` | 列出所有会话 | code |
-| `switch_session` | 切换到指定会话 | sessionId, code |
-| `get_device_info` | 获取系统信息 | code |
+| `list_devices` | 列出所有已连接设备（含配对状态） | 无 |
+| `execute_command` | 远程执行 shell 命令 | deviceId, command, timeout? |
+| `read_file` | 读取远程文件 | deviceId, path |
+| `write_file` | 写入远程文件 | deviceId, path, content |
+| `get_device_info` | 获取系统信息（OS、CPU、内存等） | deviceId |
 
-### 旧版工具（兼容）
+### 配对码
 
-| 工具 | 说明 |
-|------|------|
-| `list_devices` | 列出设备 |
-| `execute_command` | 执行命令（需传 deviceId + 绝对路径） |
-| `read_file_old` | 读文件（需传绝对路径） |
-| `write_file_old` | 写文件（需传绝对路径） |
-
----
-
-## 会话管理（v2.0 新特性）
-
-### 什么是会话
-
-会话（Session）是一个**持久化的工作区**，智能体在同一会话中执行的命令**共享工作目录和环境变量**。
-
-### 会话文件
-
-保存在 `~/.yunqiao/sessions/` 目录下：
-
-```json
-// ~/.yunqiao/sessions/001.json
-{
-  "id": "001",
-  "name": "openclaw 项目",
-  "workDir": "D:\\aicodework\\github\\openclaw",
-  "cwd": "D:\\aicodework\\github\\openclaw\\src",
-  "createdAt": "2026-07-31T10:00:00",
-  "lastActive": "2026-07-31T10:18:00"
-}
-```
-
-### 会话管理原则
-
-- **一次创建，持续使用** — 会话创建后一直存在，直到主动关闭
-- **智能体零感知** — 智能体只操作当前默认会话，不需要传会话名
-- **用户通过 UI 切换** — 在客户端界面上选择哪个会话是当前默认
-- **中转服务器挂了不影响** — 会话状态在客户端，换个中转地址继续用
-- **客户端重启可恢复** — 会话文件持久化到磁盘，重启后自动加载
-
-### 典型工作流
-
-```
-# 创建会话（项目 A）
-智能体: create_session("D:\project_a")
-客户端: 创建会话，设为默认
-
-# 操作项目 A
-智能体: exec("dir /b")          → 在 D:\project_a 下执行
-智能体: read_file("src/main.rs") → 相对路径自动解析
-
-# 用户切换会话（UI 上操作）
-用户: 点"新建会话"，选 D:\project_b
-客户端: 项目 B 变成当前默认
-
-# 智能体自动在新的默认会话操作
-智能体: exec("npm test")        → 在 D:\project_b 下执行
-智能体: read_file("package.json") → 相对路径指向 D:\project_b
-```
+- 6 位随机数字
+- 客户机断开后自动失效
+- 支持重新生成
+- 复制按钮自动生成 `云桥 配对码 xxxxxx` 格式，方便直接发给 AI Agent
 
 ---
 
 ## 安全
 
-| 安全措施 | 说明 |
-|---------|------|
-| **PSK 密钥** | 中转服务器与客户端之间预共享密钥，通过 Header 传递 |
-| **配对码** | 6 位数字验证码，客户端 UI 显示，智能体调用时需传入 |
-| **命令白名单** | 可限制允许执行的命令（如 `ALLOWED_COMMANDS=git,node,npm`） |
-| **文件路径白名单** | 可限制文件读写范围（如 `ALLOWED_FILE_PREFIX=D:\project`） |
-| **设备白名单** | 可限制允许连接的设备名称 |
-| **HTTPS/WSS** | 所有通信均加密传输 |
+| 机制 | 说明 |
+|------|------|
+| **密钥 预共享密钥** | 中继服务器和客户机双向认证 |
+| **设备配对码** | 临时 6 位数字，一次连接有效 |
+| **命令白名单** | `ALLOWED_COMMANDS` 环境变量配置 |
+| **文件路径白名单** | `ALLOWED_FILE_PREFIX` 限制读写范围 |
+| **HTTPS/WSS** | 全链路加密通信 |
 
 ---
 
@@ -300,36 +254,35 @@ node skills/mcp-client.mjs list
 
 ```
 yunqiao-mcp/
-├── relay/
-│   ├── server.js        # 中转服务器 (Node.js, HTTP + WSS + MCP/SSE)
+├── relay/              ← 中转服务器（Node.js）
+│   ├── server.js       ← 主服务（HTTP + WebSocket + MCP）
 │   └── package.json
-├── client/
-│   ├── main.py          # 桌面客户端（tkinter 版，带 UI）
-│   ├── agent.py         # 无头客户端代理（带会话管理）
-│   ├── requirements.txt
-│   ├── ui.html          # HTML 前端 (pywebview)
-│   └── desktop_monitor.py
-├── skills/
-│   ├── mcp-client.mjs   # MCP 客户端（智能体端）
-│   └── references/
+├── client/             ← 客户机代理（Python）
+│   ├── main.py         ← 桌面客户端（tkinter）
+│   ├── ui.html         ← HTML 前端（pywebview）
+│   ├── desktop_monitor.py  ← 旧版桌面面板
+│   └── agent.py        ← 轻量后台版
+├── skills/             ← 智能体 Skill
+│   ├── mcp-client.mjs  ← MCP 客户端（Node.js）
+│   └── references/     ← 参考源码
 └── README.md
 ```
 
-### 快速启动
+### 本地开发
 
 ```bash
-# 中转服务器
+# 中继服务器
 cd relay && npm install && node server.js
 
-# 客户端（无头版）
-cd client && pip install -r requirements.txt && python agent.py
+# 客户机（另一个终端）
+cd client && pip install -r requirements.txt && python main.py
 
-# 验证连接
+# 测试连接（第三个终端）
 node skills/mcp-client.mjs list
 ```
 
 ---
 
 <p align="center">
-  <sub>MIT License · 开源 · 仅供学习使用</sub>
+  <sub>MIT License · 开源 · 自由使用</sub>
 </p>
