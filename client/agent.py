@@ -283,6 +283,13 @@ class Agent:
             cwd_str = cwd.cwd if cwd else os.getcwd()
             self._emit(self.on_log, f"[执行] {cmd[:80]}")
             self._emit(self.on_log, f"[目录] {cwd_str}")
+            out = result.get("stdout", "")
+            err = result.get("stderr", "")
+            if out:
+                for line in out.strip().split('\n')[:10]:
+                    self._emit(self.on_log, f"  {line[:120]}")
+            if err:
+                self._emit(self.on_log, f"  ❌ {err[:120]}")
             return
         
         if msg_type == "read_file":
@@ -342,6 +349,16 @@ class Agent:
                 cwd_str = cwd.cwd if cwd else os.getcwd()
                 self._emit(self.on_log, f"[执行] {payload.get('command','')[:80]}")
                 self._emit(self.on_log, f"[目录] {cwd_str}")
+                # 显示结果摘要
+                out = result.get("stdout", "")
+                err = result.get("stderr", "")
+                if out:
+                    for line in out.strip().split('\n')[:10]:
+                        self._emit(self.on_log, f"  {line[:120]}")
+                if err:
+                    self._emit(self.on_log, f"  ❌ {err[:120]}")
+                if result.get("exitCode") != 0:
+                    self._emit(self.on_log, f"  (退出码: {result.get('exitCode')})")
             elif op == "read_file":
                 self._emit(self.on_log, f"[读取] {payload.get('path','')}")
             elif op == "write_file":
