@@ -209,6 +209,24 @@ function checkAuthCode(device, code) {
   return true;
 }
 
+// 会话级配对码：首次带 code 调用验证成功后，该会话内后续调用免 code
+function getAuthedDevice(sessionState, userId, deviceId, code) {
+  // 无 code 时优先使用本会话已授权设备
+  if (!deviceId && !code && sessionState.authedDeviceId) {
+    const d = devices.get(sessionState.authedDeviceId);
+    if (d && d.userId === userId) return { device: d };
+  }
+  const device = deviceId ? devices.get(deviceId) : getDefaultDevice(userId);
+  if (!device) return { device: null, error: '没有已连接的设备' };
+  if (code) {
+    if (!checkAuthCode(device, code)) return { device: null, error: '验证码错误' };
+    sessionState.authedDeviceId = device.id;
+    return { device };
+  }
+  if (sessionState.authedDeviceId === device.id) return { device };
+  return { device: null, error: '需要配对码（请先调用一次带配对码的工具完成授权）' };
+}
+
 function broadcastToDevices(msg, userId) {
   // 匿名（无 userId）不广播给任何设备
   if (!userId) return;
@@ -316,6 +334,8 @@ function createMcpServer(userId, authInfo = {}) {
     name: 'yunqiao',
     version: '2.0.0',
   });
+  // 会话级状态：首次配对码验证成功后，该会话内免 code
+  const sessionState = { authedDeviceId: null };
 
   server.registerTool('list_devices', {
     description: '列出所有已连接到中转的私人电脑设备',
@@ -441,22 +461,19 @@ function createMcpServer(userId, authInfo = {}) {
 
   // 会话管理
   const sessionTools = [
-    ['create_session', '在远程电脑上创建一个新的工作会话', { workDir: z.string(), name: z.string().optional(), code: z.string() }],
-    ['exec', '在当前默认会话中执行 shell 命令', { command: z.string(), timeout: z.number().optional(), code: z.string() }],
-    ['read_file', '在当前默认会话中读取文件', { path: z.string(), code: z.string() }],
-    ['write_file', '在当前默认会话中写入文件', { path: z.string(), content: z.string(), code: z.string() }],
-    ['close_session', '关闭当前默认会话', { code: z.string() }],
-    ['list_sessions', '列出远程电脑上所有已创建的工作会话', { code: z.string() }],
-    ['switch_session', '切换到指定的会话', { sessionId: z.string(), code: z.string() }],
+    ['create_session', '在远程电脑上创建一个新的工作会话', { workDir: z.string(), name: z.string().optional(), code: z.string().optional() }],
+    ['exec', '在当前默认会话中执行 shell 命令', { command: z.string(), timeout: z.number().optional(), code: z.string().optional() }],
+    ['read_file', '在当前默认会话中读取文件', { path: z.string(), code: z.string().optional() }],
+    ['write_file', '在当前默认会话中写入文件', { path: z.string(), content: z.string(), code: z.string().optional() }],
+    ['close_session', '关闭当前默认会话', { code: z.string().optional() }],
+    ['list_sessions', '列出远程电脑上所有已创建的工作会话', { code: z.string().optional() }],
+    ['switch_session', '切换到指定的会话', { sessionId: z.string(), code: z.string().optional() }],
   ];
 
   for (const [name, desc, schema] of sessionTools) {
     server.registerTool(name, { description: desc, inputSchema: z.object(schema) }, wrapTool(userId, async (params) => {
-      const device = getDefaultDevice(userId);
-      if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
-      if (!checkAuthCode(device, params.code)) {
-        return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
-      }
+      const { device, error } = getAuthedDevice(sessionState, userId, undefined, params.code);
+      if (!device) return { content: [{ type: 'text', text: `Error: ${error}` }], isError: true };
       const op = name.replace('_session', '');
       const result = await handleSessionOp(op === 'exec' ? 'exec' : op, params, device.id);
       return formatResult(name, result, params);
@@ -467,12 +484,11 @@ function createMcpServer(userId, authInfo = {}) {
   server.registerTool('execute_command', {
     description: '[旧版] 在指定的私人电脑上执行 shell 命令',
     inputSchema: z.object({
-      deviceId: z.string().optional(), command: z.string(), timeout: z.number().optional(), code: z.string(),
+      deviceId: z.string().optional(), command: z.string(), timeout: z.number().optional(), code: z.string().optional(),
     }),
   }, wrapTool(userId, async ({ deviceId, code, command, timeout }) => {
-    const device = deviceId ? devices.get(deviceId) : getDefaultDevice(userId);
-    if (!device) return { content: [{ type: 'text', text: 'Error: device not found' }], isError: true };
-    if (!checkAuthCode(device, code)) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
+    const { device, error } = getAuthedDevice(sessionState, userId, deviceId, code);
+    if (!device) return { content: [{ type: 'text', text: `Error: ${error}` }], isError: true };
     if (!checkCommandAllowed(command)) return { content: [{ type: 'text', text: 'Error: command not allowed' }], isError: true };
     const output = await sendAndWait('execute_command', { command, timeout }, device.id);
     const o = output.payload;
@@ -481,11 +497,10 @@ function createMcpServer(userId, authInfo = {}) {
 
   server.registerTool('read_file_old', {
     description: '[旧版] 读取私人电脑上的文件',
-    inputSchema: z.object({ deviceId: z.string().optional(), code: z.string(), path: z.string() }),
+    inputSchema: z.object({ deviceId: z.string().optional(), code: z.string().optional(), path: z.string() }),
   }, wrapTool(userId, async ({ deviceId, code, path }) => {
-    const device = deviceId ? devices.get(deviceId) : getDefaultDevice(userId);
-    if (!device) return { content: [{ type: 'text', text: 'Error: device not found' }], isError: true };
-    if (!checkAuthCode(device, code)) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
+    const { device, error } = getAuthedDevice(sessionState, userId, deviceId, code);
+    if (!device) return { content: [{ type: 'text', text: `Error: ${error}` }], isError: true };
     if (!checkPathAllowed(path)) return { content: [{ type: 'text', text: 'Error: path outside allowed prefix' }], isError: true };
     const result = await sendAndWait('read_file', { path }, device.id);
     const o = result.payload;
@@ -494,11 +509,10 @@ function createMcpServer(userId, authInfo = {}) {
 
   server.registerTool('write_file_old', {
     description: '[旧版] 写入私人电脑上的文件',
-    inputSchema: z.object({ deviceId: z.string().optional(), code: z.string(), path: z.string(), content: z.string() }),
+    inputSchema: z.object({ deviceId: z.string().optional(), code: z.string().optional(), path: z.string(), content: z.string() }),
   }, wrapTool(userId, async ({ deviceId, code, path, content }) => {
-    const device = deviceId ? devices.get(deviceId) : getDefaultDevice(userId);
-    if (!device) return { content: [{ type: 'text', text: 'Error: device not found' }], isError: true };
-    if (!checkAuthCode(device, code)) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
+    const { device, error } = getAuthedDevice(sessionState, userId, deviceId, code);
+    if (!device) return { content: [{ type: 'text', text: `Error: ${error}` }], isError: true };
     if (!checkPathAllowed(path)) return { content: [{ type: 'text', text: 'Error: path outside allowed prefix' }], isError: true };
     const result = await sendAndWait('write_file', { path, content }, device.id);
     const o = result.payload;
@@ -530,11 +544,10 @@ function createMcpServer(userId, authInfo = {}) {
 
   server.registerTool('get_device_info', {
     description: '获取远程电脑的系统信息',
-    inputSchema: z.object({ code: z.string() }),
+    inputSchema: z.object({ code: z.string().optional() }),
   }, wrapTool(userId, async ({ code }) => {
-    const device = getDefaultDevice(userId);
-    if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
-    if (!checkAuthCode(device, code)) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
+    const { device, error } = getAuthedDevice(sessionState, userId, undefined, code);
+    if (!device) return { content: [{ type: 'text', text: `Error: ${error}` }], isError: true };
     const result = await sendAndWait('get_device_info', {}, device.id);
     const info = result.payload;
     const gb = (b) => (b / 1024 / 1024 / 1024).toFixed(1) + ' GB';
@@ -548,22 +561,20 @@ function createMcpServer(userId, authInfo = {}) {
 
   server.registerTool('notify', {
     description: '发送通知消息到客户端日志',
-    inputSchema: z.object({ text: z.string(), code: z.string() }),
+    inputSchema: z.object({ text: z.string(), code: z.string().optional() }),
   }, wrapTool(userId, async ({ text, code }) => {
-    const device = getDefaultDevice(userId);
-    if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
-    if (!checkAuthCode(device, code)) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
+    const { device, error } = getAuthedDevice(sessionState, userId, undefined, code);
+    if (!device) return { content: [{ type: 'text', text: `Error: ${error}` }], isError: true };
     sendJSON(device.ws, { type: 'notify', text });
     return { content: [{ type: 'text', text: '已发送' }] };
   }, 'notify'));
 
   server.registerTool('download', {
     description: '下载远程电脑上的文件（返回 base64 编码，受该用户 maxDownloadMB 限制）',
-    inputSchema: z.object({ path: z.string(), code: z.string() }),
+    inputSchema: z.object({ path: z.string(), code: z.string().optional() }),
   }, wrapTool(userId, async ({ path, code }) => {
-    const device = getDefaultDevice(userId);
-    if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
-    if (!checkAuthCode(device, code)) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
+    const { device, error } = getAuthedDevice(sessionState, userId, undefined, code);
+    if (!device) return { content: [{ type: 'text', text: `Error: ${error}` }], isError: true };
     if (!checkPathAllowed(path)) return { content: [{ type: 'text', text: 'Error: path outside allowed prefix' }], isError: true };
     const result = await sendAndWait('download', { path }, device.id);
     const o = result.payload;
