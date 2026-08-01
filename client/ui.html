@@ -521,7 +521,6 @@ function handleBridge(action, data) {
       btn.style.background = '#222';
       btn.style.color = '#ededed';
     }
-    }
   }
 }
 function setConn状态(status) {
@@ -539,6 +538,10 @@ function setConn状态(status) {
 
 
 function toggleConnect() {
+  var btn = document.getElementById('connectBtn');
+  if (btn.textContent === '连接') {
+    addLog('status', '正在连接中转服务器...');
+  }
   window.pywebview.api.toggle_connect();
 }
 
