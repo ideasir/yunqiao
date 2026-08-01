@@ -696,9 +696,16 @@ function closeConfigModal() {
 function saveConfigModal() {
   var url = document.getElementById('modalRelayUrl').value.trim();
   var key = document.getElementById('modalRelayKey').value.trim();
+  // 自动补 wss:// 前缀
+  if (url && !url.startsWith('ws://') && !url.startsWith('wss://')) {
+    url = 'wss://' + url;
+  }
+  // 自动补 /device 路径
+  if (url && !url.endsWith('/device')) {
+    url = url + '/device';
+  }
   if (url) document.getElementById('relayUrl').textContent = url;
   if (key) state.relayKey = key;
-  // 保存到后端配置文件
   try {
     if (window.pywebview && window.pywebview.api) {
       window.pywebview.api.save_settings(key, url);
