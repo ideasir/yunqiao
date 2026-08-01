@@ -189,11 +189,19 @@ class Agent:
         
         while self._running:
             try:
-                async with websockets.connect(
-                    self.relay_url,
-                    extra_headers={"X-Key": self.relay_key},
-                    ping_interval=30
-                ) as ws:
+                try:
+                    ws = await websockets.connect(
+                        self.relay_url,
+                        extra_headers={"X-Key": self.relay_key},
+                        ping_interval=30
+                    )
+                except TypeError:
+                    ws = await websockets.connect(
+                        self.relay_url,
+                        additional_headers={"X-Key": self.relay_key},
+                        ping_interval=30
+                    )
+                async with ws:
                     self._ws = ws
                     self.connected = True
                     self._emit(self.on_log, "已连接到中继服务器")
