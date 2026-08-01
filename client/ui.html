@@ -533,40 +533,21 @@ function setConn状态(status) {
 function toggleConnect() {
   var btn = document.getElementById('connectBtn');
   if (btn.textContent === '连接') {
-    if (window.pywebview && window.pywebview.api) {
-      window.pywebview.api.toggle_connect().then(function() {
-        btn.textContent = '断开';
-        btn.style.background = '#7f1d1d';
-        btn.style.color = '#fca5a5';
-        addLog('status', '正在连接中转服务器...');
-      });
-      return;
-    }
-    connectRelay();
-    return;
+    window.pywebview.api.toggle_connect().then(function() {
+      btn.textContent = '断开';
+      btn.style.background = '#7f1d1d';
+      btn.style.color = '#fca5a5';
+      addLog('status', '正在连接中转服务器...');
+    });
   } else {
-    // 断开
-    if (state.ws) {
-      try { state.ws.close(); } catch(e) {}
-      state.ws = null;
-    }
-    if (window.pywebview && window.pywebview.api) {
-      window.pywebview.api.toggle_connect().then(function() {
-        btn.textContent = '连接';
-        btn.style.background = '';
-        btn.style.color = '';
-        document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
-        document.getElementById('relayStatus').textContent = '未连接';
-        addLog('info', '已断开连接');
-      });
-    } else {
+    window.pywebview.api.toggle_connect().then(function() {
       btn.textContent = '连接';
       btn.style.background = '';
       btn.style.color = '';
       document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
       document.getElementById('relayStatus').textContent = '未连接';
       addLog('info', '已断开连接');
-    }
+    });
   }
 }
 
