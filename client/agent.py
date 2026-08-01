@@ -299,12 +299,13 @@ class Agent:
     
     # ── 命令执行 ──────────────────────────────
     
-    async def _exec_cmd(self, command, timeout):
+    async def _exec_cmd(self, command, timeout, cwd=None):
         try:
             proc = await asyncio.create_subprocess_shell(
                 command,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                cwd=cwd,
             )
             try:
                 stdout, stderr = await asyncio.wait_for(
@@ -370,7 +371,7 @@ class Agent:
                 session = self.sessions.get_current()
                 if not session:
                     return {"exitCode": 1, "stdout": "", "stderr": "没有当前会话", "killed": False}
-                return await self._exec_cmd(payload.get("command", ""), payload.get("timeout", 30000))
+                return await self._exec_cmd(payload.get("command", ""), payload.get("timeout", 30000), session.cwd)
             elif op == "read_file":
                 session = self.sessions.get_current()
                 if not session:
