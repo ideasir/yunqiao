@@ -59,7 +59,10 @@ def get_agent():
             if "agent" in s:
                 notify_ui("agent_status", {"status": s["agent"]})
             else:
-                notify_ui("relay_status", {"status": "connected" if s.get("connected") else "disconnected"})
+                notify_ui("relay_status", {
+                    "status": "connected" if s.get("connected") else "disconnected",
+                    "latency": s.get("latency", 0)
+                })
         agent.on_status = on_status
         agent.on_result = lambda r: notify_ui("command_result", {"payload": r})
     return agent

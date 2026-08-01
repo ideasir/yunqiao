@@ -199,6 +199,7 @@ class Agent:
         
         while self._running:
             try:
+                t0 = time.time()
                 try:
                     ws = await websockets.connect(
                         self.relay_url,
@@ -214,8 +215,9 @@ class Agent:
                 async with ws:
                     self._ws = ws
                     self.connected = True
+                    latency = int((time.time() - t0) * 1000)
                     self._emit(self.on_log, "已连接到中继服务器")
-                    self._emit(self.on_status, {"connected": True})
+                    self._emit(self.on_status, {"connected": True, "latency": latency})
                     
                     # 注册设备
                     await ws.send(json.dumps({

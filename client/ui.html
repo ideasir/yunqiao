@@ -530,6 +530,11 @@ function handleBridge(action, data) {
       dot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
       status.textContent = '已连接';
       status.style.color = '#4ade80';
+      // 显示延迟
+      var rl = document.getElementById('relayLatency');
+      if (rl && data.latency) { rl.textContent = data.latency + ' ms'; rl.style.color = '#4ade80'; }
+      var rcl = document.getElementById('relayClientLatency');
+      if (rcl && data.latency) { rcl.textContent = data.latency + ' ms'; rcl.style.color = '#4ade80'; }
       btn.textContent = '断开';
       btn.style.background = '#7f1d1d';
       btn.style.color = '#fca5a5';
