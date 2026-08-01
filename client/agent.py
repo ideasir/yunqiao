@@ -121,9 +121,13 @@ class Agent:
         # 会话管理
         self.sessions = SessionManager()
         
-        # 默认工作区：项目根目录下的 worker 目录
-        script_dir = Path(__file__).parent.parent  # client/ 的上一级 = 项目根
-        self.default_work_dir = str(script_dir / 'worker')
+        # 默认工作区：打包成 exe 时在 exe 旁边（绿色版便携，文件持久）；
+        # 源码运行时在项目根。不能用 __file__（PyInstaller 里指向临时解压目录，文件会"消失"）
+        if getattr(sys, 'frozen', False):
+            base_dir = Path(sys.executable).parent  # exe 所在目录
+        else:
+            base_dir = Path(__file__).parent.parent  # 项目根
+        self.default_work_dir = str(base_dir / 'worker')
         os.makedirs(self.default_work_dir, exist_ok=True)
         self.sessions.create(self.default_work_dir, '默认工作区')
         

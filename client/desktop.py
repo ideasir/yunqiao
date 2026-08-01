@@ -221,8 +221,12 @@ class Api:
                 "currentId": sl.get("defaultId"),
                 "workDir": agent.default_work_dir
             }
-        # Agent 未启动时也返回默认工作区
-        dw = str(Path(__file__).parent.parent / 'worker')
+        # Agent 未启动时也返回默认工作区（与 agent.py 一致：exe 旁/worker 或项目根/worker）
+        if getattr(sys, 'frozen', False):
+            base = Path(sys.executable).parent
+        else:
+            base = Path(__file__).parent.parent
+        dw = str(base / 'worker')
         return {
             "sessions": [{"id": "default", "name": "默认工作区", "workDir": dw, "cwd": dw, "isDefault": True}],
             "currentId": "default",
