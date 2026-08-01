@@ -120,6 +120,7 @@ class Api:
             "platform": "Windows",
             "relayStatus": "已连接" if (a and a.connected) else "未连接",
             "connected": a is not None and a.connected,
+            "homeDir": str(Path.home()),  # 用户主目录（新建工作区弹窗的默认目录，避免硬编码 C:\Users\Administrator 导致无权限）
         }
 
     def save_settings(self, key, relay_url, auto_connect=False):
@@ -235,17 +236,21 @@ class Api:
 
     def create_session(self, work_dir, name=None):
         """在远端创建新工作区（用户通过 UI 设定，不走 #5 限制）"""
-        a = agent or get_agent()  # 未连接时也创建本地实例（连接后自动同步）
-        if not work_dir:
-            return {"success": False, "error": "工作目录不能为空"}
-        work_dir = os.path.abspath(work_dir)
-        # 目录不存在则创建（否则 Agent 之后在该目录执行命令会失败）
         try:
-            os.makedirs(work_dir, exist_ok=True)
+            a = agent or get_agent()  # 未连接时也创建本地实例（连接后自动同步）
+            if not work_dir:
+                return {"success": False, "error": "工作目录不能为空"}
+            work_dir = os.path.abspath(work_dir)
+            # 目录不存在则创建（否则 Agent 之后在该目录执行命令会失败）
+            try:
+                os.makedirs(work_dir, exist_ok=True)
+            except Exception as e:
+                return {"success": False, "error": f"目录不可用: {e}"}
+            result = a.sessions.create(work_dir, name)
+            return {"success": True, "session": result}
         except Exception as e:
-            return {"success": False, "error": f"目录不可用: {e}"}
-        result = a.sessions.create(work_dir, name)
-        return {"success": True, "session": result}
+            # 兜底：把真实异常返回给 UI（否则前端只看到无提示的失败）
+            return {"success": False, "error": f"创建失败: {e}"}
 
     def close_session(self, session_id):
         """关闭并删除一个工作区（后端会话）"""

@@ -680,7 +680,7 @@ function refreshPairCode() {
 
 function openSessionModal() {
   document.getElementById('modalSessionName').value = '工作区 ' + (state.sessions.length + 1);
-  document.getElementById('modalSessionDir').value = state.workDir || 'C:\\Users\\Administrator';
+  document.getElementById('modalSessionDir').value = state.workDir || state.homeDir || 'C:\\Users\\Administrator';
   var overlay = document.getElementById('sessionModal');
   var content = document.getElementById('sessionModalContent');
   overlay.style.opacity = '1';
@@ -711,7 +711,7 @@ function createSession() {
 
 function saveSessionModal() {
   var name = document.getElementById('modalSessionName').value.trim() || '工作区';
-  var dir = document.getElementById('modalSessionDir').value.trim() || 'C:\\Users\\Administrator';
+  var dir = document.getElementById('modalSessionDir').value.trim() || state.homeDir || 'C:\\Users\\Administrator';
   // 桌面端：调后端 API 创建会话（影响 Agent 实际工作目录）
   if (window.pywebview && window.pywebview.api && window.pywebview.api.create_session) {
     window.pywebview.api.create_session(dir, name).then(function(r) {
@@ -721,7 +721,7 @@ function saveSessionModal() {
       } else {
         addLog('err', '创建工作区失败: ' + ((r && r.error) || ''));
       }
-    }).catch(function() { addLog('err', '创建工作区失败'); });
+    }).catch(function(e) { addLog('err', '创建工作区失败: ' + ((e && e.message) || e || '未知错误')); });
   } else {
     // 浏览器直连：纯前端模式
     var id = 's_' + Date.now().toString(36);
@@ -842,9 +842,9 @@ function setDefaultSession(id) {
         loadSessions();
         addLog('done', '工作区已切换: ' + (s ? s.name : id));
       } else {
-        addLog('err', '切换工作区失败');
+        addLog('err', '切换工作区失败: ' + ((r && r.error) || ''));
       }
-    });
+    }).catch(function(e) { addLog('err', '切换工作区失败: ' + ((e && e.message) || e || '未知错误')); });
   } else {
     state.currentSessionId = id;
     renderSidebar();
@@ -864,7 +864,7 @@ function closeSession(id) {
         } else {
           addLog('err', '关闭会话失败: ' + ((r && r.error) || ''));
         }
-      }).catch(function() { addLog('err', '关闭会话失败'); });
+      }).catch(function(e) { addLog('err', '关闭会话失败: ' + ((e && e.message) || e || '未知错误')); });
     } else {
       state.sessions = state.sessions.filter(function(s) { return s.id !== id; });
       if (state.currentSessionId === id) { state.currentSessionId = state.sessions.length > 0 ? state.sessions[0].id : null; }
@@ -1113,6 +1113,39 @@ function renderActivityDots(a) {
   el.title = 'Agent 活跃: ' + used + '/' + total + (a && a.runningTasks ? ' · 任务 ' + a.runningTasks : '') + (a && a.pendingCalls ? ' · 调用 ' + a.pendingCalls : '');
 }
 
+// 从后端获取状态（pywebview API 可能延迟注入）
+// 注意：必须在全局作用域声明（saveSessionModal/setDefaultSession/closeSession 都会调用 loadSessions）
+function loadStatus() {
+  if (window.pywebview && window.pywebview.api) {
+    window.pywebview.api.get_status().then(function(s) {
+      state.pairCode = s.pairCode || state.pairCode;
+      state.deviceName = s.deviceName || '';
+      state.platform = s.platform || '';
+      state.hostname = s.hostname || '';
+      state.homeDir = s.homeDir || '';
+      updateStatus();
+    });
+  } else {
+    setTimeout(loadStatus, 500);
+  }
+}
+// 从后端加载会话和工作区（pywebview API 可能延迟注入）
+function loadSessions() {
+  if (window.pywebview && window.pywebview.api) {
+    window.pywebview.api.get_sessions().then(function(data) {
+      if (data && data.sessions) {
+        state.sessions = data.sessions;
+        state.currentSessionId = data.currentId || '';
+        state.workDir = data.workDir || '';
+        updateStatus();
+        renderSidebar();
+      }
+    });
+  } else {
+    setTimeout(loadSessions, 500);
+  }
+}
+
 (function() {
   updateStatus();
   updateAgentBadge();
@@ -1122,37 +1155,7 @@ function renderActivityDots(a) {
   addLog('info', '工作区是持久的：文件存放在默认工作区，重开客户端不会丢失');
   updateHealth();
   setPermission('workspace');
-  // 从后端获取状态（pywebview API 可能延迟注入）
-  function loadStatus() {
-    if (window.pywebview && window.pywebview.api) {
-      window.pywebview.api.get_status().then(function(s) {
-        state.pairCode = s.pairCode || state.pairCode;
-        state.deviceName = s.deviceName || '';
-        state.platform = s.platform || '';
-        state.hostname = s.hostname || '';
-        updateStatus();
-      });
-    } else {
-      setTimeout(loadStatus, 500);
-    }
-  }
   setTimeout(loadStatus, 300);
-  // 从后端加载会话和工作区（pywebview API 可能延迟注入）
-  function loadSessions() {
-    if (window.pywebview && window.pywebview.api) {
-      window.pywebview.api.get_sessions().then(function(data) {
-        if (data && data.sessions) {
-          state.sessions = data.sessions;
-          state.currentSessionId = data.currentId || '';
-          state.workDir = data.workDir || '';
-          updateStatus();
-          renderSidebar();
-        }
-      });
-    } else {
-      setTimeout(loadSessions, 500);
-    }
-  }
   setTimeout(loadSessions, 300);
 })();
 
