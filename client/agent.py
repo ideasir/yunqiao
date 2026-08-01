@@ -153,6 +153,15 @@ class Agent:
             callback(*args)
         except Exception:
             pass
+
+    async def _send_ws(self, obj):
+        """向中继发送 JSON（ws 已关闭时静默失败，不抛异常——否则任务完成回传会未捕获崩溃）"""
+        ws = self._ws
+        if ws:
+            try:
+                await ws.send(json.dumps(obj))
+            except Exception:
+                pass
     
     def start(self):
         """启动 Agent（后台线程）"""
@@ -173,10 +182,7 @@ class Agent:
         self.auth_code = code
         if self._ws and self._loop:
             asyncio.run_coroutine_threadsafe(
-                self._ws.send(json.dumps({
-                    "type": "update_code",
-                    "authCode": code,
-                })),
+                self._send_ws({"type": "update_code", "authCode": code}),
                 self._loop
             )
     
@@ -193,12 +199,12 @@ class Agent:
         }
         if self._ws and self._loop:
             asyncio.run_coroutine_threadsafe(
-                self._ws.send(json.dumps({
+                self._send_ws({
                     "type": "agent_message",
                     "text": text,
                     "urgent": urgent,
                     "msgId": msg_id,
-                })),
+                }),
                 self._loop
             )
             self._emit(self.on_log, f"消息已发送，等待 Agent 读取: {text[:60]}")
@@ -210,10 +216,7 @@ class Agent:
         """任务队列拖拽排序后，向中继同步消息的新顺序（Agent 将按此顺序读取）"""
         if self._ws and self._loop:
             asyncio.run_coroutine_threadsafe(
-                self._ws.send(json.dumps({
-                    "type": "reorder_messages",
-                    "orderedIds": list(ordered_ids),
-                })),
+                self._send_ws({"type": "reorder_messages", "orderedIds": list(ordered_ids)}),
                 self._loop
             )
 
@@ -224,7 +227,7 @@ class Agent:
             self.pending_messages.pop(i, None)
         if ids and self._ws and self._loop:
             asyncio.run_coroutine_threadsafe(
-                self._ws.send(json.dumps({"type": "delete_messages", "ids": ids})),
+                self._send_ws({"type": "delete_messages", "ids": ids}),
                 self._loop
             )
         return len(ids)
@@ -235,7 +238,7 @@ class Agent:
             self.pending_messages[msg_id]["text"] = text
         if self._ws and self._loop:
             asyncio.run_coroutine_threadsafe(
-                self._ws.send(json.dumps({"type": "edit_message", "id": msg_id, "text": text})),
+                self._send_ws({"type": "edit_message", "id": msg_id, "text": text}),
                 self._loop
             )
 
@@ -252,7 +255,7 @@ class Agent:
     async def _request_ticket(self):
         waiter = self._loop.create_future()
         self._ticket_waiter = waiter
-        await self._ws.send(json.dumps({"type": "get_mcp_ticket", "requestId": "ticket"}))
+        await self._send_ws({"type": "get_mcp_ticket", "requestId": "ticket"})
         try:
             return await asyncio.wait_for(waiter, timeout=3)
         except asyncio.TimeoutError:
@@ -503,10 +506,7 @@ class Agent:
             return
     
     async def _send(self, msg_type, rid, payload):
-        if self._ws:
-            await self._ws.send(json.dumps({
-                "type": msg_type, "requestId": rid, "payload": payload
-            }))
+        await self._send_ws({"type": msg_type, "requestId": rid, "payload": payload})
     
     # ── 命令执行 ──────────────────────────────
     
@@ -563,12 +563,7 @@ class Agent:
 
     async def _send_task_result(self, task_id, result):
         """taskId 放顶层（relay 按 msg.taskId 匹配），payload 是结果"""
-        if self._ws:
-            await self._ws.send(json.dumps({
-                "type": "task_result",
-                "taskId": task_id,
-                "payload": result,
-            }))
+        await self._send_ws({"type": "task_result", "taskId": task_id, "payload": result})
     
     def _check_path(self, path):
         """检查路径是否在允许范围内（管理员白名单 + 工作区）"""

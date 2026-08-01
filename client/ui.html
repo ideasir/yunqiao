@@ -296,12 +296,9 @@ function setLogFilter(f) {
 }
 function addLog(type, text) {
   var _now = Date.now();
-  // 连续相同文本跳过
-  if (text === _lastLogText) return;
-  // 状态类日志快速重复跳过（3秒内同类型状态）
-  if (type === 'status' || type === 'info' || type === 'done') {
-    if (type === _lastLogType && _now - _lastLogTime < 3000) return;
-  }
+  // 只去重 3 秒内同类型同文本的重复推送（防事件刷屏）；不同文本/不同时间正常记录，
+  // 否则用户连续发两条相同消息时第二条日志会被吞掉
+  if (text === _lastLogText && type === _lastLogType && _now - _lastLogTime < 3000) return;
   _lastLogText = text;
   _lastLogTime = _now;
   _lastLogType = type;
@@ -806,6 +803,11 @@ function renderSidebar() {
     item.onmouseout = function() { if (!isDefault) { this.style.background = 'transparent'; this.style.color = '#666'; } };
     item.onclick = function(e) {
       e.stopPropagation();
+      setDefaultSession(s.id);  // 左键单击 = 切换为该工作区
+    };
+    item.oncontextmenu = function(e) {
+      e.preventDefault();
+      e.stopPropagation();
       ctxSessionId = s.id;
       var menu = document.getElementById('ctxMenu');
       menu.style.display = 'block';
@@ -832,14 +834,6 @@ function ctxDelete() {
 }
 
 
-function switchSession(id) {
-  // 查看会话日志（不切换默认工作区）
-  var s = state.sessions.find(function(s) { return s.id === id; });
-  if (s) {
-    addLog('info', '查看会话: ' + (s.name || 'unnamed') + ' (' + id + ')');
-  }
-}
-
 function setDefaultSession(id) {
   var s = state.sessions.find(function(s) { return s.id === id; });
   if (window.pywebview && window.pywebview.api && window.pywebview.api.switch_session) {
@@ -861,9 +855,21 @@ function setDefaultSession(id) {
 function closeSession(id) {
   nativeConfirm('关闭会话', '确定关闭此会话?').then(function(ok) {
     if (!ok) return;
-    state.sessions = state.sessions.filter(function(s) { return s.id !== id; });
-    if (state.currentSessionId === id) { state.currentSessionId = state.sessions.length > 0 ? state.sessions[0].id : null; }
-    renderSidebar(); addLog('info', '会话已关闭: ' + id);
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.close_session) {
+      // 桌面端：同步删除后端会话（否则刷新后会复活）
+      window.pywebview.api.close_session(id).then(function(r) {
+        if (r && r.success) {
+          loadSessions();
+          addLog('done', '会话已关闭: ' + id);
+        } else {
+          addLog('err', '关闭会话失败: ' + ((r && r.error) || ''));
+        }
+      }).catch(function() { addLog('err', '关闭会话失败'); });
+    } else {
+      state.sessions = state.sessions.filter(function(s) { return s.id !== id; });
+      if (state.currentSessionId === id) { state.currentSessionId = state.sessions.length > 0 ? state.sessions[0].id : null; }
+      renderSidebar(); addLog('info', '会话已关闭: ' + id);
+    }
   });
 }
 
@@ -1155,7 +1161,14 @@ function renderActivityDots(a) {
 function toggleConnect() {
   health.relay = 'connecting';
   updateHealth();
-  window.pywebview.api.toggle_connect();
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.toggle_connect) {
+    window.pywebview.api.toggle_connect();
+  } else {
+    // 浏览器直连模式：无后端可连
+    addLog('err', '浏览器直连模式暂不支持连接中转服务器，请使用桌面客户端');
+    health.relay = 'off';
+    updateHealth();
+  }
 }
 function configRelay() {
   document.getElementById('modalRelayUrl').value = document.getElementById('relayUrl').textContent;

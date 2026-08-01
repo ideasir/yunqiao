@@ -311,6 +311,8 @@ function getAuthedDevice(sessionState, userId, deviceId, code) {
   }
   const device = deviceId ? devices.get(deviceId) : getDefaultDevice(userId);
   if (!device) return { device: null, error: '没有已连接的设备' };
+  // 设备归属校验：显式传 deviceId 时只能操作自己名下的设备（防跨用户执行）
+  if (device.userId !== userId) return { device: null, error: '设备不存在' };
   if (code) {
     if (!checkAuthCode(device, code)) return { device: null, error: '验证码错误' };
     sessionState.authedDeviceId = device.id;
@@ -340,8 +342,10 @@ function checkCommandAllowed(command) {
 
 function checkPathAllowed(filePath) {
   if (!ALLOWED_FILE_PREFIX) return true;
-  return filePath.startsWith(ALLOWED_FILE_PREFIX.replace(/\\/g, '/').replace(/\/$/, '') + '/')
-    || filePath.startsWith(ALLOWED_FILE_PREFIX.replace(/\\/g, '\\').replace(/\\$/, '') + '\\');
+  // 统一转正斜杠比较，避免 Windows 反斜杠与 Linux 正斜杠混用导致白名单失效/被绕过
+  const p = String(filePath || '').replace(/\\/g, '/').replace(/\/+$/, '');
+  const prefix = ALLOWED_FILE_PREFIX.replace(/\\/g, '/').replace(/\/+$/, '');
+  return p === prefix || p.startsWith(prefix + '/');
 }
 
 async function handleSessionOp(op, payload, deviceId) {
@@ -603,6 +607,13 @@ function createMcpServer(userId, authInfo = {}) {
     server.registerTool(name, { description: desc, inputSchema: z.object(schema) }, wrapTool(userId, async (params) => {
       const { device, error } = getAuthedDevice(sessionState, userId, undefined, params.code);
       if (!device) return { content: [{ type: 'text', text: `Error: ${error}` }], isError: true };
+      // 命令/路径白名单（与旧工具保持一致，防止新工具绕过 ALLOWED_COMMANDS / ALLOWED_FILE_PREFIX）
+      if (name === 'exec' && !checkCommandAllowed(params.command || '')) {
+        return { content: [{ type: 'text', text: 'Error: command not allowed' }], isError: true };
+      }
+      if ((name === 'read_file' || name === 'write_file') && !checkPathAllowed(params.path || '')) {
+        return { content: [{ type: 'text', text: 'Error: path outside allowed prefix' }], isError: true };
+      }
       const op = name.replace('_session', '');
       const result = await handleSessionOp(op === 'exec' ? 'exec' : op, params, device.id);
       return formatResult(name, result, params);
@@ -728,6 +739,7 @@ function createMcpServer(userId, authInfo = {}) {
   }, wrapTool(userId, async ({ command, timeout }) => {
     const { device, error } = getAuthedDevice(sessionState, userId, undefined, undefined);
     if (!device) return { content: [{ type: 'text', text: `Error: ${error}` }], isError: true };
+    if (!checkCommandAllowed(command)) return { content: [{ type: 'text', text: 'Error: command not allowed' }], isError: true };
     // 并发上限：每设备同时最多 TASK_MAX_CONCURRENT 个运行中任务
     const running = Array.from(tasks.values()).filter(t => t.deviceId === device.id && t.status === 'running').length;
     if (running >= TASK_MAX_CONCURRENT) {
@@ -922,12 +934,21 @@ const httpServer = createServer(async (req, res) => {
 
 const wss = new WebSocketServer({ noServer: true });
 
+// 心跳：发 ping 计延迟；若 pong 超时（默认 3 个周期 = 45s）判定假死连接，主动断开
+// （TCP 假死时 ws close 可能不触发，残留会一直占着设备名额）
+const PONG_TIMEOUT = parseInt(process.env.PONG_TIMEOUT || '45000', 10);
 const heartbeat = setInterval(() => {
+  const now = Date.now();
   for (const [id, device] of devices) {
-    if (device.ws.readyState === WebSocket.OPEN) {
-      device._lastPingAt = Date.now();
-      device.ws.ping();
+    if (device.ws.readyState !== WebSocket.OPEN) continue;
+    // 上次 ping 后一直没收到 pong，超过阈值判定假死并断开
+    if (device._lastPingAt && now - device._lastPingAt > PONG_TIMEOUT) {
+      console.error(`[device] heartbeat timeout, closing: ${device.name} (${id})`);
+      device.ws.terminate();
+      continue;
     }
+    device._lastPingAt = now;
+    device.ws.ping();
   }
 }, 15000);
 
