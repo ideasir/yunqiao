@@ -1,7 +1,7 @@
 """
 云桥 MCP — 桌面客户端（pywebview 正式版）
 用法: pip install pywebview websockets && python desktop.py
-PSK 从 ~/.yunqiao/config.json 读取
+密钥从 ~/.yunqiao/config.json 读取
 """
 
 import asyncio
@@ -15,29 +15,23 @@ import uuid
 from pathlib import Path
 
 # ─── 配置 ────────────────────────────────────────
-RELAY_URL = os.environ.get("RELAY_URL", "wss://yunqiao.very.im/device")
+RELAY_URL = os.environ.get("RELAY_URL", "")
 DEVICE_NAME = os.environ.get("DEVICE_NAME", platform.node())
 CONFIG_DIR = Path(os.environ.get("YUNQIAO_CONFIG", str(Path.home() / ".yunqiao")))
 CONFIG_FILE = CONFIG_DIR / "config.json"
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
-RELAY_PSK = ""
+RELAY_KEY = ""
 if CONFIG_FILE.exists():
     try:
         cfg = json.loads(CONFIG_FILE.read_text("utf-8"))
-        RELAY_PSK = cfg.get("psk", "")
-        if not RELAY_URL or RELAY_URL == "wss://yunqiao.very.im/device":
-            cfg_url = cfg.get("relayUrl", "")
-            if cfg_url and not cfg_url.startswith("ws"):
-                RELAY_URL = "wss://" + cfg_url + "/device"
-            elif cfg_url:
-                RELAY_URL = cfg_url
-            else:
-                RELAY_URL = "wss://yunqiao.very.im/device"
+        RELAY_KEY = cfg.get("key", "") or cfg.get("psk", "")  # 兼容旧版 psk
+        if not RELAY_URL:
+            RELAY_URL = cfg.get("relayUrl", "")
     except:
         pass
-if not RELAY_PSK:
-    print("⚠️ PSK 未配置，请在设置中配置")
+if not RELAY_KEY:
+    print("⚠️ 连接密钥未配置，请在设置中配置")
     print(f"   配置文件: {CONFIG_FILE}")
 
 # ─── 全局状态 ────────────────────────────────────
@@ -57,10 +51,10 @@ async def _ws_connect_headers():
         import inspect
         sig = inspect.signature(websockets.connect)
         if 'additional_headers' in sig.parameters:
-            return {'additional_headers': {"X-PSK": RELAY_PSK}}
+            return {'additional_headers': {"X-Key": RELAY_KEY}}
     except:
         pass
-    return {'extra_headers': {"X-PSK": RELAY_PSK}}
+    return {'extra_headers': {"X-Key": RELAY_KEY}}
 
 async def ws_connect():
     global WS, device_id, SHOULD_RECONNECT
@@ -341,16 +335,16 @@ class Api:
             "connected": WS is not None,
         }
 
-    def save_settings(self, psk, relay_url):
-        global RELAY_PSK, RELAY_URL
-        cfg = {"psk": psk, "relayUrl": relay_url, "deviceName": DEVICE_NAME}
+    def save_settings(self, key, relay_url):
+        global RELAY_KEY, RELAY_URL
+        cfg = {"key": key, "relayUrl": relay_url, "deviceName": DEVICE_NAME}
         CONFIG_FILE.write_text(json.dumps(cfg, indent=2), "utf-8")
-        RELAY_PSK = psk
+        RELAY_KEY = key
         RELAY_URL = relay_url
         return {"success": True}
 
     def get_settings(self):
-        return {"psk": RELAY_PSK, "relayUrl": RELAY_URL, "deviceName": DEVICE_NAME}
+        return {"key": RELAY_KEY, "relayUrl": RELAY_URL, "deviceName": DEVICE_NAME}
 
     def toggle_connect(self):
         """连接/断开切换（线程安全）"""

@@ -46,7 +46,7 @@ python main.py
 **3. 在 AI Agent 端**
 
 ```bash
-node skills/mcp-client.mjs <配对码> list
+node skills/yunqiao-client.mjs <配对码> list
 ```
 
 看到设备列表，搞定。
@@ -58,7 +58,7 @@ node skills/mcp-client.mjs <配对码> list
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                     AI Agent (沙箱)                       │
-│  node skills/mcp-client.mjs <配对码> call <工具> <参数>  │
+│  node skills/yunqiao-client.mjs <配对码> call <工具> <参数>  │
 └──────────────┬──────────────────────────────────────────┘
                │ MCP/SSE (HTTPS)
                ▼
@@ -188,29 +188,29 @@ pyinstaller --onefile --windowed --name "云桥MCP" main.py
 
 ```bash
 # 列出工具
-node skills/mcp-client.mjs <配对码> list
+node skills/yunqiao-client.mjs <配对码> list
 
 # 列出设备
-node skills/mcp-client.mjs <配对码> call list_devices '{}'
+node skills/yunqiao-client.mjs <配对码> call list_devices '{}'
 
 # 远程执行命令
-node skills/mcp-client.mjs <配对码> call execute_command '{"deviceId":"xxx","command":"dir"}'
+node skills/yunqiao-client.mjs <配对码> call execute_command '{"deviceId":"xxx","command":"dir"}'
 
 # 读取文件
-node skills/mcp-client.mjs <配对码> call read_file '{"deviceId":"xxx","path":"C:\\path\\to\\file.txt"}'
+node skills/yunqiao-client.mjs <配对码> call read_file '{"deviceId":"xxx","path":"C:\\path\\to\\file.txt"}'
 
 # 写入文件
-node skills/mcp-client.mjs <配对码> call write_file '{"deviceId":"xxx","path":"C:\\path\\to\\file.txt","content":"hello"}'
+node skills/yunqiao-client.mjs <配对码> call write_file '{"deviceId":"xxx","path":"C:\\path\\to\\file.txt","content":"hello"}'
 
 # 获取系统信息
-node skills/mcp-client.mjs <配对码> call get_device_info '{"deviceId":"xxx"}'
+node skills/yunqiao-client.mjs <配对码> call get_device_info '{"deviceId":"xxx"}'
 ```
 
 也支持通过环境变量设置配对码：
 
 ```bash
 export MCP_AUTH_CODE=984979
-node skills/mcp-client.mjs list
+node skills/yunqiao-client.mjs list
 ```
 
 ---
@@ -263,7 +263,7 @@ yunqiao-mcp/
 │   ├── desktop_monitor.py  ← 旧版桌面面板
 │   └── agent.py        ← 轻量后台版
 ├── skills/             ← 智能体 Skill
-│   ├── mcp-client.mjs  ← MCP 客户端（Node.js）
+│   ├── yunqiao-client.mjs  ← MCP 客户端（Node.js）
 │   └── references/     ← 参考源码
 └── README.md
 ```
@@ -278,7 +278,7 @@ cd relay && npm install && node server.js
 cd client && pip install -r requirements.txt && python main.py
 
 # 测试连接（第三个终端）
-node skills/mcp-client.mjs list
+node skills/yunqiao-client.mjs list
 ```
 
 ---

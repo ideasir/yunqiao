@@ -1,5 +1,5 @@
 """
-云端协同 MCP - Windows 本地代理（Python 版）
+云桥 - Windows 本地代理（CLI 版）
 用法: python agent.py
 """
 
@@ -8,6 +8,70 @@ import json
 import os
 import platform
 import subprocess
+import sys
+import time
+import shutil
+from pathlib import Path
+
+
+# ─── 会话管理（供 desktop.py 导入） ───
+class Session:
+    def __init__(self, sid, name, work_dir):
+        self.id = sid
+        self.name = name
+        self.workDir = work_dir
+        self.cwd = work_dir
+        self.alive = True
+        self.lastActive = time.time()
+
+    def to_dict(self):
+        return {"id": self.id, "name": self.name, "workDir": self.workDir,
+                "cwd": self.cwd, "alive": self.alive, "lastActive": self.lastActive}
+
+
+class SessionManager:
+    def __init__(self):
+        self.sessions = []
+        self.default_id = None
+
+    def create(self, work_dir, name=None):
+        import uuid
+        sid = uuid.uuid4().hex[:8]
+        name = name or f"session-{sid}"
+        s = Session(sid, name, work_dir)
+        self.sessions.append(s)
+        self.default_id = sid
+        return {"success": True, "id": sid, "name": name, "workDir": work_dir, "cwd": work_dir}
+
+    def get_current(self):
+        for s in self.sessions:
+            if s.id == self.default_id:
+                s.lastActive = time.time()
+                return s
+        return None
+
+    def close(self, session_id=None):
+        sid = session_id or self.default_id
+        for s in self.sessions:
+            if s.id == sid:
+                self.sessions.remove(s)
+                if self.default_id == sid:
+                    self.default_id = self.sessions[0].id if self.sessions else None
+                return {"success": True}
+        return {"success": False, "error": f"会话 {sid} 不存在"}
+
+    def list_all(self):
+        return {"sessions": [s.to_dict() for s in self.sessions], "defaultId": self.default_id}
+
+    def switch(self, session_id):
+        for s in self.sessions:
+            if s.id == session_id:
+                self.default_id = session_id
+                return {"success": True, "sessionId": s.id, "name": s.name, "workDir": s.workDir}
+        return {"success": False, "error": f"会话 {session_id} 不存在"}
+
+
+# ─── 配置 ───────────────────────────────────────
 import sys
 import time
 

@@ -4,31 +4,31 @@
  * 绕过 mcporter 的 SSE 兼容性问题，直接用 MCP SDK 连接
  * 
  * 用法:
- *   node mcp-client.mjs list                        # 列出工具
- *   node mcp-client.mjs call <tool> <json-args>     # 调用工具
+ *   node yunqiao-client.mjs list                        # 列出工具
+ *   node yunqiao-client.mjs call <tool> <json-args>     # 调用工具
  * 
  * 示例:
- *   node mcp-client.mjs list
- *   node mcp-client.mjs call list_devices '{}'
- *   node mcp-client.mjs call get_device_info '{"deviceId":"xxx"}'
+ *   node yunqiao-client.mjs list
+ *   node yunqiao-client.mjs call list_devices '{}'
+ *   node yunqiao-client.mjs call get_device_info '{"deviceId":"xxx"}'
  */
 
 import { Client } from '/opt/node-v24.11.1-linux-x64/lib/node_modules/mcporter/node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js';
 import { SSEClientTransport } from '/opt/node-v24.11.1-linux-x64/lib/node_modules/mcporter/node_modules/@modelcontextprotocol/sdk/dist/esm/client/sse.js';
 
 // 从全局环境变量读取验证码
-const AUTH_CODE = process.env.MCP_AUTH_CODE || '';
-const SERVER_URL = process.env.MCP_SERVER_URL;
+const AUTH_CODE = process.env.YUNQIAO_CODE || '';
+const SERVER_URL = process.env.YUNQIAO_URL;
 if (!SERVER_URL) {
-  console.error('请设置 MCP_SERVER_URL 环境变量（云桥 MCP 端点地址）');
+  console.error('请设置 YUNQIAO_URL 环境变量（云桥 MCP 端点地址）');
   process.exit(1);
 }
 
 async function main() {
   const args = process.argv.slice(2);
   // 支持两种格式:
-  //   node mcp-client.mjs <配对码> list
-  //   node mcp-client.mjs list
+  //   node yunqiao-client.mjs <配对码> list
+  //   node yunqiao-client.mjs list
   let authCode = AUTH_CODE;
   let action, toolName, argsStr;
   if (args.length >= 2 && /^\d{6}$/.test(args[0])) {
@@ -42,13 +42,13 @@ async function main() {
 
   if (!action) {
     console.log(`用法:
-  node mcp-client.mjs <配对码> list                   # 列出工具
-  node mcp-client.mjs <配对码> call <工具名> <JSON>    # 调用工具
-  node mcp-client.mjs list                            # 列出工具（用环境变量 MCP_AUTH_CODE）
+  node yunqiao-client.mjs <配对码> list                   # 列出工具
+  node yunqiao-client.mjs <配对码> call <工具名> <JSON>    # 调用工具
+  node yunqiao-client.mjs list                            # 列出工具（用环境变量 YUNQIAO_CODE）
 
 示例:
-  node mcp-client.mjs 880083 list
-  node mcp-client.mjs 880083 call execute_command '{"deviceId":"xxx","command":"dir"}'
+  node yunqiao-client.mjs 880083 list
+  node yunqiao-client.mjs 880083 call execute_command '{"deviceId":"xxx","command":"dir"}'
 `);
     process.exit(0);
   }
@@ -57,7 +57,7 @@ async function main() {
   const code = authCode;
 
   const transport = new SSEClientTransport(new URL(SERVER_URL));
-  const client = new Client({ name: 'cloud-mcp-client', version: '1.0.0' });
+  const client = new Client({ name: 'cloud-yunqiao-client', version: '1.0.0' });
 
   try {
     await client.connect(transport);
