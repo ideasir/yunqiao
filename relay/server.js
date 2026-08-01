@@ -464,6 +464,16 @@ httpServer.on('error', (err) => {
 
 const wss = new WebSocketServer({ noServer: true });
 
+// 心跳保活，防止自动断开
+const heartbeat = setInterval(() => {
+  for (const [id, device] of devices) {
+    if (device.ws.readyState === WebSocket.OPEN) {
+      device.ws.ping();
+    }
+  }
+}, 30000);
+wss.on('close', () => clearInterval(heartbeat));
+
 httpServer.on('upgrade', (req, socket, head) => {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
 

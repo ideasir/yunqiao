@@ -530,7 +530,6 @@ function handleBridge(action, data) {
       btn.style.color = '#fca5a5';
       var cd = document.getElementById('clientDot');
       if (cd) cd.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
-      refreshPairCode();
       addLog('done', '中转服务器已连接');
       // 点亮 WSS 协议标签
       var rw = document.getElementById('relayProtoWSS');
