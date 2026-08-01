@@ -168,8 +168,13 @@ class Api:
 
     def get_sessions(self):
         if agent:
-            return agent.sessions.list_all()
-        return {"sessions": [], "defaultId": None}
+            sl = agent.sessions.list_all()
+            return {
+                "sessions": sl.get("sessions", []),
+                "currentId": sl.get("defaultId"),
+                "workDir": agent.default_work_dir
+            }
+        return {"sessions": [], "currentId": None, "workDir": ""}
 
 
 # ─── 启动 ────────────────────────────────────────
