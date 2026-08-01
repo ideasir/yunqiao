@@ -465,6 +465,14 @@ function updateStatus() {
 }
 function handleBridge(action, data) {
   if (action === 'log') { addLog('info', data.text); }
+  else if (action === 'sync_status') {
+    state.pairCode = data.pairCode || state.pairCode;
+    state.workDir = data.workDir || state.workDir;
+    state.sessions = data.sessions || state.sessions;
+    state.currentSessionId = data.currentSessionId || state.currentSessionId;
+    updateStatus();
+    renderSidebar();
+  }
   else if (action === 'command_result') {
     var p = data.payload;
     if (p && p.exitCode !== undefined) {

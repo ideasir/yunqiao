@@ -75,6 +75,17 @@ def start_agent():
     agent = None
     a = get_agent()
     a.start()
+    # 同步会话和状态到 UI
+    threading.Timer(1.0, lambda: sync_ui_state(a)).start()
+
+def sync_ui_state(a):
+    sl = a.sessions.list_all()
+    notify_ui("sync_status", {
+        "pairCode": a.auth_code,
+        "workDir": a.default_work_dir,
+        "sessions": sl.get("sessions", []),
+        "currentSessionId": sl.get("defaultId"),
+    })
 
 def stop_agent():
     global agent
