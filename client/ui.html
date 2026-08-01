@@ -562,6 +562,7 @@ function configRelay() {
     }).catch(function() {});
   }
   document.getElementById('modalRelayKey').value = state.relayKey || '';
+  document.getElementById('modalAutoConnect').checked = state.autoConnect || false;
   var overlay = document.getElementById('configModal');
   var content = document.getElementById('configModalContent');
   overlay.style.opacity = '1';
@@ -598,9 +599,10 @@ function saveConfigModal() {
   }
   if (url) document.getElementById('relayUrl').textContent = url;
   if (key) state.relayKey = key;
+  state.autoConnect = document.getElementById('modalAutoConnect').checked;
   try {
     if (window.pywebview && window.pywebview.api) {
-      window.pywebview.api.save_settings(key, url);
+      window.pywebview.api.save_settings(key, url, state.autoConnect);
     }
   } catch(e) {}
   addLog('info', '中转服务器配置已更新');
@@ -632,6 +634,10 @@ function saveConfigModal() {
       <div>
         <label class="text-xs text-[#888] block mb-1">Key（密钥）</label>
         <input type="text" id="modalRelayKey" class="w-full bg-[#0d0d0d] border border-[#333] rounded-lg px-3 py-2 text-xs text-[#ededed] outline-none font-mono transition-colors focus:border-[#555]" placeholder="输入密钥" />
+      </div>
+      <div class="flex items-center gap-2">
+        <input type="checkbox" id="modalAutoConnect" class="w-3 h-3 rounded" />
+        <label for="modalAutoConnect" class="text-xs text-[#888]">启动时自动连接</label>
       </div>
     </div>
     <div class="flex gap-2 px-4 py-3 border-t border-[#222]">

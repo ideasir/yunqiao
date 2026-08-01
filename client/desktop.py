@@ -35,10 +35,11 @@ def load_config():
             pass
     return {}
 
-def save_config(relay_url, key, name):
+def save_config(relay_url, key, name, auto_connect=False):
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     CONFIG_FILE.write_text(json.dumps({
-        "relayUrl": relay_url, "key": key, "deviceName": name
+        "relayUrl": relay_url, "key": key, "deviceName": name,
+        "autoConnect": auto_connect
     }, indent=2), "utf-8")
 
 cfg = load_config()
@@ -102,11 +103,11 @@ class Api:
             "connected": a is not None and a.connected,
         }
 
-    def save_settings(self, key, relay_url):
+    def save_settings(self, key, relay_url, auto_connect=False):
         global RELAY_URL, RELAY_KEY
         RELAY_URL = relay_url
         RELAY_KEY = key
-        save_config(relay_url, key, DEVICE_NAME)
+        save_config(relay_url, key, DEVICE_NAME, auto_connect)
         if agent:
             stop_agent()
         return {"success": True}
@@ -182,8 +183,9 @@ def main():
         resizable=True,
     )
 
-    # 如果已配置，自动连接
-    if RELAY_URL and RELAY_KEY:
+    # 读取自动连接配置
+    auto_connect = cfg.get("autoConnect", False)
+    if auto_connect and RELAY_URL and RELAY_KEY:
         threading.Timer(2.0, start_agent).start()
 
     webview.start()
