@@ -519,6 +519,7 @@ function handleBridge(action, data) {
       btn.style.color = '#fca5a5';
       var cd = document.getElementById('clientDot');
       if (cd) cd.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
+      refreshPairCode();
       addLog('done', '中转服务器已连接');
     } else {
       dot.className = 'w-1.5 h-1.5 rounded-full bg-[#666]';
@@ -541,7 +542,6 @@ function setConn状态(status) {
 }
 
 (function() {
-  refreshPairCode();
   updateStatus();
   addLog('info', '欢迎使用云桥 MCP v2.0');
   setConn状态('disconnected');
