@@ -588,7 +588,7 @@ function setConn状态(status) {
   addLog('info', '欢迎使用云桥 MCP v2.0');
   setConn状态('disconnected');
   setPermission('workspace');
-  // 从后端获取状态
+  // 从后端获取状态（pywebview API 可能延迟注入）
   function loadStatus() {
     if (window.pywebview && window.pywebview.api) {
       window.pywebview.api.get_status().then(function(s) {
@@ -598,9 +598,11 @@ function setConn状态(status) {
         state.hostname = s.hostname || '';
         updateStatus();
       });
+    } else {
+      setTimeout(loadStatus, 500);
     }
   }
-  setTimeout(loadStatus, 500);
+  setTimeout(loadStatus, 300);
   // 从后端加载会话和工作区（pywebview API 可能延迟注入）
   function loadSessions() {
     if (window.pywebview && window.pywebview.api) {
