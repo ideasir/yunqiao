@@ -338,8 +338,21 @@ function renderTaskPanel() {
     row.innerHTML =
       '<span class="text-[9px] text-[#555] font-mono pt-0.5 flex-shrink-0">' + fmtTime(m.time) + '</span>' +
       '<span class="' + (m.urgent ? 'text-[#ff6b6b]' : 'text-[#ddd]') + ' flex-1 break-all leading-tight">' +
-      (m.urgent ? '⚠️ ' : '') + esc(m.text) + '</span>';
+      (m.urgent ? '⚠️ ' : '') + esc(m.text) + '</span>' +
+      '<span class="flex flex-col gap-1 flex-shrink-0 ml-0.5">' +
+      '<button class="op-edit text-[10px] text-[#777] hover:text-[#ededed] leading-none" title="编辑">✎</button>' +
+      '<button class="op-del text-[10px] text-[#777] hover:text-[#ff6b6b] leading-none" title="删除">✕</button>' +
+      '</span>';
+    row.querySelector('.op-edit').addEventListener('click', function(e) {
+      e.stopPropagation();
+      editTask(parseInt(row.dataset.idx, 10));
+    });
+    row.querySelector('.op-del').addEventListener('click', function(e) {
+      e.stopPropagation();
+      deleteTask(parseInt(row.dataset.idx, 10));
+    });
     row.addEventListener('dragstart', function(e) {
+      if (e.target && e.target.closest && e.target.closest('button')) { e.preventDefault(); return; }
       dragMsgIdx = parseInt(this.dataset.idx, 10);
       this.style.opacity = '0.4';
       if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
@@ -359,6 +372,57 @@ function renderTaskPanel() {
   if (n === 0) panelOpen = false;
   else if (!panelManual) panelOpen = true;
   applyPanelState();
+}
+function deleteTask(idx) {
+  var m = state.pendingMessages[idx];
+  if (!m) return;
+  if (!confirm('删除这条任务？')) return;
+  state.pendingMessages.splice(idx, 1);
+  renderTaskPanel();
+  updateAgentBadge();
+  syncDelete([m.id]);
+  addLog('info', '任务已删除');
+}
+function syncDelete(ids) {
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.delete_messages) {
+    window.pywebview.api.delete_messages(ids);
+  }
+}
+function editTask(idx) {
+  var m = state.pendingMessages[idx];
+  var list = document.getElementById('taskList');
+  if (!m || !list) return;
+  var row = list.children[idx];
+  if (!row) return;
+  row.draggable = false;
+  row.className = row.className.replace('cursor-grab', '');
+  row.innerHTML = '<input type="text" class="flex-1 bg-transparent border border-[#333] rounded px-1.5 py-0.5 text-xs text-[#ededed] outline-none" value="' + esc(m.text) + '" />';
+  var input = row.querySelector('input');
+  input.focus();
+  input.select();
+  var done = false;
+  function commit(save) {
+    if (done) return;
+    done = true;
+    if (save && input.value.trim()) {
+      var newText = input.value.trim();
+      m.text = newText;
+      syncEdit(m.id, newText);
+      addLog('info', '任务已编辑');
+    }
+    renderTaskPanel();
+  }
+  input.addEventListener('keydown', function(e) {
+    e.stopPropagation();
+    if (e.key === 'Enter') commit(true);
+    else if (e.key === 'Escape') commit(false);
+  });
+  input.addEventListener('blur', function() { commit(true); });
+}
+function syncEdit(id, text) {
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.edit_message) {
+    window.pywebview.api.edit_message(id, text);
+  }
 }
 function reorderTask(from, to) {
   if (from === to || from < 0) return;

@@ -176,6 +176,22 @@ class Api:
             return {"success": True}
         return {"success": False, "error": "未连接"}
 
+    def delete_messages(self, ids):
+        """从任务队列删除消息"""
+        a = agent
+        if a:
+            n = a.delete_messages(list(ids))
+            return {"success": True, "deleted": n}
+        return {"success": False, "error": "未连接"}
+
+    def edit_message(self, msg_id, text):
+        """编辑任务队列中某条消息"""
+        a = agent
+        if a:
+            a.edit_message(msg_id, text)
+            return {"success": True}
+        return {"success": False, "error": "未连接"}
+
     def browse_folder(self):
         import tkinter as tk
         from tkinter import filedialog

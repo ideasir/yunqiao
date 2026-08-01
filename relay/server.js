@@ -597,6 +597,34 @@ wss.on('connection', (ws, req, user) => {
       sendJSON(ws, { type: 'reorder_result', requestId, success: true });
       return;
     }
+    if (type === 'delete_messages') {
+      const device = devices.get(deviceId);
+      if (device && Array.isArray(msg.ids) && msg.ids.length > 0) {
+        const del = new Set(msg.ids);
+        for (let i = agentMessages.length - 1; i >= 0; i--) {
+          if (agentMessages[i].userId === device.userId && del.has(agentMessages[i].id)) {
+            agentMessages.splice(i, 1);
+          }
+        }
+        console.error(`[message] deleted ${msg.ids.length} messages (user:${device.userId})`);
+      }
+      sendJSON(ws, { type: 'delete_result', requestId, success: true });
+      return;
+    }
+    if (type === 'edit_message') {
+      const device = devices.get(deviceId);
+      if (device && msg.id && typeof msg.text === 'string') {
+        for (const m of agentMessages) {
+          if (m.id === msg.id && m.userId === device.userId) {
+            m.text = msg.text;
+            console.error(`[message] edited ${msg.id}: ${msg.text.slice(0, 50)}`);
+            break;
+          }
+        }
+      }
+      sendJSON(ws, { type: 'edit_result', requestId, success: true });
+      return;
+    }
 
     if (requestId && pendingRequests.has(requestId)) {
       const { resolve, reject, timer } = pendingRequests.get(requestId);

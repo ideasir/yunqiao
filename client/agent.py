@@ -208,6 +208,28 @@ class Agent:
                 self._loop
             )
 
+    def delete_messages(self, ids):
+        """从任务队列删除消息（Agent 尚未读取时有效），返回实际删除数"""
+        ids = [i for i in ids if i in self.pending_messages]
+        for i in ids:
+            self.pending_messages.pop(i, None)
+        if ids and self._ws and self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self._ws.send(json.dumps({"type": "delete_messages", "ids": ids})),
+                self._loop
+            )
+        return len(ids)
+
+    def edit_message(self, msg_id, text):
+        """编辑任务队列中某条消息的内容"""
+        if msg_id in self.pending_messages:
+            self.pending_messages[msg_id]["text"] = text
+        if self._ws and self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self._ws.send(json.dumps({"type": "edit_message", "id": msg_id, "text": text})),
+                self._loop
+            )
+
     def set_permission(self, mode):
         """设置权限模式: workspace 或 super"""
         self.permission = mode
