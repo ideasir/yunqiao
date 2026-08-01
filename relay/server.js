@@ -230,6 +230,8 @@ const qpsCounters = new Map();
 function checkQps(userId) {
   const limits = getLimits(userId);
   const now = Date.now();
+  // 防恶意刷 ?user= 填爆计数器表
+  if (qpsCounters.size > 500) qpsCounters.clear();
   let c = qpsCounters.get(userId);
   if (!c || now - c.start >= 1000) { c = { start: now, count: 0 }; qpsCounters.set(userId, c); }
   if (c.count >= limits.qps) return false;
@@ -549,10 +551,10 @@ const httpServer = createServer(async (req, res) => {
       const authKey = req.headers['x-key'] || (req.headers.authorization || '').replace(/^Bearer\s+/i, '') || '';
       const authUser = authKey ? findByKey(authKey) : null;
       const isAdminAuth = !!(authUser && authUser.role === 'admin');
-      // 身份只来自认证；?user= 仅在非强制模式下兼容旧客户端（AUTH_REQUIRED=1 时忽略）
+      // 身份只来自认证；非强制模式下兼容旧客户端（无认证回退 admin，?user= 可指定）
       let userId = authUser ? authUser.userId : null;
       if (!userId && !AUTH_REQUIRED) {
-        userId = url.searchParams.get('user') || null;
+        userId = url.searchParams.get('user') || 'admin';
       }
       if (AUTH_REQUIRED && !authUser) {
         res.writeHead(401, { 'content-type': 'application/json' });

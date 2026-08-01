@@ -346,10 +346,10 @@ class Agent:
                 await self._send("command_result", rid, {"exitCode": 1, "stdout": "", "stderr": err, "killed": False})
                 return
             self._emit(self.on_command, {"type": "execute", "command": cmd})
-            result = await self._exec_cmd(cmd, payload.get("timeout", 30000))
-            await self._send("command_result", rid, result)
             cwd = self.sessions.get_current()
             cwd_str = cwd.cwd if cwd else os.getcwd()
+            result = await self._exec_cmd(cmd, payload.get("timeout", 30000), cwd_str)
+            await self._send("command_result", rid, result)
             self._emit(self.on_result, {**result, "command": cmd, "cwd": cwd_str})
             self._emit(self.on_log, f"[执行] {cmd[:80]}")
             self._emit(self.on_log, f"[目录] {cwd_str}")
@@ -377,8 +377,13 @@ class Agent:
         if msg_type == "write_file":
             path = payload.get("path", "")
             self._emit(self.on_command, {"type": "write", "path": path})
-            # 判断文件是否存在（新建 vs 修改）
-            existed = os.path.exists(path)
+            # 判断文件是否存在（新建 vs 修改），相对路径按会话目录解析
+            existed_path = path
+            if not os.path.isabs(existed_path):
+                session = self.sessions.get_current()
+                if session:
+                    existed_path = os.path.join(session.cwd, existed_path)
+            existed = os.path.exists(os.path.normpath(existed_path))
             result = self._write_file(path, payload.get("content", ""))
             await self._send("file_result", rid, result)
             if result.get("success"):
