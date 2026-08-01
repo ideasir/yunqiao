@@ -466,7 +466,7 @@ const httpServer = createServer(async (req, res) => {
       for (const device of devices.values()) {
         if (device.latency) { latency = device.latency; break; }
       }
-      broadcastToDevices({ type: 'agent_connected', latency });
+      broadcastToDevices({ type: 'agent_connected', latency, sessionId: transport.sessionId, platform: 'sandbox', hostname: 'OpenClaw Agent' });
     } catch (err) {
       console.error('[mcp] SSE connect error:', err);
       try { res.writeHead(500).end('Internal Server Error'); } catch {}

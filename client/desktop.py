@@ -57,7 +57,13 @@ def get_agent():
         agent.on_log = lambda msg: notify_ui("log", {"text": msg})
         def on_status(s):
             if "agent" in s:
-                notify_ui("agent_status", {"status": s["agent"], "latency": s.get("latency", 0)})
+                notify_ui("agent_status", {
+                    "status": s["agent"],
+                    "latency": s.get("latency", 0),
+                    "agentId": s.get("agentId", ""),
+                    "agentPlatform": s.get("agentPlatform", ""),
+                    "agentHostname": s.get("agentHostname", ""),
+                })
             else:
                 notify_ui("relay_status", {
                     "status": "connected" if s.get("connected") else "disconnected",

@@ -101,7 +101,8 @@ tailwind.config = {
       <div class="px-3 py-2 space-y-1.5 text-xs">
         <div class="flex justify-between"><span class="text-[#888]">状态</span><span class="text-[#ddd]" id="agent状态">待接入</span></div>
         <div class="flex justify-between"><span class="text-[#888]">配对码</span><span class="font-mono text-[#ededed] font-semibold tracking-wider bg-[#1a1a1a] px-1.5 py-0.5 rounded" id="pairCode">------</span></div>
-        <div class="flex justify-between"><span class="text-[#888]">设备</span><span class="text-[#ddd] truncate max-w-[120px]" id="deviceName">-</span></div>
+        <div class="flex justify-between"><span class="text-[#888]">设备</span><span class="text-[#ddd] truncate max-w-[120px]" id="agentDevice">-</span></div>
+        <div class="flex justify-between"><span class="text-[#888]">平台</span><span class="text-[#ddd]" id="agentPlatform">-</span></div>
       </div>
       <div class="flex gap-1.5 px-3 py-2 border-t border-[#1f1f1f]">
         <button class="flex-1 text-xs py-1 rounded-lg bg-[#222] text-[#ededed] hover:bg-[#2a2a2a] transition-all font-medium" onclick="copyPairCode()" title="复制地址和配对码">复制</button>
@@ -493,6 +494,11 @@ function handleBridge(action, data) {
     var s = document.getElementById('agent状态');
     if (data.status === 'connected') {
       s.textContent = '已配对'; s.style.color = '#4ade80';
+      // 更新 Agent 设备信息
+      var ad = document.getElementById('agentDevice');
+      if (ad && data.agentHostname) { ad.textContent = data.agentHostname; }
+      var ap = document.getElementById('agentPlatform');
+      if (ap && data.agentPlatform) { ap.textContent = data.agentPlatform; }
       // 连接线延迟
       var arl = document.getElementById('agentRelayLatency');
       if (arl && data.latency) { arl.textContent = data.latency + ' ms'; arl.style.color = '#3b82f6'; }

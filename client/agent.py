@@ -263,7 +263,14 @@ class Agent:
             return
         
         if msg_type == "agent_connected":
-            self._emit(self.on_status, {"agent": "connected", "connected": True, "latency": msg.get("latency", 0)})
+            sid = msg.get("sessionId", "") or ""
+            self._emit(self.on_status, {
+                "agent": "connected", "connected": True,
+                "latency": msg.get("latency", 0),
+                "agentId": sid[:8] if sid else "agent",
+                "agentPlatform": msg.get("platform", "sandbox"),
+                "agentHostname": msg.get("hostname", "OpenClaw"),
+            })
             return
         
         if msg_type == "agent_disconnected":
