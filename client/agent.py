@@ -358,6 +358,11 @@ class Agent:
             self._emit(self.on_activity, msg.get("payload", {}))
             return
         
+        if msg_type == "agent_action":
+            # Agent 工具调用流（显示在客户端日志，绿色 AGT 徽章）
+            self._emit(self.on_log, f"[Agent] {msg.get('text', '')}")
+            return
+        
         if msg_type == "agent_connected":
             sid = msg.get("sessionId", "") or ""
             self._emit(self.on_status, {

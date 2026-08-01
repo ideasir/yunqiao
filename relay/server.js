@@ -405,6 +405,8 @@ function withMsgHint(userId, handler) {
 
 // 每用户调用限流（1 秒滑动窗口）与输出大小限制
 const qpsCounters = new Map();
+// 需要广播"操作流"给客户端的工具（让用户看到 Agent 在干什么，跳过纯查询/轮询）
+const ACTION_TOOLS = new Set(['exec', 'execute_command', 'read_file', 'write_file', 'read_file_old', 'write_file_old', 'download', 'exec_task', 'notify', 'create_session', 'switch_session', 'close_session']);
 function checkQps(userId) {
   const limits = getLimits(userId);
   const now = Date.now();
@@ -433,6 +435,12 @@ function withLimits(userId, handler, toolName) {
       ok: !(result && result.isError),
       durationMs: Date.now() - t0,
     });
+    // Agent 操作流广播：让客户端日志显示 Agent 实际在干什么
+    if (ACTION_TOOLS.has(toolName)) {
+      const brief = summarizeArgs(toolName, params);
+      const detail = (brief.command || brief.path || brief.text || '').slice(0, 60);
+      broadcastToDevices({ type: 'agent_action', text: `Agent ${toolName}${detail ? ': ' + detail : ''}` }, userId);
+    }
     // download 的输出大小由 handler 内按 maxDownloadMB 检查，这里豁免
     if (toolName !== 'download' && result && Array.isArray(result.content)) {
       let total = 0;
