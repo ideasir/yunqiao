@@ -6,3 +6,6 @@ __pycache__/
 *.pyc
 node_modules/
 .env
+
+# 运行时工作区（agent.py 默认工作目录）
+worker/
