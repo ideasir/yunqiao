@@ -235,6 +235,18 @@ class Api:
             return {"success": True}
         return {"success": False, "error": "Agent 未启动"}
 
+    def window_minimize(self):
+        """无边框窗口的最小化"""
+        if UI:
+            UI.minimize()
+        return {"success": True}
+
+    def window_close(self):
+        """无边框窗口的关闭"""
+        if UI:
+            UI.destroy()
+        return {"success": True}
+
 
 # ─── 启动 ────────────────────────────────────────
 def main():
@@ -256,6 +268,9 @@ def main():
         height=699,
         min_size=(800, 500),
         resizable=True,
+        frameless=True,   # 无系统标题栏，用自绘标题栏
+        easy_drag=True,   # 通过 .pywebview-drag-region 区域拖动窗口
+        shadow=True,      # 无边框窗口的阴影边框
     )
 
     # 读取自动连接配置
