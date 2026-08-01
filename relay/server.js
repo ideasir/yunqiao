@@ -75,7 +75,11 @@ function rejectDeviceRequests(deviceId, reason) {
 // 获取默认设备（优先选有配对码的，否则选第一个）
 function getDefaultDevice() {
   if (devices.size === 0) return null;
-  // 优先选有 authCode 的设备（agent.py 可能没有，main.py 有）
+  // 优先选有 authCode 的非 web 设备
+  for (const device of devices.values()) {
+    if (device.authCode && device.os !== 'web') return device;
+  }
+  // 退而求其次
   for (const device of devices.values()) {
     if (device.authCode) return device;
   }
