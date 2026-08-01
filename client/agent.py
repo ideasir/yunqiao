@@ -266,6 +266,11 @@ class Agent:
         
         if msg_type == "execute_command":
             cmd = payload.get("command", "")
+            # 工作区模式检查
+            ok, err = self._check_command(cmd)
+            if not ok:
+                await self._send("command_result", rid, {"exitCode": 1, "stdout": "", "stderr": err, "killed": False})
+                return
             self._emit(self.on_command, {"type": "execute", "command": cmd})
             result = await self._exec_cmd(cmd, payload.get("timeout", 30000))
             await self._send("command_result", rid, result)
@@ -307,6 +312,10 @@ class Agent:
     # ── 命令执行 ──────────────────────────────
     
     async def _exec_cmd(self, command, timeout, cwd=None):
+        # 工作区模式检查命令
+        ok, err = self._check_command(command)
+        if not ok:
+            return {"exitCode": 1, "stdout": "", "stderr": err, "killed": False}
         try:
             proc = await asyncio.create_subprocess_shell(
                 command,
@@ -342,6 +351,25 @@ class Agent:
         workspace = os.path.normpath(session.workDir)
         resolved = os.path.normpath(path)
         return resolved == workspace or resolved.startswith(workspace + os.sep)
+    
+    def _check_command(self, command):
+        """检查命令是否可能逃逸工作区"""
+        if self.permission != "workspace":
+            return True, ""
+        import re
+        # 检测绝对路径 C:\ D:\ / 等
+        if re.search(r'\b[A-Za-z]:\\', command):
+            return False, "工作区模式禁止使用绝对路径"
+        # 检测 .. 逃逸
+        if re.search(r'(?:^|\s|[&|;])\.\.(?:\\|/|\s|$)', command):
+            return False, "工作区模式禁止使用 .. 逃逸"
+        # 检测 cd 命令
+        if re.search(r'(?:^|\s|[&|;])cd\s', command, re.IGNORECASE):
+            return False, "工作区模式禁止 cd 命令"
+        # 检测 pushd/popd
+        if re.search(r'(?:^|\s|[&|;])(?:pushd|popd)\s', command, re.IGNORECASE):
+            return False, "工作区模式禁止 pushd/popd"
+        return True, ""
     
     def _read_file(self, path):
         try:
