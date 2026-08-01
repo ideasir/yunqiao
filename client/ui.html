@@ -203,7 +203,7 @@ function addLog(type, text) {
 
   const now = new Date();
   const time = now.toTimeString().slice(0, 8);
-  const colors = {cmd:'text-white font-medium',out:'text-[#e8e8e8]',err:'text-[#ff6b6b]',info:'text-[#aaaaaa]',done:'text-white font-medium',file:'text-[#cccccc]',code:'text-[#cccccc]',status:'text-[#cccccc]'};
+  const colors = {cmd:'text-white font-medium',out:'text-[#e8e8e8]',err:'text-[#ff6b6b]',info:'text-[#aaaaaa]',done:'text-white font-medium',file:'text-[#cccccc]',code:'text-[#cccccc]',status:'text-[#cccccc]',action:'text-[#4ade80]'};
   const c = colors[type] || 'text-[#cccccc]';
   if (type === 'file' || type === 'code') {
     entry.innerHTML = '<span class="text-[#777] flex-shrink-0 min-w-[60px]">' + time + '</span><span class="' + c + '"><pre style="margin:0;font-family:inherit;white-space:pre-wrap">' + esc(text) + '</pre></span>';
@@ -470,7 +470,7 @@ function updateStatus() {
 
 }
 function handleBridge(action, data) {
-  if (action === 'log') { addLog('info', data.text); }
+  if (action === 'log') { addLog('action', data.text); }
   else if (action === 'sync_status') {
     state.pairCode = data.pairCode || state.pairCode;
     state.workDir = data.workDir || state.workDir;
