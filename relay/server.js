@@ -203,6 +203,18 @@ function notifyAgentsNewMessage(userId) {
   }
 }
 
+// 异步任务完成 → 在线 Agent 推送（尽力而为；兜底靠工具响应附加"任务完成"提示）
+function notifyTaskDone(userId, task) {
+  for (const { transport, userId: sessionUserId } of transports.values()) {
+    if (sessionUserId !== userId) continue;
+    transport.send({
+      jsonrpc: '2.0',
+      method: 'notifications/task',
+      params: { taskId: task.taskId, status: task.status },
+    }).catch(() => {});
+  }
+}
+
 // 按客户端任务队列拖拽后的顺序重排未读消息（只影响本用户自己的消息）
 function reorderMessages(orderedIds, userId) {
   const idSet = new Set(orderedIds);
@@ -319,19 +331,29 @@ function requireAdmin(authInfo) {
   return null;
 }
 
-// 工具响应附加未读消息提示：把消息内容直接贴进每个工具响应（Agent 调任何工具都能看到，想忽略都难）
+// 工具响应附加未读消息 + 任务完成提示：把内容直接贴进每个工具响应（Agent 调任何工具都能看到，想忽略都难）
 function withMsgHint(userId, handler) {
   return async (params) => {
     const result = await handler(params);
+    const extras = [];
+    // 未读消息
     const unread = agentMessages.filter(m => m.userId === userId && !m.read);
-    if (unread.length > 0 && result && Array.isArray(result.content)) {
+    if (unread.length > 0) {
       const hint = unread.map(m =>
         `[${new Date(m.time).toLocaleTimeString()}]${m.urgent ? ' ⚠️紧急' : ''} ${m.deviceName}: ${(m.text || '').slice(0, 300)}`
       ).join('\n');
-      result.content = [...result.content, {
-        type: 'text',
-        text: `\n📬 [来自客户端的未读消息，请优先处理]\n${hint}\n（处理完请调用 get_client_messages 确认已读）`,
-      }];
+      extras.push(`\n📬 [来自客户端的未读消息，请优先处理]\n${hint}\n（处理完请调用 get_client_messages 确认已读）`);
+    }
+    // 已完成未查看的任务
+    const doneTasks = Array.from(tasks.values()).filter(t => t.userId === userId && t.status !== 'running' && !t.viewed);
+    if (doneTasks.length > 0) {
+      const taskHint = doneTasks.map(t =>
+        `[${t.status}] ${t.taskId.slice(0, 8)} ${(t.command || '').slice(0, 50)} 完成于 ${new Date(t.finishedAt).toLocaleTimeString()}`
+      ).join('\n');
+      extras.push(`\n📋 [任务完成通知]\n${taskHint}\n（用 get_task_result 查看结果，或 list_tasks 查看全部）`);
+    }
+    if (extras.length > 0 && result && Array.isArray(result.content)) {
+      result.content = [...result.content, { type: 'text', text: extras.join('\n') }];
     }
     return result;
   };
@@ -663,7 +685,7 @@ function createMcpServer(userId, authInfo = {}) {
     tasks.set(taskId, {
       taskId, userId, deviceId: device.id, command,
       status: 'running', exitCode: null, stdout: '', stderr: '', killed: false,
-      createdAt: Date.now(), finishedAt: null,
+      createdAt: Date.now(), finishedAt: null, viewed: true,
     });
     sendJSON(device.ws, { type: 'task_start', requestId: randomUUID(), taskId, payload: { command, timeout: timeout || TASK_TIMEOUT } });
     return { content: [{ type: 'text', text: `任务已提交: ${taskId}\n状态: running\n用 get_task_result 查询（taskId=${taskId}）` }] };
@@ -680,6 +702,7 @@ function createMcpServer(userId, authInfo = {}) {
     if (task.status === 'running') {
       return { content: [{ type: 'text', text: `任务 ${taskId} 正在运行...` }] };
     }
+    task.viewed = true;  // 已查看，清除"任务完成通知"
     const text = [
       `任务 ${taskId}: ${task.status}`,
       `Exit Code: ${task.exitCode}`,
@@ -691,14 +714,15 @@ function createMcpServer(userId, authInfo = {}) {
   }, 'get_task_result'));
 
   server.registerTool('list_tasks', {
-    description: '列出我的所有异步任务及当前状态（防止遗忘任务）',
+    description: '列出我的所有异步任务及当前状态/完成时间（防止遗忘任务）',
     inputSchema: z.object({}),
   }, wrapTool(userId, async () => {
     const mine = Array.from(tasks.values()).filter(t => t.userId === userId);
     if (mine.length === 0) return { content: [{ type: 'text', text: '暂无任务' }] };
     const text = mine.map(t => {
       const age = t.status === 'running' ? '运行中' : (t.duration != null ? t.duration + 'ms' : '');
-      return `- ${t.taskId.slice(0, 8)} ${t.status} ${t.command.slice(0, 50)} ${age}`;
+      const doneAt = t.finishedAt ? new Date(t.finishedAt).toLocaleTimeString() : '';
+      return `- ${t.taskId.slice(0, 8)} ${t.status} ${t.command.slice(0, 50)} ${age}${doneAt ? ' 完成于 ' + doneAt : ''}`;
     }).join('\n');
     return { content: [{ type: 'text', text }] };
   }, 'list_tasks'));
@@ -991,7 +1015,9 @@ wss.on('connection', (ws, req, user) => {
         task.killed = !!p.killed;
         task.duration = p.duration || 0;
         task.finishedAt = Date.now();
+        task.viewed = false;  // 标记未查看，触发"任务完成通知"
         console.error(`[task] ${task.taskId} ${task.status} (${task.duration}ms)`);
+        notifyTaskDone(task.userId, task);
       }
       return;
     }
