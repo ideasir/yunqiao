@@ -487,7 +487,7 @@ const heartbeat = setInterval(() => {
       device.ws.ping();
     }
   }
-}, 30000);
+}, 15000);
 wss.on('close', () => clearInterval(heartbeat));
 
 httpServer.on('upgrade', (req, socket, head) => {
