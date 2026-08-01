@@ -173,8 +173,8 @@ def main():
         title="云桥",
         url=ui_path,
         js_api=api,
-        width=1096,
-        height=650,
+        width=1080,
+        height=669,
         min_size=(800, 500),
         resizable=True,
     )
