@@ -108,6 +108,12 @@ async function handleSessionOp(op, payload, deviceId) {
 
 // ─── MCP 服务 ────────────────────────────────
 
+function broadcastToDevices(msg) {
+  for (const device of devices.values()) {
+    sendJSON(device.ws, msg);
+  }
+}
+
 function createMcpServer() {
   const server = new McpServer({
     name: 'cloud-collaborative-mcp',
@@ -414,8 +420,12 @@ const httpServer = createServer(async (req, res) => {
       const mcpServer = createMcpServer();
       const transport = new SSEServerTransport(MCP_MESSAGE_PATH, res);
       transports.set(transport.sessionId, { server: mcpServer, transport });
-      res.on('close', () => { transports.delete(transport.sessionId); });
+      res.on('close', () => {
+        transports.delete(transport.sessionId);
+        broadcastToDevices({ type: 'agent_disconnected' });
+      });
       await mcpServer.connect(transport);
+      broadcastToDevices({ type: 'agent_connected' });
     } catch (err) {
       console.error('[mcp] SSE connect error:', err);
       try { res.writeHead(500).end('Internal Server Error'); } catch {}
