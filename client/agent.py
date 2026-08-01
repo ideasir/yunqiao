@@ -389,16 +389,23 @@ class Agent:
                 stdout, stderr = await asyncio.wait_for(
                     proc.communicate(), timeout=timeout / 1000
                 )
+                # Windows 编码: 先试 gbk，再 utf-8
+                def _decode(b):
+                    if not b: return ""
+                    for enc in ['gbk', 'utf-8']:
+                        try: return b.decode(enc)
+                        except: continue
+                    return b.decode('utf-8', errors='replace')
                 return {"exitCode": proc.returncode or 0,
-                        "stdout": stdout.decode("utf-8", errors="replace") if stdout else "",
-                        "stderr": stderr.decode("utf-8", errors="replace") if stderr else "",
+                        "stdout": _decode(stdout),
+                        "stderr": _decode(stderr),
                         "killed": False}
             except asyncio.TimeoutError:
                 proc.kill()
                 stdout, stderr = await proc.communicate()
                 return {"exitCode": 1,
-                        "stdout": stdout.decode("utf-8", errors="replace") if stdout else "",
-                        "stderr": stderr.decode("utf-8", errors="replace") if stderr else "",
+                        "stdout": _decode(stdout) if stdout else "",
+                        "stderr": _decode(stderr) if stderr else "",
                         "killed": True}
         except Exception as e:
             return {"exitCode": 1, "stdout": "", "stderr": str(e), "killed": False}
