@@ -67,7 +67,7 @@ tailwind.config = {
   </div>
 
   <!-- 左侧：对话/日志 -->
-  <div class="flex-1 flex flex-col min-w-0 bg-[#0a0a0a]">
+  <div class="flex-1 relative flex flex-col min-w-0 bg-[#0a0a0a]">
 
     <!-- 路径栏 -->
     <div class="flex items-center gap-2 px-5 py-2 flex-shrink-0 select-none bg-[#0a0a0a] ">
@@ -85,6 +85,21 @@ tailwind.config = {
     <div class="flex items-stretch flex-shrink-0 bg-[#0a0a0a] border-t border-[#1a1a1a]">
       <span class="flex items-center pl-5 pr-1 text-[#888] text-sm font-bold select-none">❯</span>
       <input type="text" id="cmdInput" class="flex-1 bg-transparent border-none text-[#ededed] px-3 py-3 font-mono text-xs outline-none placeholder-[#666]" placeholder="给 Agent 发消息，回车发送（! 前缀 = 紧急）" spellcheck="false" onkeydown="if(event.key==='Enter')sendCommand()" />
+    </div>
+
+    <!-- 任务队列面板（日志区域右下角，绝对定位不随日志滚动） -->
+    <div id="taskPanel" class="absolute rounded-xl bg-[#141414] border border-[#222222] shadow-2xl z-40 select-none" style="bottom:52px; right:12px; width:280px; max-height:280px;">
+      <div class="flex items-center gap-2 px-3 py-2 border-b border-[#1f1f1f] cursor-pointer" onclick="toggleTaskPanel()" title="点击收起/展开">
+        <div class="w-1.5 h-1.5 rounded-full flex-shrink-0" id="taskPanelDot" style="background:#333;"></div>
+        <span class="text-xs font-medium text-[#ccc]">任务队列</span>
+        <span class="ml-auto text-[10px] font-mono text-[#888]" id="taskPanelCount">0</span>
+        <span class="text-[10px] text-[#555]" id="taskPanelArrow">▾</span>
+      </div>
+      <div id="taskPanelBody">
+        <div id="taskEmpty" class="px-3 py-3 text-[11px] text-[#555] text-center">暂无等待任务</div>
+        <div id="taskList" class="overflow-y-auto" style="max-height:190px; display:none;"></div>
+        <div class="px-3 py-1.5 text-[9px] text-[#444] border-t border-[#1a1a1a] text-center">拖动排序，Agent 将按此顺序读取</div>
+      </div>
     </div>
   </div>
 
@@ -848,21 +863,6 @@ function saveConfigModal() {
       <button class="flex-1 text-xs py-2 rounded-lg bg-[#333] text-[#aaa] hover:bg-[#444] hover:text-[#ededed] transition-all font-medium" onclick="closeSessionModal()" title="取消新建工作区">取消</button>
       <button class="flex-1 text-xs py-2 rounded-lg bg-[#ededed] text-[#0a0a0a] hover:bg-white transition-all font-medium" onclick="saveSessionModal()" title="保存工作区">确定</button>
     </div>
-  </div>
-</div>
-
-<!-- 任务队列面板 -->
-<div id="taskPanel" class="fixed rounded-xl bg-[#141414] border border-[#222222] shadow-2xl z-40 select-none" style="bottom:12px; right:12px; width:280px; max-height:280px;">
-  <div class="flex items-center gap-2 px-3 py-2 border-b border-[#1f1f1f] cursor-pointer" onclick="toggleTaskPanel()" title="点击收起/展开">
-    <div class="w-1.5 h-1.5 rounded-full flex-shrink-0" id="taskPanelDot" style="background:#333;"></div>
-    <span class="text-xs font-medium text-[#ccc]">任务队列</span>
-    <span class="ml-auto text-[10px] font-mono text-[#888]" id="taskPanelCount">0</span>
-    <span class="text-[10px] text-[#555]" id="taskPanelArrow">▾</span>
-  </div>
-  <div id="taskPanelBody">
-    <div id="taskEmpty" class="px-3 py-3 text-[11px] text-[#555] text-center">暂无等待任务</div>
-    <div id="taskList" class="overflow-y-auto" style="max-height:190px; display:none;"></div>
-    <div class="px-3 py-1.5 text-[9px] text-[#444] border-t border-[#1a1a1a] text-center">拖动排序，Agent 将按此顺序读取</div>
   </div>
 </div>
 </body>
