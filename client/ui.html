@@ -30,9 +30,11 @@ tailwind.config = {
   ::-webkit-scrollbar-thumb:hover { background: #333333; }
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
   @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  @keyframes blinkFast { 0%,100% { opacity: 1; } 50% { opacity: 0.1; } }
 @keyframes modalIn { from { opacity: 0; transform: scale(0.9) translateY(20px); } to { opacity: 1; transform: scale(1) translateY(0); } }
 @keyframes slide-up { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
   .animate-pulse { animation: pulse 2s ease-in-out infinite; }
+  .blink-fast { animation: blinkFast 0.3s ease-in-out infinite; }
   .animate-slide-up { animation: slide-up 0.2s ease; }
   .hidden { display: none; }
   button:active { transform: scale(.95); }
@@ -1001,14 +1003,21 @@ function copyDiagInfo() {
   copyTextToClipboard(lines.join('\n'), '链路诊断信息已复制');
 }
 // 标题栏活跃灯排：灯总数 = 该用户连接配额，亮 = Agent 当前活跃连接
+// 忙（有工具调用/任务运行）时快闪，空闲时慢呼吸；多灯错开延迟形成流动感
 function renderActivityDots(a) {
   var el = document.getElementById('activityDots');
   if (!el) return;
   var total = (a && a.maxConnections) || 10;
   var used = (a && a.connections) || 0;
+  var busy = (((a && a.pendingCalls) || 0) + ((a && a.runningTasks) || 0)) > 0;
+  var anim = busy ? 'blink-fast' : 'animate-pulse';
   var html = '';
   for (var i = 0; i < total; i++) {
-    html += '<span class="w-1.5 h-1.5 rounded-full inline-block ' + (i < used ? 'bg-[#4ade80]' : 'bg-[#2a2a2a]') + '"></span>';
+    if (i < used) {
+      html += '<span class="w-1.5 h-1.5 rounded-full inline-block bg-[#4ade80] ' + anim + '" style="animation-delay:' + (i * 70) + 'ms"></span>';
+    } else {
+      html += '<span class="w-1.5 h-1.5 rounded-full inline-block bg-[#2a2a2a]"></span>';
+    }
   }
   el.innerHTML = html;
   el.title = 'Agent 活跃: ' + used + '/' + total + (a && a.runningTasks ? ' · 任务 ' + a.runningTasks : '') + (a && a.pendingCalls ? ' · 调用 ' + a.pendingCalls : '');
