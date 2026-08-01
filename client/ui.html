@@ -267,12 +267,14 @@ function refreshPairCode() {
     window.pywebview.api.refresh_pair_code().then(function(result) {
       state.pairCode = result.pairCode;
       var el = document.getElementById('pairCode'); if (el) el.textContent = state.pairCode;
-      addLog('info', '配对码已刷新: ' + state.pairCode);
+      addLog('done', '配对码已推送至中转服务器');
+      addLog('info', '请复制并发送给智能体：云桥地址 ' + (document.getElementById('relayUrl')?.textContent || '') + ' 配对码 ' + state.pairCode);
     });
   } else {
     state.pairCode = String(100000 + Math.floor(Math.random() * 900000));
     var el = document.getElementById('pairCode'); if (el) el.textContent = state.pairCode;
-    addLog('info', '配对码已刷新: ' + state.pairCode);
+    addLog('done', '配对码已推送至中转服务器');
+    addLog('info', '请复制并发送给智能体：云桥地址 ' + (document.getElementById('relayUrl')?.textContent || '') + ' 配对码 ' + state.pairCode);
   }
 }
 
