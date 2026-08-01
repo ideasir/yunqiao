@@ -8,28 +8,37 @@ import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { z } from 'zod/v4';
 
 const PORT = parseInt(process.env.PORT || '9876');
-const KEY_FILE = process.env.KEY_FILE || '/opt/cloud-mcp/.key';
-const ALLOWED_DEVICES = (process.env.ALLOWED_DEVICES || '').split(',').filter(Boolean);
+const USERS_FILE = process.env.USERS_FILE || '/opt/cloud-mcp/.users.json';
 const COMMAND_TIMEOUT = parseInt(process.env.COMMAND_TIMEOUT || '60000');
 const MCP_PATH = '/mcp';
 const MCP_MESSAGE_PATH = '/mcp/message';
 
-// 自动管理 KEY
-let AUTH_KEY = '';
-if (existsSync(KEY_FILE)) {
-  AUTH_KEY = readFileSync(KEY_FILE, 'utf-8').trim();
-  console.error(`[server] 🔑 KEY 已从 ${KEY_FILE} 读取`);
-} else {
-  AUTH_KEY = randomBytes(32).toString('hex');
-  mkdirSync(dirname(KEY_FILE), { recursive: true });
-  writeFileSync(KEY_FILE, AUTH_KEY, 'utf-8');
-  console.error(`[server] 🔑 新 KEY 已生成并保存到 ${KEY_FILE}`);
-  console.error(`[server] 📋 KEY: ${AUTH_KEY}`);
+// ═══════════════════════════════════════════════
+// 多用户管理
+// ═══════════════════════════════════════════════
+
+let users = {};
+function loadUsers() {
+  if (existsSync(USERS_FILE)) {
+    try { users = JSON.parse(readFileSync(USERS_FILE, 'utf-8')); } catch {}
+  }
+  // 默认管理员用户
+  if (!users['admin']) {
+    users['admin'] = { key: process.env.RELAY_KEY || 'yunqiao-mcp-key-2026', name: '管理员', role: 'admin', createdAt: new Date().toISOString() };
+    saveUsers();
+  }
 }
-if (process.env.RELAY_KEY) {
-  AUTH_KEY = process.env.RELAY_KEY;
-  console.error('[server] 🔑 使用环境变量 RELAY_KEY 覆盖');
+function saveUsers() {
+  mkdirSync(dirname(USERS_FILE), { recursive: true });
+  writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf-8');
 }
+function findByKey(key) {
+  for (const [uid, u] of Object.entries(users)) {
+    if (u.key === key) return { userId: uid, ...u };
+  }
+  return null;
+}
+loadUsers();
 
 const ALLOWED_COMMANDS = (process.env.ALLOWED_COMMANDS || '').split(',').filter(Boolean);
 const ALLOWED_FILE_PREFIX = process.env.ALLOWED_FILE_PREFIX || '';
@@ -37,7 +46,11 @@ const ALLOWED_FILE_PREFIX = process.env.ALLOWED_FILE_PREFIX || '';
 const devices = new Map();
 const pendingRequests = new Map();
 const transports = new Map();
-const agentMessages = [];  // 客户端发往智能体的消息队列
+const agentMessages = [];
+
+// ═══════════════════════════════════════════════
+// 工具函数
+// ═══════════════════════════════════════════════
 
 function sendJSON(ws, data) {
   if (ws.readyState === WebSocket.OPEN) {
@@ -73,9 +86,10 @@ function rejectDeviceRequests(deviceId, reason) {
 }
 
 // 客户端消息 → 在线 Agent 推送（SSE 短连接存活期间可即时收到通知，兜底靠 get_client_messages 轮询）
-function notifyAgentsNewMessage() {
-  const unread = agentMessages.filter(m => !m.read).length;
-  for (const { transport } of transports.values()) {
+function notifyAgentsNewMessage(userId) {
+  const unread = agentMessages.filter(m => m.userId === userId && !m.read).length;
+  for (const { transport, userId: sessionUserId } of transports.values()) {
+    if (sessionUserId !== userId) continue;
     transport.send({
       jsonrpc: '2.0',
       method: 'notifications/message',
@@ -84,14 +98,14 @@ function notifyAgentsNewMessage() {
   }
 }
 
-// 按客户端任务队列拖拽后的顺序重排未读消息
-function reorderMessages(orderedIds) {
+// 按客户端任务队列拖拽后的顺序重排未读消息（只影响本用户自己的消息）
+function reorderMessages(orderedIds, userId) {
   const idSet = new Set(orderedIds);
   if (idSet.size === 0) return;
   const byId = new Map();
   const rest = [];
   for (const m of agentMessages) {
-    if (idSet.has(m.id)) byId.set(m.id, m);
+    if (idSet.has(m.id) && m.userId === userId) byId.set(m.id, m);
     else rest.push(m);
   }
   const ordered = orderedIds.map(id => byId.get(id)).filter(Boolean);
@@ -99,7 +113,7 @@ function reorderMessages(orderedIds) {
   // 找到第一个被排序消息原本的位置，把排序后的消息插回该处，保持其余消息相对顺序
   let insertAt = 0;
   for (let i = 0; i < agentMessages.length; i++) {
-    if (idSet.has(agentMessages[i].id)) { insertAt = i; break; }
+    if (idSet.has(agentMessages[i].id) && agentMessages[i].userId === userId) { insertAt = i; break; }
   }
   rest.splice(insertAt, 0, ...ordered);
   agentMessages.length = 0;
@@ -107,18 +121,23 @@ function reorderMessages(orderedIds) {
   console.error(`[message] reordered ${ordered.length} messages`);
 }
 
-// 获取默认设备（优先选有配对码的，否则选第一个）
-function getDefaultDevice() {
+function getDefaultDevice(userId) {
   if (devices.size === 0) return null;
-  // 优先选有 authCode 的非 web 设备
   for (const device of devices.values()) {
-    if (device.authCode && device.os !== 'web') return device;
+    if (device.authCode && device.os !== 'web' && (!userId || device.userId === userId)) return device;
   }
-  // 退而求其次
   for (const device of devices.values()) {
-    if (device.authCode) return device;
+    if (device.authCode && (!userId || device.userId === userId)) return device;
   }
   return devices.values().next().value;
+}
+
+function broadcastToDevices(msg, userId) {
+  for (const device of devices.values()) {
+    if (!userId || device.userId === userId) {
+      sendJSON(device.ws, msg);
+    }
+  }
 }
 
 function checkCommandAllowed(command) {
@@ -135,37 +154,31 @@ function checkPathAllowed(filePath) {
     || filePath.startsWith(ALLOWED_FILE_PREFIX.replace(/\\/g, '\\').replace(/\\$/, '') + '\\');
 }
 
-// ─── 会话管理工具 ─────────────────────────────
-
 async function handleSessionOp(op, payload, deviceId) {
   return await sendAndWait('session_op', { op, ...payload }, deviceId);
 }
 
-// ─── MCP 服务 ────────────────────────────────
+// ═══════════════════════════════════════════════
+// MCP 服务
+// ═══════════════════════════════════════════════
 
-function broadcastToDevices(msg) {
-  for (const device of devices.values()) {
-    sendJSON(device.ws, msg);
-  }
-}
-
-function createMcpServer() {
+function createMcpServer(userId) {
   const server = new McpServer({
-    name: 'cloud-collaborative-mcp',
+    name: 'yunqiao',
     version: '2.0.0',
   });
-
-  // ═══ 旧工具（保留兼容） ═══════════════════
 
   server.registerTool('list_devices', {
     description: '列出所有已连接到中转的私人电脑设备',
     inputSchema: z.object({}),
   }, async () => {
-    const list = Array.from(devices.values()).map(d => ({
-      id: d.id, name: d.name, os: d.os, arch: d.arch,
-      hostname: d.hostname, connectedAt: d.connectedAt,
-      verified: !!d.authCode,
-    }));
+    const list = Array.from(devices.values())
+      .filter(d => !userId || d.userId === userId)
+      .map(d => ({
+        id: d.id, name: d.name, os: d.os, arch: d.arch,
+        hostname: d.hostname, connectedAt: d.connectedAt,
+        verified: !!d.authCode,
+      }));
     if (list.length === 0) {
       return { content: [{ type: 'text', text: '当前没有已连接的设备' }] };
     }
@@ -175,247 +188,124 @@ function createMcpServer() {
     return { content: [{ type: 'text', text }] };
   });
 
-  // ═══ 会话管理工具（新） ═══════════════════
-
-  server.registerTool('create_session', {
-    description: '在远程电脑上创建一个新的工作会话，并设为当前默认会话',
+  // 用户管理（admin 权限）
+  server.registerTool('create_user', {
+    description: '创建新用户',
     inputSchema: z.object({
-      workDir: z.string().describe('工作目录（绝对路径）'),
-      name: z.string().optional().describe('会话名称，不传则自动生成'),
-      code: z.string().describe('客户端显示的验证码'),
+      userId: z.string().describe('用户 ID'),
+      name: z.string().optional().describe('用户名称'),
+      key: z.string().optional().describe('密钥（不传则自动生成）'),
     }),
-  }, async ({ workDir, name, code }) => {
-    const device = getDefaultDevice();
-    if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
-    if (device.authCode !== code) {
-      return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
-    }
-    const result = await handleSessionOp('create', { workDir, name }, device.id);
-    const session = result.payload;
-    return { content: [{ type: 'text', text: `会话已创建: ${session.name} (${session.id})\n工作目录: ${session.workDir}\n当前路径: ${session.cwd}` }] };
+  }, async ({ userId, name, key }) => {
+    const user = users[userId];
+    if (user && user.role !== 'admin') return { content: [{ type: 'text', text: 'Error: 需要 admin 权限' }], isError: true };
+    if (users[userId]) return { content: [{ type: 'text', text: 'Error: 用户已存在' }], isError: true };
+    if (!key) key = randomBytes(16).toString('hex');
+    users[userId] = { key, name: name || userId, role: 'user', createdAt: new Date().toISOString() };
+    saveUsers();
+    return { content: [{ type: 'text', text: `用户已创建: ${userId}\n密钥: ${key}` }] };
   });
 
-  server.registerTool('exec', {
-    description: '在当前默认会话中执行 shell 命令，保持工作目录和环境变量',
-    inputSchema: z.object({
-      command: z.string().describe('要执行的命令'),
-      timeout: z.number().optional().describe('超时时间（毫秒），默认 30000'),
-      code: z.string().describe('客户端显示的验证码'),
-    }),
-  }, async ({ command, timeout, code }) => {
-    const device = getDefaultDevice();
-    if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
-    if (device.authCode !== code) {
-      return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
-    }
-    if (!checkCommandAllowed(command)) {
-      return { content: [{ type: 'text', text: `Error: command '${command.split(/\s+/)[0]}' is not allowed` }], isError: true };
-    }
-    const result = await handleSessionOp('exec', { command, timeout }, device.id);
-    const o = result.payload;
-    const text = [
-      `Exit Code: ${o.exitCode}`,
-      o.stdout ? `\nSTDOUT:\n${o.stdout}` : '',
-      o.stderr ? `\nSTDERR:\n${o.stderr}` : '',
-      o.killed ? '\n[Process was killed due to timeout]' : '',
-    ].join('');
-    return { content: [{ type: 'text', text }] };
+  server.registerTool('list_users', {
+    description: '列出所有用户',
+    inputSchema: z.object({}),
+  }, async () => {
+    const list = Object.entries(users).map(([id, u]) =>
+      `- ${id} (${u.name})${u.role === 'admin' ? ' 👑' : ''}`
+    ).join('\n');
+    return { content: [{ type: 'text', text: list || '暂无用户' }] };
   });
 
-  server.registerTool('read_file', {
-    description: '在当前默认会话中读取文件（支持相对路径，基于会话工作目录）',
+  server.registerTool('delete_user', {
+    description: '删除用户',
     inputSchema: z.object({
-      path: z.string().describe('文件路径（相对路径基于会话 cwd）'),
-      code: z.string().describe('客户端显示的验证码'),
+      userId: z.string().describe('用户 ID'),
     }),
-  }, async ({ path, code }) => {
-    const device = getDefaultDevice();
-    if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
-    if (device.authCode !== code) {
-      return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
-    }
-    const result = await handleSessionOp('read_file', { path }, device.id);
-    const o = result.payload;
-    if (o.success) {
-      return { content: [{ type: 'text', text: o.content }] };
-    }
-    return { content: [{ type: 'text', text: `Error: ${o.error}` }], isError: true };
+  }, async ({ userId }) => {
+    if (userId === 'admin') return { content: [{ type: 'text', text: 'Error: 不能删除 admin' }], isError: true };
+    if (!users[userId]) return { content: [{ type: 'text', text: 'Error: 用户不存在' }], isError: true };
+    delete users[userId];
+    saveUsers();
+    return { content: [{ type: 'text', text: `用户已删除: ${userId}` }] };
   });
 
-  server.registerTool('write_file', {
-    description: '在当前默认会话中写入文件（支持相对路径，基于会话工作目录）',
-    inputSchema: z.object({
-      path: z.string().describe('文件路径（相对路径基于会话 cwd）'),
-      content: z.string().describe('要写入的文件内容'),
-      code: z.string().describe('客户端显示的验证码'),
-    }),
-  }, async ({ path, content, code }) => {
-    const device = getDefaultDevice();
-    if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
-    if (device.authCode !== code) {
-      return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
-    }
-    const result = await handleSessionOp('write_file', { path, content }, device.id);
-    const o = result.payload;
-    if (o.success) {
-      return { content: [{ type: 'text', text: `文件已写入: ${o.path}` }] };
-    }
-    return { content: [{ type: 'text', text: `Error: ${o.error}` }], isError: true };
-  });
+  // 会话管理
+  const sessionTools = [
+    ['create_session', '在远程电脑上创建一个新的工作会话', { workDir: z.string(), name: z.string().optional(), code: z.string() }],
+    ['exec', '在当前默认会话中执行 shell 命令', { command: z.string(), timeout: z.number().optional(), code: z.string() }],
+    ['read_file', '在当前默认会话中读取文件', { path: z.string(), code: z.string() }],
+    ['write_file', '在当前默认会话中写入文件', { path: z.string(), content: z.string(), code: z.string() }],
+    ['close_session', '关闭当前默认会话', { code: z.string() }],
+    ['list_sessions', '列出远程电脑上所有已创建的工作会话', { code: z.string() }],
+    ['switch_session', '切换到指定的会话', { sessionId: z.string(), code: z.string() }],
+  ];
 
-  server.registerTool('close_session', {
-    description: '关闭当前默认会话，清理持久进程和缓存',
-    inputSchema: z.object({
-      code: z.string().describe('客户端显示的验证码'),
-    }),
-  }, async ({ code }) => {
-    const device = getDefaultDevice();
-    if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
-    if (device.authCode !== code) {
-      return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
-    }
-    const result = await handleSessionOp('close', {}, device.id);
-    const o = result.payload;
-    if (o.success) {
-      return { content: [{ type: 'text', text: `会话已关闭` }] };
-    }
-    return { content: [{ type: 'text', text: `Error: ${o.error}` }], isError: true };
-  });
+  for (const [name, desc, schema] of sessionTools) {
+    server.registerTool(name, { description: desc, inputSchema: z.object(schema) }, async (params) => {
+      const device = getDefaultDevice(userId);
+      if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
+      if (device.authCode !== params.code) {
+        return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
+      }
+      const op = name.replace('_session', '');
+      const result = await handleSessionOp(op === 'exec' ? 'exec' : op, params, device.id);
+      return formatResult(name, result, params);
+    });
+  }
 
-  server.registerTool('list_sessions', {
-    description: '列出远程电脑上所有已创建的工作会话',
-    inputSchema: z.object({
-      code: z.string().describe('客户端显示的验证码'),
-    }),
-  }, async ({ code }) => {
-    const device = getDefaultDevice();
-    if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
-    if (device.authCode !== code) {
-      return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
-    }
-    const result = await handleSessionOp('list', {}, device.id);
-    const sessions = result.payload.sessions || [];
-    if (sessions.length === 0) {
-      return { content: [{ type: 'text', text: '当前没有会话。使用 create_session 创建新会话。' }] };
-    }
-    const text = sessions.map(s =>
-      `${s.isDefault ? '👉' : '  '} ${s.name} (${s.id})\n` +
-      `    工作目录: ${s.workDir}\n` +
-      `    当前路径: ${s.cwd}\n` +
-      `    活跃: ${s.alive ? '✅' : '❌'}\n` +
-      `    最后活动: ${new Date(s.lastActive * 1000).toLocaleString()}`
-    ).join('\n\n');
-    return { content: [{ type: 'text', text }] };
-  });
-
-  server.registerTool('switch_session', {
-    description: '切换到指定的会话，后续操作将在该会话中执行',
-    inputSchema: z.object({
-      sessionId: z.string().describe('目标会话 ID'),
-      code: z.string().describe('客户端显示的验证码'),
-    }),
-  }, async ({ sessionId, code }) => {
-    const device = getDefaultDevice();
-    if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
-    if (device.authCode !== code) {
-      return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
-    }
-    const result = await handleSessionOp('switch', { sessionId }, device.id);
-    const o = result.payload;
-    if (o.success) {
-      return { content: [{ type: 'text', text: `已切换到会话: ${o.name} (${o.sessionId})\n工作目录: ${o.workDir}` }] };
-    }
-    return { content: [{ type: 'text', text: `Error: ${o.error}` }], isError: true };
-  });
-
-  // ═══ 保留旧工具（兼容旧版智能体） ═════════
-
+  // 旧工具
   server.registerTool('execute_command', {
-    description: '[旧版] 在指定的私人电脑上执行 shell 命令（建议使用 exec + 会话管理）',
+    description: '[旧版] 在指定的私人电脑上执行 shell 命令',
     inputSchema: z.object({
-      deviceId: z.string().optional().describe('目标设备 ID（不传则自动选择）'),
-      code: z.string().describe('客户端显示的验证码'),
-      command: z.string().describe('要执行的 shell 命令'),
-      timeout: z.number().optional().describe('超时时间（毫秒），默认 30000'),
+      deviceId: z.string().optional(), command: z.string(), timeout: z.number().optional(), code: z.string(),
     }),
   }, async ({ deviceId, code, command, timeout }) => {
-    const device = deviceId ? devices.get(deviceId) : getDefaultDevice();
+    const device = deviceId ? devices.get(deviceId) : getDefaultDevice(userId);
     if (!device) return { content: [{ type: 'text', text: 'Error: device not found' }], isError: true };
-    if (device.authCode !== code) {
-      return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
-    }
-    if (!checkCommandAllowed(command)) {
-      return { content: [{ type: 'text', text: `Error: command not allowed` }], isError: true };
-    }
+    if (device.authCode !== code) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
+    if (!checkCommandAllowed(command)) return { content: [{ type: 'text', text: 'Error: command not allowed' }], isError: true };
     const output = await sendAndWait('execute_command', { command, timeout }, device.id);
     const o = output.payload;
-    const text = [
-      `Exit Code: ${o.exitCode}`,
-      o.stdout ? `\nSTDOUT:\n${o.stdout}` : '',
-      o.stderr ? `\nSTDERR:\n${o.stderr}` : '',
-      o.killed ? '\n[Process was killed due to timeout]' : '',
-    ].join('');
-    return { content: [{ type: 'text', text }] };
+    return { content: [{ type: 'text', text: `Exit Code: ${o.exitCode}${o.stdout ? '\nSTDOUT:' + o.stdout : ''}${o.stderr ? '\nSTDERR:' + o.stderr : ''}${o.killed ? '\n[超时]' : ''}` }] };
   });
 
   server.registerTool('read_file_old', {
-    description: '[旧版] 读取私人电脑上的文件（建议使用 read_file + 会话管理）',
-    inputSchema: z.object({
-      deviceId: z.string().optional().describe('目标设备 ID（不传则自动选择）'),
-      code: z.string().describe('客户端显示的验证码'),
-      path: z.string().describe('文件绝对路径'),
-    }),
+    description: '[旧版] 读取私人电脑上的文件',
+    inputSchema: z.object({ deviceId: z.string().optional(), code: z.string(), path: z.string() }),
   }, async ({ deviceId, code, path }) => {
-    const device = deviceId ? devices.get(deviceId) : getDefaultDevice();
+    const device = deviceId ? devices.get(deviceId) : getDefaultDevice(userId);
     if (!device) return { content: [{ type: 'text', text: 'Error: device not found' }], isError: true };
-    if (device.authCode !== code) {
-      return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
-    }
-    if (!checkPathAllowed(path)) {
-      return { content: [{ type: 'text', text: 'Error: path outside allowed prefix' }], isError: true };
-    }
-    const output = await sendAndWait('read_file', { path }, device.id);
-    const o = output.payload;
-    if (o.success) return { content: [{ type: 'text', text: o.content }] };
-    return { content: [{ type: 'text', text: `Error: ${o.error}` }], isError: true };
+    if (device.authCode !== code) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
+    const result = await sendAndWait('read_file', { path }, device.id);
+    const o = result.payload;
+    return { content: [{ type: 'text', text: o.success ? o.content : `Error: ${o.error}` }], isError: !o.success };
   });
 
   server.registerTool('write_file_old', {
-    description: '[旧版] 写入私人电脑上的文件（建议使用 write_file + 会话管理）',
-    inputSchema: z.object({
-      deviceId: z.string().optional().describe('目标设备 ID（不传则自动选择）'),
-      code: z.string().describe('客户端显示的验证码'),
-      path: z.string().describe('文件绝对路径'),
-      content: z.string().describe('要写入的文件内容'),
-    }),
+    description: '[旧版] 写入私人电脑上的文件',
+    inputSchema: z.object({ deviceId: z.string().optional(), code: z.string(), path: z.string(), content: z.string() }),
   }, async ({ deviceId, code, path, content }) => {
-    const device = deviceId ? devices.get(deviceId) : getDefaultDevice();
+    const device = deviceId ? devices.get(deviceId) : getDefaultDevice(userId);
     if (!device) return { content: [{ type: 'text', text: 'Error: device not found' }], isError: true };
-    if (device.authCode !== code) {
-      return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
-    }
-    if (!checkPathAllowed(path)) {
-      return { content: [{ type: 'text', text: 'Error: path outside allowed prefix' }], isError: true };
-    }
-    const output = await sendAndWait('write_file', { path, content }, device.id);
-    const o = output.payload;
-    if (o.success) return { content: [{ type: 'text', text: `File written: ${path}` }] };
-    return { content: [{ type: 'text', text: `Error: ${o.error}` }], isError: true };
+    if (device.authCode !== code) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
+    const result = await sendAndWait('write_file', { path, content }, device.id);
+    const o = result.payload;
+    return { content: [{ type: 'text', text: o.success ? `文件已写入: ${o.path}` : `Error: ${o.error}` }], isError: !o.success };
   });
 
   server.registerTool('get_client_messages', {
     description: '获取客户端发来的新消息（客户端 UI 发来的消息，读取后自动标记已读并回执给客户端）。建议每次会话开始时调用一次',
     inputSchema: z.object({}),
   }, async () => {
-    // 取走整个队列（顺带清理），只对未读消息回执
-    const msgs = agentMessages.splice(0);
-    const unread = msgs.filter(m => !m.read);
+    // 只取走本用户未读消息（顺带清理），并广播回执
+    const unread = agentMessages.filter(m => m.userId === userId && !m.read);
     const ids = unread.map(m => m.id);
     if (unread.length > 0) {
-      // 广播回执，让客户端 UI 显示"已送达 Agent"
-      for (const device of devices.values()) {
-        sendJSON(device.ws, { type: 'messages_read', ids });
+      const readIds = new Set(ids);
+      for (let i = agentMessages.length - 1; i >= 0; i--) {
+        if (readIds.has(agentMessages[i].id)) agentMessages.splice(i, 1);
       }
+      broadcastToDevices({ type: 'messages_read', ids }, userId);
     }
     if (unread.length === 0) {
       return { content: [{ type: 'text', text: '没有新消息' }] };
@@ -427,92 +317,111 @@ function createMcpServer() {
   });
 
   server.registerTool('get_device_info', {
-    description: '获取远程电脑的系统信息（OS、CPU、内存等）',
-    inputSchema: z.object({
-      code: z.string().describe('客户端显示的验证码'),
-    }),
+    description: '获取远程电脑的系统信息',
+    inputSchema: z.object({ code: z.string() }),
   }, async ({ code }) => {
-    const device = getDefaultDevice();
+    const device = getDefaultDevice(userId);
     if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
-    if (device.authCode !== code) {
-      return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
-    }
+    if (device.authCode !== code) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
     const result = await sendAndWait('get_device_info', {}, device.id);
     const info = result.payload;
+    const gb = (b) => (b / 1024 / 1024 / 1024).toFixed(1) + ' GB';
     const text = [
-      `Hostname: ${info.hostname}`,
-      `Platform: ${info.platform}`,
-      `Architecture: ${info.arch}`,
-      `CPU Cores: ${info.cpus}`,
-      `Uptime: ${(info.uptime / 3600).toFixed(1)} hours`,
-      `Home Directory: ${info.homedir}`,
-      `User: ${info.userInfo?.username || 'unknown'}`,
+      `Hostname: ${info.hostname}`, `Platform: ${info.platform}`, `Architecture: ${info.arch}`,
+      `CPU Cores: ${info.cpus}`, `Uptime: ${(info.uptime / 3600).toFixed(1)} hours`,
+      `Home Directory: ${info.homedir}`, `User: ${info.userInfo?.username || 'unknown'}`,
     ].join('\n');
     return { content: [{ type: 'text', text }] };
   });
 
   server.registerTool('notify', {
-    description: '发送通知消息到客户端日志（用于显示 AI 思考过程、提示等）',
-    inputSchema: z.object({
-      text: z.string().describe('要显示的消息内容'),
-      code: z.string().describe('客户端显示的验证码'),
-    }),
+    description: '发送通知消息到客户端日志',
+    inputSchema: z.object({ text: z.string(), code: z.string() }),
   }, async ({ text, code }) => {
-    const device = getDefaultDevice();
+    const device = getDefaultDevice(userId);
     if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
-    if (device.authCode !== code) {
-      return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
-    }
+    if (device.authCode !== code) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
     sendJSON(device.ws, { type: 'notify', text });
     return { content: [{ type: 'text', text: '已发送' }] };
   });
 
   server.registerTool('download', {
     description: '下载远程电脑上的文件（返回 base64 编码）',
-    inputSchema: z.object({
-      path: z.string().describe('文件路径'),
-      code: z.string().describe('客户端显示的验证码'),
-    }),
+    inputSchema: z.object({ path: z.string(), code: z.string() }),
   }, async ({ path, code }) => {
-    const device = getDefaultDevice();
+    const device = getDefaultDevice(userId);
     if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
-    if (device.authCode !== code) {
-      return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
-    }
+    if (device.authCode !== code) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
     const result = await sendAndWait('download', { path }, device.id);
     const o = result.payload;
-    if (o.success) {
-      return { content: [{ type: 'text', text: `FILE:${path}|${o.size}|${o.data}` }] };
-    }
+    if (o.success) return { content: [{ type: 'text', text: `FILE:${path}|${o.size}|${o.data}` }] };
     return { content: [{ type: 'text', text: `Error: ${o.error}` }], isError: true };
   });
 
   return server;
 }
 
-// ─── HTTP + WebSocket 服务 ──────────────────
+function formatResult(name, result, params) {
+  const o = result.payload;
+  if (name === 'create_session') {
+    const session = o;
+    return { content: [{ type: 'text', text: `会话已创建: ${session?.name || '?'} (${session?.id || '?'})\n工作目录: ${session?.workDir || '?'}` }] };
+  }
+  if (name === 'exec') {
+    const text = [`Exit Code: ${o.exitCode}`, o.stdout ? `\nSTDOUT:\n${o.stdout}` : '', o.stderr ? `\nSTDERR:\n${o.stderr}` : '', o.killed ? '\n[超时]' : ''].join('');
+    return { content: [{ type: 'text', text }] };
+  }
+  if (name === 'read_file') {
+    return { content: [{ type: 'text', text: o.success ? o.content : `Error: ${o.error}` }], isError: !o.success };
+  }
+  if (name === 'write_file') {
+    return { content: [{ type: 'text', text: o.success ? `文件已写入: ${o.path}` : `Error: ${o.error}` }], isError: !o.success };
+  }
+  if (name === 'close_session') {
+    return { content: [{ type: 'text', text: o.success ? '会话已关闭' : `Error: ${o.error}` }], isError: !o.success };
+  }
+  if (name === 'list_sessions') {
+    const sessions = o.sessions || [];
+    if (sessions.length === 0) return { content: [{ type: 'text', text: '暂无会话' }] };
+    const text = sessions.map(s => `${s.isDefault ? '👉' : '  '} ${s.name} (${s.id})\n    工作目录: ${s.workDir}\n    当前路径: ${s.cwd}`).join('\n\n');
+    return { content: [{ type: 'text', text }] };
+  }
+  if (name === 'switch_session') {
+    return { content: [{ type: 'text', text: o.success ? `已切换到: ${o.name} (${o.sessionId})` : `Error: ${o.error}` }], isError: !o.success };
+  }
+  return { content: [{ type: 'text', text: JSON.stringify(o) }] };
+}
+
+// ═══════════════════════════════════════════════
+// HTTP + WebSocket
+// ═══════════════════════════════════════════════
 
 const httpServer = createServer(async (req, res) => {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
 
+  if (url.pathname === '/api/users') {
+    res.writeHead(403, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ error: 'API disabled' }));
+    return;
+  }
+
   if (url.pathname === MCP_PATH) {
     try {
-      const mcpServer = createMcpServer();
+      const userId = url.searchParams.get('user') || 'admin';
+      const mcpServer = createMcpServer(userId);
       const transport = new SSEServerTransport(MCP_MESSAGE_PATH, res);
-      transports.set(transport.sessionId, { server: mcpServer, transport });
+      transports.set(transport.sessionId, { server: mcpServer, transport, userId });
       res.on('close', () => {
         transports.delete(transport.sessionId);
-        broadcastToDevices({ type: 'agent_disconnected' });
+        broadcastToDevices({ type: 'agent_disconnected' }, userId);
       });
       await mcpServer.connect(transport);
-      // 计算 SSE 延迟：取第一个设备的 WSS 延迟
       let latency = 0;
       for (const device of devices.values()) {
-        if (device.latency) { latency = device.latency; break; }
+        if (device.latency && device.userId === userId) { latency = device.latency; break; }
       }
-      broadcastToDevices({ type: 'agent_connected', latency, sessionId: transport.sessionId, platform: 'sandbox', hostname: 'OpenClaw Agent', relayPlatform: 'Ubuntu Linux' });
+      broadcastToDevices({ type: 'agent_connected', latency, platform: 'sandbox', hostname: 'OpenClaw Agent', relayPlatform: 'Ubuntu Linux' }, userId);
     } catch (err) {
-      console.error('[mcp] SSE connect error:', err);
       try { res.writeHead(500).end('Internal Server Error'); } catch {}
     }
     return;
@@ -524,97 +433,72 @@ const httpServer = createServer(async (req, res) => {
       res.writeHead(400).end('Missing or invalid sessionId');
       return;
     }
-    try {
-      await transports.get(sessionId).transport.handlePostMessage(req, res);
-    } catch (err) {
-      console.error('[mcp] handlePostMessage error:', err);
-      try { res.writeHead(500).end('Internal Server Error'); } catch {}
-    }
+    try { await transports.get(sessionId).transport.handlePostMessage(req, res); } catch {}
     return;
   }
 
   if (url.pathname === '/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', devices: devices.size }));
+    res.end(JSON.stringify({ status: 'ok', devices: devices.size, users: Object.keys(users).length }));
     return;
   }
 
   res.writeHead(404).end('Not Found');
 });
 
-httpServer.on('error', (err) => {
-  console.error('[server] HTTP error:', err);
-  process.exit(1);
-});
-
 const wss = new WebSocketServer({ noServer: true });
 
-// 心跳保活，防止自动断开
 const heartbeat = setInterval(() => {
   for (const [id, device] of devices) {
     if (device.ws.readyState === WebSocket.OPEN) {
       const t0 = Date.now();
       device.ws.ping();
-      device.ws.once('pong', () => {
-        device.latency = Date.now() - t0;
-      });
+      device.ws.once('pong', () => { device.latency = Date.now() - t0; });
     }
   }
 }, 15000);
-wss.on('close', () => clearInterval(heartbeat));
 
 httpServer.on('upgrade', (req, socket, head) => {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
-
   if (url.pathname === '/device') {
     const authKey = req.headers['x-key'] || url.searchParams.get('key');
-    if (authKey !== AUTH_KEY) {
+    const user = findByKey(authKey);
+    if (!user) {
       socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
       socket.destroy();
       return;
     }
     wss.handleUpgrade(req, socket, head, (ws) => {
-      wss.emit('connection', ws, req);
+      wss.emit('connection', ws, req, user);
     });
     return;
   }
-
   socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
   socket.destroy();
 });
 
-wss.on('connection', (ws, req) => {
+wss.on('connection', (ws, req, user) => {
   const deviceId = randomUUID();
-
   ws.on('message', (raw) => {
     let msg;
     try { msg = JSON.parse(raw.toString()); } catch {
       sendJSON(ws, { type: 'error', error: 'invalid json' });
       return;
     }
-
     const { type, requestId } = msg;
-
     if (type === 'register') {
       const { deviceName, os, arch, hostname, authCode } = msg;
       const name = deviceName || 'unknown';
-      if (ALLOWED_DEVICES.length > 0 && !ALLOWED_DEVICES.includes(name)) {
-        console.error(`[device] rejected: ${name}`);
-        sendJSON(ws, { type: 'register_result', requestId, success: false, error: 'device not allowed' });
-        return;
-      }
       devices.set(deviceId, {
         id: deviceId, name, os: os || 'unknown', arch: arch || 'unknown',
         hostname: hostname || 'unknown', ws,
-        authCode: authCode || null,
-        connectedAt: new Date().toISOString(),
-        latency: 0,
+        authCode: authCode || null, userId: user.userId,
+        connectedAt: new Date().toISOString(), latency: 0,
       });
-      console.error(`[device] registered: ${name} (${deviceId}) code:${authCode || 'none'}`);
+      console.error(`[device] registered: ${name} (${deviceId}) user:${user.userId} code:${authCode || 'none'}`);
       sendJSON(ws, { type: 'register_result', requestId, success: true, deviceId });
       return;
     }
-
     if (type === 'agent_message') {
       const device = devices.get(deviceId);
       if (device) {
@@ -625,36 +509,33 @@ wss.on('connection', (ws, req) => {
           time: new Date().toISOString(),
           urgent: !!msg.urgent,
           read: false,
+          userId: device.userId,
         });
         if (agentMessages.length > 200) agentMessages.shift();
         console.error(`[message] from ${device.name}: ${(msg.text || '').slice(0, 50)}`);
         sendJSON(ws, { type: 'agent_message_result', requestId, success: true });
         // 尽量即时通知在线的 Agent 会话有新消息
-        notifyAgentsNewMessage();
+        notifyAgentsNewMessage(device.userId);
       }
       return;
     }
-
     if (type === 'update_code') {
       const device = devices.get(deviceId);
       if (device) {
         device.authCode = msg.authCode;
-        // 同步到同 hostname 的所有设备（agent.py 和 main.py 共享配对码）
         for (const [otherId, other] of devices) {
-          if (otherId !== deviceId && other.hostname === device.hostname) {
+          if (otherId !== deviceId && other.hostname === device.hostname && other.userId === device.userId) {
             other.authCode = msg.authCode;
-            console.error(`[device] code synced: ${other.name} (${otherId}) -> ${msg.authCode}`);
           }
         }
-        console.error(`[device] code updated: ${device.name} (${deviceId}) -> ${msg.authCode}`);
         sendJSON(ws, { type: 'update_code_result', requestId, success: true });
       }
       return;
     }
-
     if (type === 'reorder_messages') {
-      if (Array.isArray(msg.orderedIds)) {
-        reorderMessages(msg.orderedIds);
+      const device = devices.get(deviceId);
+      if (device && Array.isArray(msg.orderedIds)) {
+        reorderMessages(msg.orderedIds, device.userId);
       }
       sendJSON(ws, { type: 'reorder_result', requestId, success: true });
       return;
@@ -664,38 +545,25 @@ wss.on('connection', (ws, req) => {
       const { resolve, reject, timer } = pendingRequests.get(requestId);
       clearTimeout(timer);
       pendingRequests.delete(requestId);
-      if (type === 'error') {
-        reject(new Error(msg.error));
-      } else {
-        resolve(msg);
-      }
+      if (type === 'error') reject(new Error(msg.error));
+      else resolve(msg);
     }
   });
-
   ws.on('close', () => {
     const device = devices.get(deviceId);
-    if (device) {
-      console.error(`[device] disconnected: ${device.name} (${deviceId})`);
-    }
+    if (device) console.error(`[device] disconnected: ${device.name} (${deviceId})`);
     devices.delete(deviceId);
     rejectDeviceRequests(deviceId, `device '${deviceId}' disconnected`);
   });
-
-  ws.on('error', (err) => {
-    console.error(`[device] ws error: ${deviceId}`, err.message);
-  });
+  ws.on('error', (err) => { console.error(`[device] ws error: ${deviceId}`, err.message); });
 });
 
 httpServer.listen(PORT, () => {
   console.error(`[server] listening on http://0.0.0.0:${PORT}`);
-  console.error(`[server] MCP endpoint: http://0.0.0.0:${PORT}${MCP_PATH}`);
-  console.error(`[server] Device WS: ws://0.0.0.0:${PORT}/device`);
-  console.error(`[server] Session management enabled`);
-  if (ALLOWED_COMMANDS.length) console.error(`[server] allowed commands: ${ALLOWED_COMMANDS.join(', ')}`);
+  console.error(`[server] Users: ${Object.keys(users).length} (admin: ${users['admin']?.key?.slice(0,8)}...)`);
 });
 
 process.on('SIGINT', () => {
-  console.error('[server] shutting down');
   wss.close();
   httpServer.close();
   process.exit(0);
