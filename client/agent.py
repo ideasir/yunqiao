@@ -526,13 +526,14 @@ class Agent:
             import psutil
             total = psutil.virtual_memory().total
             free = psutil.virtual_memory().available
+            uptime = time.time() - psutil.boot_time()
         except:
-            total = 0; free = 0
+            total = 0; free = 0; uptime = 0
         return {
             "hostname": platform.node(), "platform": sys.platform,
             "arch": platform.machine(), "cpus": os.cpu_count() or 0,
             "totalMem": total, "freeMem": free,
-            "uptime": time.time(), "homedir": str(Path.home()),
+            "uptime": uptime, "homedir": str(Path.home()),
             "userInfo": {"username": os.getlogin()},
         }
     

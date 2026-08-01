@@ -131,7 +131,8 @@ class Api:
         return {"success": True}
 
     def get_settings(self):
-        return {"key": RELAY_KEY, "relayUrl": RELAY_URL, "deviceName": DEVICE_NAME}
+        return {"key": RELAY_KEY, "relayUrl": RELAY_URL, "deviceName": DEVICE_NAME,
+                "autoConnect": cfg.get("autoConnect", False)}
 
     def toggle_connect(self):
         if agent and agent.connected:

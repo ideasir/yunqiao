@@ -771,6 +771,10 @@ function configRelay() {
     window.pywebview.api.get_settings().then(function(cfg) {
       if (cfg && cfg.key) state.relayKey = cfg.key;
       if (cfg && cfg.relayUrl) document.getElementById('modalRelayUrl').value = cfg.relayUrl;
+      if (cfg && typeof cfg.autoConnect !== 'undefined') {
+        state.autoConnect = cfg.autoConnect;
+        document.getElementById('modalAutoConnect').checked = cfg.autoConnect;
+      }
     }).catch(function() {});
   }
   document.getElementById('modalRelayKey').value = state.relayKey || '';

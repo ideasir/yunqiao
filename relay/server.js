@@ -496,9 +496,8 @@ const wss = new WebSocketServer({ noServer: true });
 const heartbeat = setInterval(() => {
   for (const [id, device] of devices) {
     if (device.ws.readyState === WebSocket.OPEN) {
-      const t0 = Date.now();
+      device._lastPingAt = Date.now();
       device.ws.ping();
-      device.ws.once('pong', () => { device.latency = Date.now() - t0; });
     }
   }
 }, 15000);
@@ -524,6 +523,14 @@ httpServer.on('upgrade', (req, socket, head) => {
 
 wss.on('connection', (ws, req, user) => {
   const deviceId = randomUUID();
+  // 持久 pong 监听（避免每次 ping 注册 once 监听器导致泄漏），延迟负值归零
+  ws.on('pong', () => {
+    const d = devices.get(deviceId);
+    if (d && d._lastPingAt) {
+      d.latency = Math.max(0, Date.now() - d._lastPingAt);
+      d._lastPingAt = null;
+    }
+  });
   ws.on('message', (raw) => {
     let msg;
     try { msg = JSON.parse(raw.toString()); } catch {
