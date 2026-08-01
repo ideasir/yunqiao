@@ -180,7 +180,7 @@ console.log("JS loaded OK");
 
 
 
-const state = { connected: false, pairCode: '------', ws: null, sessions: [], currentSessionId: null, deviceId: null, deviceName: '', cwd: '', logs: {}, platform: '', hostname: '', workDir: '', relayKey: 'yunqiao-mcp-key-2026', permission: 'super' };
+const state = { connected: false, pairCode: '------', ws: null, sessions: [], currentSessionId: null, deviceId: null, deviceName: '', cwd: '', logs: {}, platform: '', hostname: '', workDir: '', relayKey: '', permission: 'workspace' };
 var isDesktopApp = typeof window.pywebview !== 'undefined';
 
 var _lastLogText = '';
@@ -373,7 +373,8 @@ function renderSidebar() {
       item.style.cssText = 'color:#666;width:26px;height:26px;background:transparent;';
     }
     item.title = (s.name || 'unnamed') + ' - ' + (s.workDir || '');
-    item.textContent = (s.name || '?').slice(0, 1);
+    item.textContent = (s.name || '?').slice(0, 2);
+    item.style.fontSize = '10px';
     item.onmouseover = function() { if (!isDefault) { this.style.background = '#1a1a1a'; this.style.color = '#aaa'; } };
     item.onmouseout = function() { if (!isDefault) { this.style.background = 'transparent'; this.style.color = '#666'; } };
     item.onclick = function(e) {
@@ -544,6 +545,7 @@ function setConn状态(status) {
   updateStatus();
   addLog('info', '欢迎使用云桥 MCP v2.0');
   setConn状态('disconnected');
+  setPermission('workspace');
   // 从后端加载会话和工作区
   if (window.pywebview && window.pywebview.api) {
     window.pywebview.api.get_sessions().then(function(data) {
