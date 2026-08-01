@@ -147,7 +147,8 @@ tailwind.config = {
         <div class="flex justify-between"><span class="text-[#888]">平台</span><span class="text-[#ddd]" id="agentPlatform">-</span></div>
       </div>
       <div class="flex gap-1.5 px-3 py-2 border-t border-[#1f1f1f]">
-        <button class="flex-1 text-xs py-1 rounded-lg bg-[#222] text-[#ededed] hover:bg-[#2a2a2a] transition-all font-medium" onclick="copyPairCode()" title="复制地址和配对码">复制</button>
+        <button class="flex-1 text-xs py-1 rounded-lg bg-[#222] text-[#ededed] hover:bg-[#2a2a2a] transition-all font-medium" onclick="copyPairCode()" title="复制配对码（发给智能体）">复制配对码</button>
+        <button class="text-xs py-1 px-2 rounded-lg bg-[#1a1a1a] text-[#777] hover:text-[#ededed] transition-all" onclick="copyMcpUrl()" title="复制 MCP 地址（仅第一次连接需要发给智能体）">地址</button>
         <button class="text-xs py-1 px-2 rounded-lg bg-[#1a1a1a] text-[#777] hover:text-[#ededed] transition-all" onclick="refreshPairCode()" title="刷新配对码">刷新</button>
       </div>
     </div>
@@ -586,7 +587,7 @@ function syncTaskOrder() {
   }
 }
 
-function copyPairCode() {
+function getMcpUrl() {
   var relayUrl = document.getElementById('relayUrl').textContent;
   // 推导 MCP 地址
   var mcpUrl = relayUrl;
@@ -595,8 +596,13 @@ function copyPairCode() {
   else if (!mcpUrl.startsWith('http')) mcpUrl = 'https://' + mcpUrl;
   mcpUrl = mcpUrl.replace('/device', '/mcp');
   if (!mcpUrl.endsWith('/mcp')) mcpUrl = mcpUrl + '/mcp';
-  navigator.clipboard.writeText('云桥地址: ' + mcpUrl + '\n配对码: ' + state.pairCode);
-  addLog('info', '已复制：云桥地址 + 配对码');
+  return mcpUrl;
+}
+function copyPairCode() {
+  copyTextToClipboard('配对码: ' + state.pairCode, '配对码已复制（不包含地址）');
+}
+function copyMcpUrl() {
+  copyTextToClipboard(getMcpUrl(), 'MCP 地址已复制（仅第一次连接需要发给智能体）: ' + getMcpUrl());
 }
 function refreshPairCode() {
   if (window.pywebview && window.pywebview.api && window.pywebview.api.refresh_pair_code) {
