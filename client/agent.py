@@ -275,7 +275,9 @@ class Agent:
             result = await self._exec_cmd(cmd, payload.get("timeout", 30000))
             await self._send("command_result", rid, result)
             self._emit(self.on_result, result)
-            self._emit(self.on_log, f"💻 {cmd[:100]}")
+            cwd = self.sessions.get_current()
+            cwd_str = cwd.cwd if cwd else os.getcwd()
+            self._emit(self.on_log, f"💻 {cwd_str}> {cmd[:80]}")
             return
         
         if msg_type == "read_file":
@@ -305,7 +307,9 @@ class Agent:
             result = await self._handle_session_op(op, payload)
             await self._send("session_op_result", rid, result)
             if op == "exec" and "exitCode" in result:
-                self._emit(self.on_log, f"💻 {payload.get('command','')[:100]}")
+                cwd = self.sessions.get_current()
+                cwd_str = cwd.cwd if cwd else os.getcwd()
+                self._emit(self.on_log, f"💻 {cwd_str}> {payload.get('command','')[:80]}")
             elif op in ("read_file", "write_file"):
                 self._emit(self.on_log, f"{'📖' if op == 'read_file' else '✏️'} {payload.get('path','')[:80]}")
             return
