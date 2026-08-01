@@ -423,6 +423,26 @@ function createMcpServer() {
     return { content: [{ type: 'text', text: '已发送' }] };
   });
 
+  server.registerTool('download', {
+    description: '下载远程电脑上的文件（返回 base64 编码）',
+    inputSchema: z.object({
+      path: z.string().describe('文件路径'),
+      code: z.string().describe('客户端显示的验证码'),
+    }),
+  }, async ({ path, code }) => {
+    const device = getDefaultDevice();
+    if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
+    if (device.authCode !== code) {
+      return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
+    }
+    const result = await sendAndWait('download', { path }, device.id);
+    const o = result.payload;
+    if (o.success) {
+      return { content: [{ type: 'text', text: `FILE:${path}|${o.size}|${o.data}` }] };
+    }
+    return { content: [{ type: 'text', text: `Error: ${o.error}` }], isError: true };
+  });
+
   return server;
 }
 

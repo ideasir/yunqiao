@@ -49,6 +49,12 @@ case "$TOOL" in
   notify)
     YUNQIAO_URL="$URL" node "$CLIENT" "$CODE" call notify "{\"text\":\"$*\"}"
     ;;
+  download)
+    YUNQIAO_URL="$URL" node "$CLIENT" "$CODE" call download "{\"path\":\"$1\"}"
+    ;;
+  screenshot)
+    YUNQIAO_URL="$URL" node "$CLIENT" "$CODE" call exec '{"command":"powershell -Command Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $v = [System.Windows.Forms.Screen]::AllScreens; $w=0; $h=0; foreach($s in $v){if($s.Bounds.Right -gt $w){$w=$s.Bounds.Right}; if($s.Bounds.Bottom -gt $h){$h=$s.Bounds.Bottom}}; $b=New-Object System.Drawing.Bitmap($w,$h); $g=[System.Drawing.Graphics]::FromImage($b); $g.CopyFromScreen(0,0,0,0,$b.Size); $b.Save(\"screenshot.png\"); echo screenshot.png"}'
+    ;;
   *)
     echo "未知工具: $TOOL"
     exit 1

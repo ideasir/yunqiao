@@ -317,6 +317,18 @@ class Agent:
             await self._send("device_info", rid, result)
             return
         
+        if msg_type == "download":
+            path = payload.get("path", "")
+            try:
+                import base64
+                with open(path, "rb") as f:
+                    data = base64.b64encode(f.read()).decode()
+                size = os.path.getsize(path)
+                await self._send("download_result", rid, {"success": True, "data": data, "size": size, "path": path})
+            except Exception as e:
+                await self._send("download_result", rid, {"success": False, "error": str(e)})
+            return
+        
         if msg_type == "session_op":
             op = payload.get("op", "")
             self._emit(self.on_command, {"type": "session", "op": op})
