@@ -179,6 +179,12 @@ class Api:
             "workDir": dw
         }
 
+    def set_permission(self, mode):
+        if agent:
+            agent.set_permission(mode)
+            return {"success": True}
+        return {"success": False, "error": "Agent 未启动"}
+
 
 # ─── 启动 ────────────────────────────────────────
 def main():

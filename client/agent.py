@@ -112,6 +112,9 @@ class Agent:
         self.device_id = None
         self.connected = False
         
+        # 权限模式: workspace（仅工作区）/ super（全盘）
+        self.permission = "workspace"
+        
         # 会话管理
         self.sessions = SessionManager()
         
@@ -176,6 +179,10 @@ class Agent:
                 })),
                 self._loop
             )
+    
+    def set_permission(self, mode):
+        """设置权限模式: workspace 或 super"""
+        self.permission = mode
     
     # ── 内部实现 ──────────────────────────────
     
@@ -325,11 +332,25 @@ class Agent:
         except Exception as e:
             return {"exitCode": 1, "stdout": "", "stderr": str(e), "killed": False}
     
+    def _check_path(self, path):
+        """检查路径是否在工作区范围内"""
+        if self.permission != "workspace":
+            return True
+        session = self.sessions.get_current()
+        if not session:
+            return False
+        workspace = os.path.normpath(session.workDir)
+        resolved = os.path.normpath(path)
+        return resolved == workspace or resolved.startswith(workspace + os.sep)
+    
     def _read_file(self, path):
         try:
             if not os.path.isabs(path):
                 session = self.sessions.get_current()
                 path = os.path.join(session.cwd, path) if session else path
+            path = os.path.normpath(path)
+            if not self._check_path(path):
+                return {"success": False, "error": "超出工作区范围", "path": path}
             with open(path, "r", encoding="utf-8") as f:
                 content = f.read()
             return {"success": True, "content": content, "path": path}
@@ -341,6 +362,9 @@ class Agent:
             if not os.path.isabs(path):
                 session = self.sessions.get_current()
                 path = os.path.join(session.cwd, path) if session else path
+            path = os.path.normpath(path)
+            if not self._check_path(path):
+                return {"success": False, "error": "超出工作区范围", "path": path}
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content)

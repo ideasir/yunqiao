@@ -432,6 +432,10 @@ function closeSession(id) {
 
 function setPermission(type) {
   state.permission = type;
+  // 同步到后端
+  if (window.pywebview && window.pywebview.api) {
+    window.pywebview.api.set_permission(type);
+  }
   var superEl = document.getElementById('permSuper');
   var workspaceEl = document.getElementById('permWorkspace');
   if (type === 'super') {
