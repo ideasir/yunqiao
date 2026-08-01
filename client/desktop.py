@@ -61,7 +61,6 @@ def get_agent():
             else:
                 notify_ui("relay_status", {"status": "connected" if s.get("connected") else "disconnected"})
         agent.on_status = on_status
-        agent.on_command = lambda c: notify_ui("log", {"text": f"收到命令: {c.get('type','?')} {c.get('command','')[:50]}"})
         agent.on_result = lambda r: notify_ui("command_result", {"payload": r})
     return agent
 
