@@ -36,6 +36,10 @@ tailwind.config = {
   .animate-slide-up { animation: slide-up 0.2s ease; }
   .hidden { display: none; }
   button:active { transform: scale(.95); }
+
+  /* 任务队列抽屉：收起时一个小条，展开时向上延伸 */
+  #taskPanel { width: 148px; max-height: 34px; overflow: hidden; transition: all .25s ease; }
+  #taskPanel.expanded { width: 280px; max-height: 320px; }
 </style>
 
 </head>
@@ -87,13 +91,13 @@ tailwind.config = {
       <input type="text" id="cmdInput" class="flex-1 bg-transparent border-none text-[#ededed] px-3 py-3 font-mono text-xs outline-none placeholder-[#666]" placeholder="给 Agent 发消息，回车发送（! 前缀 = 紧急）" spellcheck="false" onkeydown="if(event.key==='Enter')sendCommand()" />
     </div>
 
-    <!-- 任务队列面板（日志区域右下角，绝对定位不随日志滚动） -->
-    <div id="taskPanel" class="absolute rounded-xl bg-[#141414] border border-[#222222] shadow-2xl z-40 select-none" style="bottom:52px; right:12px; width:280px; max-height:280px;">
-      <div class="flex items-center gap-2 px-3 py-2 border-b border-[#1f1f1f] cursor-pointer" onclick="toggleTaskPanel()" title="点击收起/展开">
+    <!-- 任务队列抽屉（日志区域右下角，无任务收缩/有任务自动展开） -->
+    <div id="taskPanel" class="absolute rounded-xl bg-[#141414] border border-[#222222] shadow-2xl z-40 select-none" style="bottom:52px; right:12px;">
+      <div class="flex items-center gap-2 px-3 py-2 border-b border-[#1f1f1f] cursor-pointer" onclick="toggleTaskPanel()" title="点击展开/收起">
         <div class="w-1.5 h-1.5 rounded-full flex-shrink-0" id="taskPanelDot" style="background:#333;"></div>
-        <span class="text-xs font-medium text-[#ccc]">任务队列</span>
+        <span class="text-xs font-medium text-[#ccc] whitespace-nowrap">任务队列</span>
         <span class="ml-auto text-[10px] font-mono text-[#888]" id="taskPanelCount">0</span>
-        <span class="text-[10px] text-[#555]" id="taskPanelArrow">▾</span>
+        <span class="text-[10px] text-[#555]" id="taskPanelArrow">▸</span>
       </div>
       <div id="taskPanelBody">
         <div id="taskEmpty" class="px-3 py-3 text-[11px] text-[#555] text-center">暂无等待任务</div>
@@ -290,7 +294,8 @@ function updateAgentBadge() {
 }
 
 // ─── 任务队列面板 ────────────────────────────────
-var panelCollapsed = false;
+var panelOpen = false;      // 抽屉是否展开
+var panelManual = false;    // 用户是否手动控制过（手动后不自动打扰）
 var dragMsgIdx = -1;
 function fmtTime(t) {
   var d = new Date(t);
@@ -298,11 +303,21 @@ function fmtTime(t) {
   return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
 }
 function toggleTaskPanel() {
-  panelCollapsed = !panelCollapsed;
-  var body = document.getElementById('taskPanelBody');
+  panelManual = true;
+  panelOpen = !panelOpen;
+  applyPanelState();
+}
+function applyPanelState() {
+  var panel = document.getElementById('taskPanel');
   var arrow = document.getElementById('taskPanelArrow');
-  body.style.display = panelCollapsed ? 'none' : '';
-  arrow.textContent = panelCollapsed ? '▸' : '▾';
+  if (!panel) return;
+  if (panelOpen) {
+    panel.classList.add('expanded');
+    if (arrow) arrow.textContent = '▾';
+  } else {
+    panel.classList.remove('expanded');
+    if (arrow) arrow.textContent = '▸';
+  }
 }
 function renderTaskPanel() {
   var list = document.getElementById('taskList');
@@ -340,6 +355,10 @@ function renderTaskPanel() {
     });
     list.appendChild(row);
   });
+  // 抽屉自动行为：无任务收起，有任务自动展开（用户手动控制过则不打扰）
+  if (n === 0) panelOpen = false;
+  else if (!panelManual) panelOpen = true;
+  applyPanelState();
 }
 function reorderTask(from, to) {
   if (from === to || from < 0) return;
