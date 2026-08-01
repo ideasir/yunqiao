@@ -277,8 +277,8 @@ class Agent:
             self._emit(self.on_result, result)
             cwd = self.sessions.get_current()
             cwd_str = cwd.cwd if cwd else os.getcwd()
-            self._emit(self.on_log, f"💻 执行命令: {cmd[:80]}")
-            self._emit(self.on_log, f"📂 {cwd_str}")
+            self._emit(self.on_log, f"[执行] {cmd[:80]}")
+            self._emit(self.on_log, f"[目录] {cwd_str}")
             return
         
         if msg_type == "read_file":
@@ -288,21 +288,24 @@ class Agent:
             await self._send("file_result", rid, result)
             if result.get("success"):
                 size = len(result.get("content", ""))
-                self._emit(self.on_log, f"📖 读取文件: {path} ({size} 字节)")
+                self._emit(self.on_log, f"[读取] {path} ({size} 字节)")
             else:
-                self._emit(self.on_log, f"📖 读取文件: {path} ❌ {result.get('error','')}")
+                self._emit(self.on_log, f"[读取] {path} 失败: {result.get('error','')}")
             return
         
         if msg_type == "write_file":
             path = payload.get("path", "")
             self._emit(self.on_command, {"type": "write", "path": path})
+            # 判断文件是否存在（新建 vs 修改）
+            existed = os.path.exists(path)
             result = self._write_file(path, payload.get("content", ""))
             await self._send("file_result", rid, result)
             if result.get("success"):
                 size = len(payload.get("content", ""))
-                self._emit(self.on_log, f"✏️ 写入文件: {path} ({size} 字节)")
+                action = "修改" if existed else "新建"
+                self._emit(self.on_log, f"[{action}] {path} ({size} 字节)")
             else:
-                self._emit(self.on_log, f"✏️ 写入文件: {path} ❌ {result.get('error','')}")
+                self._emit(self.on_log, f"[写入] {path} 失败: {result.get('error','')}")
             return
         
         if msg_type == "get_device_info":
@@ -318,14 +321,12 @@ class Agent:
             if op == "exec" and "exitCode" in result:
                 cwd = self.sessions.get_current()
                 cwd_str = cwd.cwd if cwd else os.getcwd()
-                self._emit(self.on_log, f"💻 执行命令: {payload.get('command','')[:80]}")
-                self._emit(self.on_log, f"📂 {cwd_str}")
+                self._emit(self.on_log, f"[执行] {payload.get('command','')[:80]}")
+                self._emit(self.on_log, f"[目录] {cwd_str}")
             elif op == "read_file":
-                p = payload.get('path','')
-                self._emit(self.on_log, f"📖 读取文件: {p}")
+                self._emit(self.on_log, f"[读取] {payload.get('path','')}")
             elif op == "write_file":
-                p = payload.get('path','')
-                self._emit(self.on_log, f"✏️ 写入文件: {p}")
+                self._emit(self.on_log, f"[写入] {payload.get('path','')}")
             return
     
     async def _send(self, msg_type, rid, payload):
