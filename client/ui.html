@@ -40,6 +40,13 @@ tailwind.config = {
   /* 任务队列抽屉：收起时一个小条，展开时向上延伸 */
   #taskPanel { width: 148px; max-height: 34px; overflow: hidden; transition: all .25s ease; }
   #taskPanel.expanded { width: 280px; max-height: 320px; }
+
+  /* 日志系统（IDE 风格） */
+  .lg-time { color: #666; font-family: 'JetBrains Mono', Consolas, monospace; flex-shrink: 0; min-width: 56px; }
+  .lg-badge { font-size: 9px; font-family: 'JetBrains Mono', Consolas, monospace; padding: 0 4px; border-radius: 3px; border: 1px solid; flex-shrink: 0; line-height: 13px; margin-top: 1px; }
+  .lg-fbtn.active { background: #222; color: #ededed; }
+  .cmd-body pre { margin: 0; font-family: inherit; white-space: pre-wrap; word-break: break-all; }
+  .entry { user-select: text; -webkit-user-select: text; }
 </style>
 
 </head>
@@ -80,9 +87,21 @@ tailwind.config = {
       <button onclick="copyLog()" class="text-[10px] text-[#555] hover:text-[#aaa] transition-colors cursor-pointer bg-transparent border-0" title="复制日志">📋</button>
     </div>
 
+    <!-- 日志工具条 -->
+    <div class="flex items-center gap-1 px-4 py-1 flex-shrink-0 select-none bg-[#0d0d0d] border-y border-[#1a1a1a]">
+      <button class="lg-fbtn active text-[10px] px-1.5 py-0.5 rounded text-[#ccc] hover:text-white transition-colors" data-f="all" onclick="setLogFilter('all')">全部</button>
+      <button class="lg-fbtn text-[10px] px-1.5 py-0.5 rounded text-[#666] hover:text-[#ccc] transition-colors" data-f="cmd" onclick="setLogFilter('cmd')">命令</button>
+      <button class="lg-fbtn text-[10px] px-1.5 py-0.5 rounded text-[#666] hover:text-[#ccc] transition-colors" data-f="file" onclick="setLogFilter('file')">文件</button>
+      <button class="lg-fbtn text-[10px] px-1.5 py-0.5 rounded text-[#666] hover:text-[#ccc] transition-colors" data-f="err" onclick="setLogFilter('err')">错误</button>
+      <button class="lg-fbtn text-[10px] px-1.5 py-0.5 rounded text-[#666] hover:text-[#ccc] transition-colors" data-f="msg" onclick="setLogFilter('msg')">消息</button>
+      <div class="flex-1"></div>
+      <button id="autoScrollBtn" class="text-[10px] text-[#555] hover:text-[#aaa] transition-colors bg-transparent border-0 cursor-pointer" onclick="toggleAutoScroll()" title="自动滚动到底部">⤓ 滚动</button>
+      <button class="text-[10px] text-[#555] hover:text-[#aaa] transition-colors bg-transparent border-0 cursor-pointer" onclick="clearLog()" title="清空日志">清空</button>
+    </div>
+
     <!-- 日志区 -->
-    <div class="flex-1 overflow-y-auto px-5 py-3 font-mono text-xs leading-relaxed select-text" id="sessionLog" style="user-select: text; -webkit-user-select: text;">
-      <div class="entry info flex gap-3 py-1 animate-slide-up"><span class="text-[#777] flex-shrink-0 min-w-[60px]">--:--:--</span><span class="text-[#ccc]">云桥 v2.0 运行中</span></div>
+    <div class="flex-1 overflow-y-auto px-4 py-2 font-mono text-xs leading-relaxed" id="sessionLog">
+      <div class="entry flex items-start gap-2 py-[3px] animate-slide-up"><span class="lg-time">--:--:--</span><span class="lg-badge" style="color:#4ade80;border-color:#4ade8044;">SYS</span><span class="text-[#888]">云桥 v2.0 运行中</span></div>
     </div>
 
     <!-- 输入区 -->
@@ -207,6 +226,55 @@ var isDesktopApp = typeof window.pywebview !== 'undefined';
 var _lastLogText = '';
 var _lastLogTime = 0;
 var _lastLogType = '';
+var autoScroll = true;
+var logFilter = 'all';
+var BADGES = {
+  cmd:    ['CMD',  '#3b82f6', 'text-[#93c5fd]'],
+  out:    ['OUT',  '#71717a', 'text-[#d4d4d4]'],
+  err:    ['ERR',  '#ff6b6b', 'text-[#ff8a8a]'],
+  info:   ['INF',  '#64748b', 'text-[#a1a1aa]'],
+  done:   ['OK',   '#4ade80', 'text-[#4ade80]'],
+  file:   ['FILE', '#a78bfa', 'text-[#c4b5fd]'],
+  code:   ['CODE', '#e0a458', 'text-[#e0a458]'],
+  status: ['SYS',  '#5b6472', 'text-[#8a8a8a]'],
+  action: ['AGT',  '#4ade80', 'text-[#4ade80]'],
+  msg:    ['MSG',  '#fbbf24', 'text-[#fcd34d]'],
+  warn:   ['WARN', '#fbbf24', 'text-[#fcd34d]'],
+};
+function logCat(type) {
+  if (type === 'cmd' || type === 'out') return 'cmd';
+  if (type === 'file' || type === 'code') return 'file';
+  if (type === 'err' || type === 'warn') return 'err';
+  if (type === 'msg') return 'msg';
+  return 'sys';
+}
+function scrollLog() {
+  if (!autoScroll) return;
+  var log = document.getElementById('sessionLog');
+  if (log) log.scrollTop = log.scrollHeight;
+}
+function toggleAutoScroll() {
+  autoScroll = !autoScroll;
+  var btn = document.getElementById('autoScrollBtn');
+  if (btn) { btn.textContent = autoScroll ? '⤓ 滚动' : '⏸ 暂停'; btn.style.color = autoScroll ? '#555' : '#fbbf24'; }
+  if (autoScroll) scrollLog();
+}
+function clearLog() {
+  var log = document.getElementById('sessionLog');
+  log.innerHTML = '';
+  addLog('status', '日志已清空');
+}
+function setLogFilter(f) {
+  logFilter = f;
+  var btns = document.querySelectorAll('.lg-fbtn');
+  for (var i = 0; i < btns.length; i++) btns[i].classList.toggle('active', btns[i].dataset.f === f);
+  var log = document.getElementById('sessionLog');
+  for (var j = 0; j < log.children.length; j++) {
+    var t = log.children[j].dataset.t;
+    log.children[j].style.display = (f === 'all' || t === f) ? '' : 'none';
+  }
+  scrollLog();
+}
 function addLog(type, text) {
   var _now = Date.now();
   // 连续相同文本跳过
@@ -218,21 +286,65 @@ function addLog(type, text) {
   _lastLogText = text;
   _lastLogTime = _now;
   _lastLogType = type;
-  const log = document.getElementById('sessionLog');
-  const entry = document.createElement('div');
-  entry.className = 'entry ' + type + ' flex gap-3 py-1 animate-slide-up';
+  var log = document.getElementById('sessionLog');
+  var entry = document.createElement('div');
+  entry.className = 'entry flex items-start gap-2 py-[3px] animate-slide-up';
+  entry.dataset.t = logCat(type);
 
-  const now = new Date();
-  const time = now.toTimeString().slice(0, 8);
-  const colors = {cmd:'text-white font-medium',out:'text-[#e8e8e8]',err:'text-[#ff6b6b]',info:'text-[#aaaaaa]',done:'text-white font-medium',file:'text-[#cccccc]',code:'text-[#cccccc]',status:'text-[#cccccc]',action:'text-[#4ade80]'};
-  const c = colors[type] || 'text-[#cccccc]';
-  if (type === 'file' || type === 'code') {
-    entry.innerHTML = '<span class="text-[#777] flex-shrink-0 min-w-[60px]">' + time + '</span><span class="' + c + '"><pre style="margin:0;font-family:inherit;white-space:pre-wrap">' + esc(text) + '</pre></span>';
-  } else {
-    entry.innerHTML = '<span class="text-[#777] flex-shrink-0 min-w-[60px]">' + time + '</span><span class="' + c + '">' + esc(text) + '</span>';
-  }
+  var now = new Date();
+  var time = now.toTimeString().slice(0, 8);
+  var b = BADGES[type] || BADGES.info;
+  var multi = type === 'out' || type === 'err' || type === 'file' || type === 'code';
+  var body = multi
+    ? '<pre class="' + b[2] + '" style="margin:0;font-family:inherit;white-space:pre-wrap;word-break:break-all">' + esc(text) + '</pre>'
+    : '<span class="' + b[2] + '">' + esc(text) + '</span>';
+  entry.innerHTML = '<span class="lg-time pt-px">' + time + '</span><span class="lg-badge" style="color:' + b[1] + ';border-color:' + b[1] + '44;">' + b[0] + '</span><span class="flex-1 min-w-0">' + body + '</span>';
+  if (logFilter !== 'all' && entry.dataset.t !== logFilter) entry.style.display = 'none';
   log.appendChild(entry);
-  log.scrollTop = log.scrollHeight;
+  scrollLog();
+}
+function addCmdBlock(cmd, meta, p) {
+  var log = document.getElementById('sessionLog');
+  var block = document.createElement('div');
+  block.className = 'entry cmd-block animate-slide-up';
+  block.dataset.t = 'cmd';
+  var now = new Date();
+  var time = now.toTimeString().slice(0, 8);
+  var ok = !p || p.exitCode === 0;
+  var dur = null;
+  if (meta && meta.duration != null) dur = meta.duration;
+  else if (p && p.duration != null) dur = p.duration;
+  var durText = dur != null ? Math.round(dur) + 'ms' : '';
+  var exitText = (p && p.exitCode !== undefined) ? (ok ? '✓ ' : '✗ ') + p.exitCode : '';
+  var title = document.createElement('div');
+  title.className = 'flex items-center gap-2 px-1.5 py-1 rounded cursor-pointer hover:bg-[#161616] transition-colors';
+  title.innerHTML =
+    '<span class="lg-time">' + time + '</span>' +
+    '<span class="lg-badge" style="color:#3b82f6;border-color:#3b82f644;">CMD</span>' +
+    '<span class="text-[#93c5fd] font-medium flex-1 min-w-0 truncate">$ ' + esc(cmd) + '</span>' +
+    (durText ? '<span class="text-[9px] text-[#666] font-mono flex-shrink-0">' + durText + '</span>' : '') +
+    (exitText ? '<span class="text-[10px] font-mono flex-shrink-0 ' + (ok ? 'text-[#4ade80]' : 'text-[#ff6b6b]') + '">' + exitText + '</span>' : '') +
+    '<span class="text-[#555] text-[9px] flex-shrink-0">▾</span>';
+  var body = document.createElement('div');
+  body.className = 'cmd-body pl-[62px] pb-1 space-y-0.5';
+  var lines = [];
+  if (meta && meta.cwd) lines.push('<div class="text-[10px] text-[#777]">📁 ' + esc(meta.cwd) + '</div>');
+  if (p && p.stdout) lines.push('<pre class="text-[#d4d4d4]">' + esc(p.stdout) + '</pre>');
+  if (p && p.stderr) lines.push('<pre class="text-[#ff8a8a]">' + esc(p.stderr) + '</pre>');
+  if (p && p.killed) lines.push('<div class="text-[10px] text-[#fbbf24]">⏱ 超时被终止</div>');
+  if (lines.length === 0) lines.push('<div class="text-[10px] text-[#555]">（无输出）</div>');
+  body.innerHTML = lines.join('');
+  title.addEventListener('click', function() {
+    var hidden = body.style.display === 'none';
+    body.style.display = hidden ? '' : 'none';
+    var arrow = title.lastElementChild;
+    if (arrow) arrow.textContent = hidden ? '▾' : '▸';
+  });
+  block.appendChild(title);
+  block.appendChild(body);
+  if (logFilter !== 'all' && logFilter !== 'cmd') block.style.display = 'none';
+  log.appendChild(block);
+  scrollLog();
 }
 function esc(t) { var d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
 function copyLog() {
@@ -271,7 +383,7 @@ function sendCommand() {
         state.pendingMessages.push({ id: r.msgId, text: text, urgent: urgent });
         updateAgentBadge();
         renderTaskPanel();
-        addLog(urgent ? 'err' : 'cmd', (urgent ? '⚠️ [紧急] → Agent: ' : '→ Agent: ') + text);
+        addLog(urgent ? 'warn' : 'msg', (urgent ? '⚠️ [紧急] → Agent: ' : '→ Agent: ') + text);
       } else {
         addLog('err', '消息发送失败: ' + ((r && r.error) || '未知错误'));
       }
@@ -279,7 +391,7 @@ function sendCommand() {
   } else if (state.ws && state.ws.readyState === WebSocket.OPEN) {
     // 浏览器直连模式：直接发给中继（无回执跟踪）
     state.ws.send(JSON.stringify({ type: 'agent_message', requestId: 'msg_' + Date.now(), text: text, urgent: urgent }));
-    addLog(urgent ? 'err' : 'cmd', (urgent ? '⚠️ [紧急] → Agent: ' : '→ Agent: ') + text);
+    addLog(urgent ? 'warn' : 'msg', (urgent ? '⚠️ [紧急] → Agent: ' : '→ Agent: ') + text);
   } else {
     addLog('err', '未连接服务器');
   }
@@ -663,7 +775,18 @@ function updateStatus() {
 
 }
 function handleBridge(action, data) {
-  if (action === 'log') { addLog(data.text.startsWith('[') ? 'action' : 'info', data.text); }
+  if (action === 'log') {
+    var t = 'info';
+    var txt = data.text || '';
+    if (txt.indexOf('[通知]') !== -1) t = 'info';
+    else if (txt.indexOf('[执行]') !== -1 || txt.indexOf('[目录]') !== -1) t = 'out';
+    else if (txt.indexOf('[读取]') !== -1 || txt.indexOf('[新建]') !== -1 || txt.indexOf('[修改]') !== -1 || txt.indexOf('[写入]') !== -1) t = 'file';
+    else if (txt.indexOf('✅') !== -1) t = 'done';
+    else if (txt.indexOf('❌') !== -1 || txt.indexOf('失败') !== -1) t = 'err';
+    else if (txt.indexOf('⚠️') !== -1) t = 'warn';
+    else if (txt.charAt(0) === '[') t = 'action';
+    addLog(t, txt);
+  }
   else if (action === 'messages_read') {
     var ids = data.ids || [];
     var before = state.pendingMessages.length;
@@ -686,10 +809,7 @@ function handleBridge(action, data) {
   else if (action === 'command_result') {
     var p = data.payload;
     if (p && p.exitCode !== undefined) {
-      var txt = p.stdout || p.stderr || '(无输出)';
-      addLog('out', txt);
-      if (p.exitCode !== 0) addLog('err', '退出码: ' + p.exitCode);
-      else addLog('done', '完成 (退出码: ' + p.exitCode + ')');
+      addCmdBlock(p.command || '(命令)', p, p);
     }
   }
   else if (action === 'agent_status') {

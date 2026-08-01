@@ -348,9 +348,9 @@ class Agent:
             self._emit(self.on_command, {"type": "execute", "command": cmd})
             result = await self._exec_cmd(cmd, payload.get("timeout", 30000))
             await self._send("command_result", rid, result)
-            self._emit(self.on_result, result)
             cwd = self.sessions.get_current()
             cwd_str = cwd.cwd if cwd else os.getcwd()
+            self._emit(self.on_result, {**result, "command": cmd, "cwd": cwd_str})
             self._emit(self.on_log, f"[执行] {cmd[:80]}")
             self._emit(self.on_log, f"[目录] {cwd_str}")
             out = result.get("stdout", "")
@@ -421,6 +421,8 @@ class Agent:
             if op == "exec" and "exitCode" in result:
                 cwd = self.sessions.get_current()
                 cwd_str = cwd.cwd if cwd else os.getcwd()
+                # 让 UI 渲染命令块（含耗时、目录、命令名）
+                self._emit(self.on_result, {**result, "command": payload.get("command", ""), "cwd": cwd_str})
                 self._emit(self.on_log, f"[执行] {payload.get('command','')[:80]}")
                 self._emit(self.on_log, f"[目录] {cwd_str}")
                 # 显示结果摘要
@@ -451,7 +453,8 @@ class Agent:
         # 工作区模式检查命令
         ok, err = self._check_command(command)
         if not ok:
-            return {"exitCode": 1, "stdout": "", "stderr": err, "killed": False}
+            return {"exitCode": 1, "stdout": "", "stderr": err, "killed": False, "duration": 0}
+        t0 = time.time()
         try:
             proc = await asyncio.create_subprocess_shell(
                 command,
@@ -473,16 +476,18 @@ class Agent:
                 return {"exitCode": proc.returncode or 0,
                         "stdout": _decode(stdout),
                         "stderr": _decode(stderr),
-                        "killed": False}
+                        "killed": False,
+                        "duration": int((time.time() - t0) * 1000)}
             except asyncio.TimeoutError:
                 proc.kill()
                 stdout, stderr = await proc.communicate()
                 return {"exitCode": 1,
                         "stdout": _decode(stdout) if stdout else "",
                         "stderr": _decode(stderr) if stderr else "",
-                        "killed": True}
+                        "killed": True,
+                        "duration": int((time.time() - t0) * 1000)}
         except Exception as e:
-            return {"exitCode": 1, "stdout": "", "stderr": str(e), "killed": False}
+            return {"exitCode": 1, "stdout": "", "stderr": str(e), "killed": False, "duration": 0}
     
     def _check_path(self, path):
         """检查路径是否在工作区范围内"""
