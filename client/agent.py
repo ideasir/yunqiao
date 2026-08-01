@@ -129,12 +129,14 @@ class Agent:
         self.on_status = lambda status: None  # 连接状态变化
         self.on_command = lambda cmd: None    # 收到命令时
         self.on_result = lambda result: None  # 命令执行结果
+        self.on_messages_read = lambda ids: None  # 上游 Agent 已读消息回执
         
         # 内部状态
         self._ws = None
         self._loop = None
         self._thread = None
         self._running = False
+        self.pending_messages = {}  # msgId -> {text, urgent, time}，等待上游 Agent 已读回执
     
     def _emit(self, callback, *args):
         """线程安全地调用回调"""
@@ -169,17 +171,43 @@ class Agent:
                 self._loop
             )
     
-    def send_message(self, text):
-        """发送消息给上游 Agent"""
+    def send_message(self, text, urgent=False):
+        """发送消息给上游 Agent，返回消息 ID（用于已读回执）
+
+        消息先进入中继队列，上游 Agent 调用 get_client_messages 读取；
+        读取后中继会广播 messages_read，触发 on_messages_read 回调。
+        """
+        import uuid
+        msg_id = uuid.uuid4().hex[:12]
+        self.pending_messages[msg_id] = {
+            "text": text, "urgent": urgent, "time": time.time(),
+        }
         if self._ws and self._loop:
             asyncio.run_coroutine_threadsafe(
                 self._ws.send(json.dumps({
                     "type": "agent_message",
                     "text": text,
+                    "urgent": urgent,
+                    "msgId": msg_id,
                 })),
                 self._loop
             )
+            self._emit(self.on_log, f"消息已发送，等待 Agent 读取: {text[:60]}")
+        else:
+            self._emit(self.on_log, "消息未发送（尚未连接中继服务器）")
+        return msg_id
     
+    def reorder_messages(self, ordered_ids):
+        """任务队列拖拽排序后，向中继同步消息的新顺序（Agent 将按此顺序读取）"""
+        if self._ws and self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self._ws.send(json.dumps({
+                    "type": "reorder_messages",
+                    "orderedIds": list(ordered_ids),
+                })),
+                self._loop
+            )
+
     def set_permission(self, mode):
         """设置权限模式: workspace 或 super"""
         self.permission = mode
@@ -260,6 +288,16 @@ class Agent:
         
         if msg_type == "notify":
             self._emit(self.on_log, f"[通知] {msg.get('text', '')}")
+            return
+        
+        if msg_type == "messages_read":
+            ids = msg.get("ids", [])
+            read = [i for i in ids if i in self.pending_messages]
+            for i in read:
+                self.pending_messages.pop(i, None)
+            if read:
+                self._emit(self.on_log, f"✅ Agent 已读取 {len(read)} 条消息")
+                self._emit(self.on_messages_read, read)
             return
         
         if msg_type == "agent_connected":

@@ -226,6 +226,7 @@ node skills/yunqiao-client.mjs list
 | `read_file` | 读取远程文件 | deviceId, path |
 | `write_file` | 写入远程文件 | deviceId, path, content |
 | `get_device_info` | 获取系统信息（OS、CPU、内存等） | deviceId |
+| `get_client_messages` | 读取客户端发来的消息（读取后自动标记已读并回执给客户端） | 无 |
 
 ### 配对码
 
@@ -233,6 +234,21 @@ node skills/yunqiao-client.mjs list
 - 客户机断开后自动失效
 - 支持重新生成
 - 复制按钮自动生成 `云桥 配对码 xxxxxx` 格式，方便直接发给 AI Agent
+
+---
+
+### 桌面 → Agent 消息
+
+桌面客户端底部的输入框用于**给上游 Agent 发消息**（`!` 前缀表示紧急消息）。由于 Agent 端是 SSE 短连接（拉取模式），消息会先存入中继队列，Agent 下次调用工具时读取：
+
+```bash
+# Agent 侧读取客户端发来的消息（读取后客户端 UI 会显示"已送达"）
+node skills/yunqiao-client.mjs <配对码> messages
+# 等价于
+node skills/yunqiao-client.mjs <配对码> call get_client_messages '{}'
+```
+
+建议 Agent 在每次会话开始时调用一次 `get_client_messages`，检查用户是否有新的指令或提示。
 
 ---
 

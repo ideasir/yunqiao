@@ -43,11 +43,13 @@ async function main() {
   if (!action) {
     console.log(`用法:
   node yunqiao-client.mjs <配对码> list                   # 列出工具
+  node yunqiao-client.mjs <配对码> messages              # 读取客户端发来的消息（读后标记已读）
   node yunqiao-client.mjs <配对码> call <工具名> <JSON>    # 调用工具
   node yunqiao-client.mjs list                            # 列出工具（用环境变量 YUNQIAO_CODE）
 
 示例:
   node yunqiao-client.mjs 880083 list
+  node yunqiao-client.mjs 880083 messages
   node yunqiao-client.mjs 880083 call execute_command '{"deviceId":"xxx","command":"dir"}'
 `);
     process.exit(0);
@@ -101,8 +103,20 @@ async function main() {
           }
         }
       }
+    } else if (action === 'messages') {
+      // 读取客户端发来的消息（读取后自动标记已读并回执给客户端）
+      const result = await client.callTool({ name: 'get_client_messages', arguments: {} });
+      for (const content of result.content) {
+        if (content.type === 'text') {
+          if (result.isError) {
+            console.error('错误:', content.text);
+          } else {
+            console.log(content.text);
+          }
+        }
+      }
     } else {
-      console.error(`未知操作: ${action}（可用: list, call）`);
+      console.error(`未知操作: ${action}（可用: list, call, messages）`);
       process.exit(1);
     }
 

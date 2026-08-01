@@ -84,7 +84,7 @@ tailwind.config = {
     <!-- 输入区 -->
     <div class="flex items-stretch flex-shrink-0 bg-[#0a0a0a] border-t border-[#1a1a1a]">
       <span class="flex items-center pl-5 pr-1 text-[#888] text-sm font-bold select-none">❯</span>
-      <input type="text" id="cmdInput" class="flex-1 bg-transparent border-none text-[#ededed] px-3 py-3 font-mono text-xs outline-none placeholder-[#666]" placeholder="输入命令..." spellcheck="false" onkeydown="if(event.key==='Enter')sendCommand()" />
+      <input type="text" id="cmdInput" class="flex-1 bg-transparent border-none text-[#ededed] px-3 py-3 font-mono text-xs outline-none placeholder-[#666]" placeholder="给 Agent 发消息，回车发送（! 前缀 = 紧急）" spellcheck="false" onkeydown="if(event.key==='Enter')sendCommand()" />
     </div>
   </div>
 
@@ -103,6 +103,7 @@ tailwind.config = {
         <div class="flex justify-between"><span class="text-[#888]">配对码</span><span class="font-mono text-[#ededed] font-semibold tracking-wider bg-[#1a1a1a] px-1.5 py-0.5 rounded" id="pairCode">------</span></div>
         <div class="flex justify-between"><span class="text-[#888]">设备</span><span class="text-[#ddd] truncate max-w-[120px]" id="agentDevice">-</span></div>
         <div class="flex justify-between"><span class="text-[#888]">平台</span><span class="text-[#ddd]" id="agentPlatform">-</span></div>
+        <div class="flex justify-between"><span class="text-[#888]">待读消息</span><span class="text-[#ddd] font-mono" id="agentPending">-</span></div>
       </div>
       <div class="flex gap-1.5 px-3 py-2 border-t border-[#1f1f1f]">
         <button class="flex-1 text-xs py-1 rounded-lg bg-[#222] text-[#ededed] hover:bg-[#2a2a2a] transition-all font-medium" onclick="copyPairCode()" title="复制地址和配对码">复制</button>
@@ -182,7 +183,7 @@ console.log("JS loaded OK");
 
 
 
-const state = { connected: false, pairCode: '------', ws: null, sessions: [], currentSessionId: null, deviceId: null, deviceName: '', cwd: '', logs: {}, platform: '', hostname: '', workDir: '', relayKey: '', permission: 'workspace' };
+const state = { connected: false, pairCode: '------', ws: null, sessions: [], currentSessionId: null, deviceId: null, deviceName: '', cwd: '', logs: {}, platform: '', hostname: '', workDir: '', relayKey: '', permission: 'workspace', pendingMessages: [] };
 var isDesktopApp = typeof window.pywebview !== 'undefined';
 
 var _lastLogText = '';
@@ -238,17 +239,106 @@ function copyLog() {
 
 function sendCommand() {
   var input = document.getElementById('cmdInput');
-  var text = input.value.trim();
-  if (!text) return;
+  var raw = input.value.trim();
+  if (!raw) return;
   input.value = '';
-  addLog('cmd', '$ ' + text);
-  if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-    state.ws.send(JSON.stringify({ type: 'execute_command', requestId: 'cmd_' + Date.now(), payload: { command: text, timeout: 30000 } }));
-    state.ws.send(JSON.stringify({ type: 'agent_message', requestId: 'msg_' + Date.now(), text: text }));
-  } else if (window.pywebview && window.pywebview.api) {
-    try { pywebview.api.api_send_command(text); } catch(e) { addLog('err', '未连接到服务器'); }
+  // 以 ! 开头 = 紧急消息（去掉前缀发送）
+  var urgent = raw.charAt(0) === '!';
+  var text = urgent ? raw.slice(1).trim() : raw;
+  if (!text) return;
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.send_message) {
+    // 桌面模式：消息进中继队列，Agent 读取后收到回执
+    window.pywebview.api.send_message(text, urgent).then(function(r) {
+      if (r && r.success && r.msgId) {
+        state.pendingMessages.push({ id: r.msgId, text: text, urgent: urgent });
+        updateAgentBadge();
+        renderTaskPanel();
+        addLog(urgent ? 'err' : 'cmd', (urgent ? '⚠️ [紧急] → Agent: ' : '→ Agent: ') + text);
+      } else {
+        addLog('err', '消息发送失败: ' + ((r && r.error) || '未知错误'));
+      }
+    }).catch(function() { addLog('err', '消息发送失败'); });
+  } else if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+    // 浏览器直连模式：直接发给中继（无回执跟踪）
+    state.ws.send(JSON.stringify({ type: 'agent_message', requestId: 'msg_' + Date.now(), text: text, urgent: urgent }));
+    addLog(urgent ? 'err' : 'cmd', (urgent ? '⚠️ [紧急] → Agent: ' : '→ Agent: ') + text);
   } else {
-    addLog('err', '未连接到服务器');
+    addLog('err', '未连接服务器');
+  }
+}
+function updateAgentBadge() {
+  var el = document.getElementById('agentPending');
+  if (!el) return;
+  var n = state.pendingMessages.length;
+  el.textContent = n > 0 ? String(n) : '-';
+  el.style.color = n > 0 ? '#fbbf24' : '#555';
+}
+
+// ─── 任务队列面板 ────────────────────────────────
+var panelCollapsed = false;
+var dragMsgIdx = -1;
+function fmtTime(t) {
+  var d = new Date(t);
+  function p(n) { return (n < 10 ? '0' : '') + n; }
+  return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+}
+function toggleTaskPanel() {
+  panelCollapsed = !panelCollapsed;
+  var body = document.getElementById('taskPanelBody');
+  var arrow = document.getElementById('taskPanelArrow');
+  body.style.display = panelCollapsed ? 'none' : '';
+  arrow.textContent = panelCollapsed ? '▸' : '▾';
+}
+function renderTaskPanel() {
+  var list = document.getElementById('taskList');
+  var empty = document.getElementById('taskEmpty');
+  var count = document.getElementById('taskPanelCount');
+  var dot = document.getElementById('taskPanelDot');
+  var n = state.pendingMessages.length;
+  count.textContent = n;
+  if (dot) dot.style.background = n > 0 ? '#fbbf24' : '#333';
+  empty.style.display = n === 0 ? '' : 'none';
+  list.style.display = n === 0 ? 'none' : '';
+  list.innerHTML = '';
+  state.pendingMessages.forEach(function(m, idx) {
+    var row = document.createElement('div');
+    row.className = 'flex items-start gap-2 px-3 py-1.5 border-b border-[#1a1a1a] hover:bg-[#181818] cursor-grab text-xs';
+    row.draggable = true;
+    row.dataset.idx = idx;
+    row.innerHTML =
+      '<span class="text-[9px] text-[#555] font-mono pt-0.5 flex-shrink-0">' + fmtTime(m.time) + '</span>' +
+      '<span class="' + (m.urgent ? 'text-[#ff6b6b]' : 'text-[#ddd]') + ' flex-1 break-all leading-tight">' +
+      (m.urgent ? '⚠️ ' : '') + esc(m.text) + '</span>';
+    row.addEventListener('dragstart', function(e) {
+      dragMsgIdx = parseInt(this.dataset.idx, 10);
+      this.style.opacity = '0.4';
+      if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+    });
+    row.addEventListener('dragend', function() { this.style.opacity = ''; });
+    row.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    });
+    row.addEventListener('drop', function(e) {
+      e.preventDefault();
+      reorderTask(dragMsgIdx, parseInt(this.dataset.idx, 10));
+    });
+    list.appendChild(row);
+  });
+}
+function reorderTask(from, to) {
+  if (from === to || from < 0) return;
+  var arr = state.pendingMessages;
+  var item = arr.splice(from, 1)[0];
+  arr.splice(to, 0, item);
+  renderTaskPanel();
+  syncTaskOrder();
+  addLog('info', '任务已重排，Agent 将按新顺序读取');
+}
+function syncTaskOrder() {
+  var ids = state.pendingMessages.map(function(m) { return m.id; });
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.reorder_messages) {
+    window.pywebview.api.reorder_messages(ids);
   }
 }
 
@@ -473,6 +563,17 @@ function updateStatus() {
 }
 function handleBridge(action, data) {
   if (action === 'log') { addLog(data.text.startsWith('[') ? 'action' : 'info', data.text); }
+  else if (action === 'messages_read') {
+    var ids = data.ids || [];
+    var before = state.pendingMessages.length;
+    state.pendingMessages = state.pendingMessages.filter(function(m) { return ids.indexOf(m.id) === -1; });
+    var read = before - state.pendingMessages.length;
+    if (read > 0) {
+      updateAgentBadge();
+      renderTaskPanel();
+      addLog('done', '✅ Agent 已读取 ' + read + ' 条消息');
+    }
+  }
   else if (action === 'sync_status') {
     state.pairCode = data.pairCode || state.pairCode;
     state.workDir = data.workDir || state.workDir;
@@ -585,6 +686,8 @@ function setConn状态(status) {
 
 (function() {
   updateStatus();
+  updateAgentBadge();
+  renderTaskPanel();
   addLog('info', '欢迎使用云桥 MCP v2.0');
   setConn状态('disconnected');
   setPermission('workspace');
@@ -745,6 +848,21 @@ function saveConfigModal() {
       <button class="flex-1 text-xs py-2 rounded-lg bg-[#333] text-[#aaa] hover:bg-[#444] hover:text-[#ededed] transition-all font-medium" onclick="closeSessionModal()" title="取消新建工作区">取消</button>
       <button class="flex-1 text-xs py-2 rounded-lg bg-[#ededed] text-[#0a0a0a] hover:bg-white transition-all font-medium" onclick="saveSessionModal()" title="保存工作区">确定</button>
     </div>
+  </div>
+</div>
+
+<!-- 任务队列面板 -->
+<div id="taskPanel" class="fixed rounded-xl bg-[#141414] border border-[#222222] shadow-2xl z-40 select-none" style="bottom:12px; right:12px; width:280px; max-height:280px;">
+  <div class="flex items-center gap-2 px-3 py-2 border-b border-[#1f1f1f] cursor-pointer" onclick="toggleTaskPanel()" title="点击收起/展开">
+    <div class="w-1.5 h-1.5 rounded-full flex-shrink-0" id="taskPanelDot" style="background:#333;"></div>
+    <span class="text-xs font-medium text-[#ccc]">任务队列</span>
+    <span class="ml-auto text-[10px] font-mono text-[#888]" id="taskPanelCount">0</span>
+    <span class="text-[10px] text-[#555]" id="taskPanelArrow">▾</span>
+  </div>
+  <div id="taskPanelBody">
+    <div id="taskEmpty" class="px-3 py-3 text-[11px] text-[#555] text-center">暂无等待任务</div>
+    <div id="taskList" class="overflow-y-auto" style="max-height:190px; display:none;"></div>
+    <div class="px-3 py-1.5 text-[9px] text-[#444] border-t border-[#1a1a1a] text-center">拖动排序，Agent 将按此顺序读取</div>
   </div>
 </div>
 </body>

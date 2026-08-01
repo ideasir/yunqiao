@@ -72,6 +72,41 @@ function rejectDeviceRequests(deviceId, reason) {
   }
 }
 
+// 客户端消息 → 在线 Agent 推送（SSE 短连接存活期间可即时收到通知，兜底靠 get_client_messages 轮询）
+function notifyAgentsNewMessage() {
+  const unread = agentMessages.filter(m => !m.read).length;
+  for (const { transport } of transports.values()) {
+    transport.send({
+      jsonrpc: '2.0',
+      method: 'notifications/message',
+      params: { unread },
+    }).catch(() => {});
+  }
+}
+
+// 按客户端任务队列拖拽后的顺序重排未读消息
+function reorderMessages(orderedIds) {
+  const idSet = new Set(orderedIds);
+  if (idSet.size === 0) return;
+  const byId = new Map();
+  const rest = [];
+  for (const m of agentMessages) {
+    if (idSet.has(m.id)) byId.set(m.id, m);
+    else rest.push(m);
+  }
+  const ordered = orderedIds.map(id => byId.get(id)).filter(Boolean);
+  if (ordered.length === 0) return;
+  // 找到第一个被排序消息原本的位置，把排序后的消息插回该处，保持其余消息相对顺序
+  let insertAt = 0;
+  for (let i = 0; i < agentMessages.length; i++) {
+    if (idSet.has(agentMessages[i].id)) { insertAt = i; break; }
+  }
+  rest.splice(insertAt, 0, ...ordered);
+  agentMessages.length = 0;
+  agentMessages.push(...rest);
+  console.error(`[message] reordered ${ordered.length} messages`);
+}
+
 // 获取默认设备（优先选有配对码的，否则选第一个）
 function getDefaultDevice() {
   if (devices.size === 0) return null;
@@ -369,15 +404,24 @@ function createMcpServer() {
   });
 
   server.registerTool('get_client_messages', {
-    description: '获取客户端发来的消息（你可以在客户端 UI 上给我发消息）',
+    description: '获取客户端发来的新消息（客户端 UI 发来的消息，读取后自动标记已读并回执给客户端）。建议每次会话开始时调用一次',
     inputSchema: z.object({}),
   }, async () => {
-    const msgs = agentMessages.splice(0);  // 取完清空
-    if (msgs.length === 0) {
+    // 取走整个队列（顺带清理），只对未读消息回执
+    const msgs = agentMessages.splice(0);
+    const unread = msgs.filter(m => !m.read);
+    const ids = unread.map(m => m.id);
+    if (unread.length > 0) {
+      // 广播回执，让客户端 UI 显示"已送达 Agent"
+      for (const device of devices.values()) {
+        sendJSON(device.ws, { type: 'messages_read', ids });
+      }
+    }
+    if (unread.length === 0) {
       return { content: [{ type: 'text', text: '没有新消息' }] };
     }
-    const text = msgs.map(m =>
-      `[${new Date(m.time).toLocaleTimeString()}] ${m.deviceName}: ${m.text}`
+    const text = unread.map(m =>
+      `${m.urgent ? '⚠️ [紧急] ' : ''}[${new Date(m.time).toLocaleTimeString()}] ${m.deviceName}: ${m.text}`
     ).join('\n');
     return { content: [{ type: 'text', text }] };
   });
@@ -575,14 +619,18 @@ wss.on('connection', (ws, req) => {
       const device = devices.get(deviceId);
       if (device) {
         agentMessages.push({
-          id: randomUUID().slice(0, 8),
+          id: msg.msgId || randomUUID().slice(0, 8),
           text: msg.text || '',
           deviceName: device.name,
           time: new Date().toISOString(),
+          urgent: !!msg.urgent,
+          read: false,
         });
         if (agentMessages.length > 200) agentMessages.shift();
         console.error(`[message] from ${device.name}: ${(msg.text || '').slice(0, 50)}`);
         sendJSON(ws, { type: 'agent_message_result', requestId, success: true });
+        // 尽量即时通知在线的 Agent 会话有新消息
+        notifyAgentsNewMessage();
       }
       return;
     }
@@ -601,6 +649,14 @@ wss.on('connection', (ws, req) => {
         console.error(`[device] code updated: ${device.name} (${deviceId}) -> ${msg.authCode}`);
         sendJSON(ws, { type: 'update_code_result', requestId, success: true });
       }
+      return;
+    }
+
+    if (type === 'reorder_messages') {
+      if (Array.isArray(msg.orderedIds)) {
+        reorderMessages(msg.orderedIds);
+      }
+      sendJSON(ws, { type: 'reorder_result', requestId, success: true });
       return;
     }
 

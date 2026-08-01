@@ -20,6 +20,7 @@ if [ $# -lt 2 ]; then
   echo "  info            - 设备信息"
   echo "  sessions        - 列出会话"
   echo "  notify <text>   - 发通知到客户端"
+  echo "  msg             - 读取客户端发来的消息"
   exit 1
 fi
 
@@ -48,6 +49,10 @@ case "$TOOL" in
     ;;
   notify)
     YUNQIAO_URL="$URL" node "$CLIENT" "$CODE" call notify "{\"text\":\"$*\"}"
+    ;;
+  msg)
+    # 读取客户端发来的消息
+    YUNQIAO_URL="$URL" node "$CLIENT" "$CODE" call get_client_messages '{}'
     ;;
   download)
     YUNQIAO_URL="$URL" node "$CLIENT" "$CODE" call download "{\"path\":\"$1\"}"

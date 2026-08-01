@@ -72,6 +72,7 @@ def get_agent():
                 })
         agent.on_status = on_status
         agent.on_result = lambda r: notify_ui("command_result", {"payload": r})
+        agent.on_messages_read = lambda ids: notify_ui("messages_read", {"ids": ids})
     return agent
 
 def start_agent():
@@ -156,11 +157,23 @@ class Api:
             agent.update_code(pair_code)
         return {"pairCode": pair_code}
 
-    def send_message(self, text):
-        if agent:
-            agent.send_message(text)
+    def send_message(self, text, urgent=False):
+        """发送消息给上游 Agent（Agent 通过 get_client_messages 读取）"""
+        a = agent
+        if not a:
+            return {"success": False, "error": "未连接"}
+        if not a.connected:
+            return {"success": False, "error": "未连接中继服务器"}
+        msg_id = a.send_message(text, bool(urgent))
+        return {"success": True, "msgId": msg_id}
+
+    def reorder_messages(self, ordered_ids):
+        """拖拽排序任务队列后，同步新顺序到中继"""
+        a = agent
+        if a:
+            a.reorder_messages(list(ordered_ids))
             return {"success": True}
-        return {"error": "未连接"}
+        return {"success": False, "error": "未连接"}
 
     def browse_folder(self):
         import tkinter as tk
