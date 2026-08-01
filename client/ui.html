@@ -531,6 +531,7 @@ function handleBridge(action, data) {
       var cd = document.getElementById('clientDot');
       if (cd) cd.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
       addLog('done', '中转服务器已连接');
+      addLog('info', '配对码已推送: ' + state.pairCode + '，请复制发送给 Agent');
       // 点亮 WSS 协议标签
       var rw = document.getElementById('relayProtoWSS');
       if (rw) { rw.style.color = '#4ade80'; rw.style.textShadow = '0 0 8px rgba(74,222,128,0.3)'; }
