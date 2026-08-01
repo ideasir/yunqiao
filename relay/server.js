@@ -45,7 +45,7 @@ loadUsers();
 const AUTH_REQUIRED = (process.env.AUTH_REQUIRED || '0') === '1';
 const DEFAULT_LIMITS = {
   maxConnections: parseInt(process.env.MAX_CONNECTIONS || '3', 10),
-  qps: parseInt(process.env.DEFAULT_QPS || '10', 10),
+  qps: parseInt(process.env.DEFAULT_QPS || '5', 10),
   maxOutputMB: parseInt(process.env.MAX_OUTPUT_MB || '5', 10),
 };
 // 每个用户的配额（可在 users.limits 单独覆盖：放开=调大，收紧=调小）

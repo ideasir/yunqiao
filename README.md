@@ -99,10 +99,65 @@ node skills/yunqiao-client.mjs <配对码> list
 cd relay
 npm install
 
-# 首次启动自动生成 密钥
+# 自用模式（最简单）
 export PORT=9876
 node server.js
 ```
+
+#### 多用户公测推荐配置
+
+适用：1 核 / 1GB 服务器，约 100 用户小范围公测。这套值"用得宽绰、不卡正常使用，也不让服务器紧张"：
+
+```bash
+export PORT=9876
+export USERS_FILE=/opt/cloud-mcp/.users.json   # 用户数据文件
+export RELAY_KEY=请改成你自己的管理员密钥        # admin 用户的密钥
+
+# 认证：公测必开，强制所有 Agent 带用户密钥连接，?user= 冒充失效
+export AUTH_REQUIRED=1
+
+# 每用户配额（宽绰但可控）
+export MAX_CONNECTIONS=3      # 每用户最大并发 MCP 连接（正常 1 个，留 2 个余量）
+export DEFAULT_QPS=5          # 每用户每秒工具调用上限（正常 Agent 不到 1 QPS）
+export MAX_OUTPUT_MB=5        # 单次工具返回上限（命令输出一般 <1MB）
+
+# 配对码防暴力
+export AUTH_MAX_FAILS=5       # 连续失败 5 次
+export AUTH_LOCK_MS=300000    # 锁定 5 分钟
+
+# 可选：命令/路径白名单
+# export ALLOWED_COMMANDS=npm,python,git,dir
+# export ALLOWED_FILE_PREFIX=/srv/workspace
+
+node server.js
+```
+
+**注意**：开启 `AUTH_REQUIRED=1` 后，Agent 端（`yunqiao-client.mjs`）必须配置用户密钥：
+
+```bash
+export YUNQIAO_URL=https://your-server.com/mcp
+export YUNQIAO_KEY=某个用户的密钥
+```
+
+#### 每用户配额管理（放开 / 收紧）
+
+管理员可单独调整任意用户的配额，无需重启：
+
+```bash
+# 收紧（发现某个用户在刷）
+yq 123456 call set_user_limit '{"userId":"user-a","qps":2,"maxConnections":1}'
+
+# 放开
+yq 123456 call set_user_limit '{"userId":"user-a","qps":20,"maxConnections":5}'
+
+# 恢复默认（不带限制参数）
+yq 123456 call set_user_limit '{"userId":"user-a"}'
+
+# 查看所有用户配额
+yq 123456 call get_user_limits '{}'
+```
+
+> 配额解读：`maxConnections=3` = 该用户最多同时保持 3 个 MCP 连接；`qps=5` = 每秒最多 5 次工具调用；`maxOutputMB=5` = 单次返回（命令输出/文件）超过 5MB 被拒绝。默认值已兼顾"不限制正常使用"与"不压垮 1G 服务器"。
 
 建议用 Nginx 反代 + Let's Encrypt 配置 HTTPS：
 

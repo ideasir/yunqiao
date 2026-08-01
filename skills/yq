@@ -65,6 +65,10 @@ case "$TOOL" in
     # 读取客户端发来的消息
     YUNQIAO_URL="$URL" node "$CLIENT" "$CODE" call get_client_messages '{}'
     ;;
+  call)
+    # 透传任意工具：yq <配对码> call <工具名> '<json参数>'
+    YUNQIAO_URL="$URL" node "$CLIENT" "$CODE" call "$1" "$2"
+    ;;
   download)
     P_JSON=$(json_str "$1")
     YUNQIAO_URL="$URL" node "$CLIENT" "$CODE" call download "{\"path\":$P_JSON}"
