@@ -205,7 +205,7 @@ def main():
         url=ui_path,
         js_api=api,
         width=1096,
-        height=669,
+        height=699,
         min_size=(800, 500),
         resizable=True,
     )
