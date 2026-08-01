@@ -461,7 +461,12 @@ const httpServer = createServer(async (req, res) => {
         broadcastToDevices({ type: 'agent_disconnected' });
       });
       await mcpServer.connect(transport);
-      broadcastToDevices({ type: 'agent_connected', timestamp: Date.now() });
+      // 计算 SSE 延迟：取第一个设备的 WSS 延迟
+      let latency = 0;
+      for (const device of devices.values()) {
+        if (device.latency) { latency = device.latency; break; }
+      }
+      broadcastToDevices({ type: 'agent_connected', latency });
     } catch (err) {
       console.error('[mcp] SSE connect error:', err);
       try { res.writeHead(500).end('Internal Server Error'); } catch {}
@@ -504,7 +509,11 @@ const wss = new WebSocketServer({ noServer: true });
 const heartbeat = setInterval(() => {
   for (const [id, device] of devices) {
     if (device.ws.readyState === WebSocket.OPEN) {
+      const t0 = Date.now();
       device.ws.ping();
+      device.ws.once('pong', () => {
+        device.latency = Date.now() - t0;
+      });
     }
   }
 }, 15000);
@@ -555,6 +564,7 @@ wss.on('connection', (ws, req) => {
         hostname: hostname || 'unknown', ws,
         authCode: authCode || null,
         connectedAt: new Date().toISOString(),
+        latency: 0,
       });
       console.error(`[device] registered: ${name} (${deviceId}) code:${authCode || 'none'}`);
       sendJSON(ws, { type: 'register_result', requestId, success: true, deviceId });
