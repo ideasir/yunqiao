@@ -722,8 +722,19 @@ function browseSessionDir(e) {
   var input = document.getElementById('modalSessionDir');
   var btn = e ? e.target : null;
   if (btn) { btn.textContent = '...'; btn.style.opacity = '0.5'; }
-  
-  // 尝试原生文件夹选择器
+  // 桌面端：用原生"选择文件夹"对话框（tkinter），返回完整路径
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.browse_folder) {
+    window.pywebview.api.browse_folder().then(function(path) {
+      if (path) input.value = path;
+      if (btn) { btn.textContent = '浏览'; btn.style.opacity = '1'; }
+    }).catch(function() {
+      if (btn) { btn.textContent = '浏览'; btn.style.opacity = '1'; }
+      input.focus();
+      input.select();
+    });
+    return;
+  }
+  // 浏览器直连模式：showDirectoryPicker（只能拿到目录名）或手动输入
   if (window.showDirectoryPicker) {
     window.showDirectoryPicker().then(function(handle) {
       document.getElementById('modalSessionDir').value = handle.name;
