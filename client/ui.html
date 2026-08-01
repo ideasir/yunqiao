@@ -569,7 +569,7 @@ function connectRelay() {
   if (state.ws) {
     try { state.ws.close(); } catch(e) {}
   }
-  state.ws = new WebSocket('wss://' + url + '/device?psk=' + encodeURIComponent(key));
+  state.ws = new WebSocket('wss://' + url + '/device?key=' + encodeURIComponent(key));
   state.ws.onopen = function() {
     document.getElementById('connectBtn').textContent = '断开';
     document.getElementById('connectBtn').style.background = '#7f1d1d';
@@ -665,7 +665,7 @@ function configRelay() {
   // 尝试从后端读取当前配置
   if (window.pywebview && window.pywebview.api) {
     window.pywebview.api.get_settings().then(function(cfg) {
-      if (cfg && cfg.psk) state.relayKey = cfg.psk;
+      if (cfg && cfg.key) state.relayKey = cfg.key;
       if (cfg && cfg.relayUrl) document.getElementById('modalRelayUrl').value = cfg.relayUrl;
     }).catch(function() {});
   }
