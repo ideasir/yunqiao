@@ -1,7 +1,12 @@
 """
-云桥 MCP — 桌面客户端（pywebview 正式版）
-用法: pip install pywebview websockets && python desktop.py
-密钥从 ~/.yunqiao/config.json 读取
+云桥 - 桌面客户端（pywebview 版）
+=============================
+职责：UI 显示（设置、连接状态、日志、配对码）
+不负责：WebSocket 连接、命令执行（那是 agent.py 的事）
+
+用法:
+  pip install pywebview websockets
+  python desktop.py
 """
 
 import asyncio
@@ -12,285 +17,68 @@ import sys
 import time
 import threading
 import uuid
+import random
 from pathlib import Path
 
 # ─── 配置 ────────────────────────────────────────
-RELAY_URL = os.environ.get("RELAY_URL", "")
-DEVICE_NAME = os.environ.get("DEVICE_NAME", platform.node())
 CONFIG_DIR = Path(os.environ.get("YUNQIAO_CONFIG", str(Path.home() / ".yunqiao")))
 CONFIG_FILE = CONFIG_DIR / "config.json"
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
-RELAY_KEY = ""
-if CONFIG_FILE.exists():
-    try:
-        cfg = json.loads(CONFIG_FILE.read_text("utf-8"))
-        RELAY_KEY = cfg.get("key", "") or cfg.get("psk", "")  # 兼容旧版 psk
-        if not RELAY_URL:
-            RELAY_URL = cfg.get("relayUrl", "")
-    except:
-        pass
-if not RELAY_KEY:
-    print("⚠️ 连接密钥未配置，请在设置中配置")
-    print(f"   配置文件: {CONFIG_FILE}")
+DEVICE_NAME = os.environ.get("DEVICE_NAME", platform.node())
+
+def load_config():
+    if CONFIG_FILE.exists():
+        try:
+            return json.loads(CONFIG_FILE.read_text("utf-8"))
+        except:
+            pass
+    return {}
+
+def save_config(relay_url, key, name):
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    CONFIG_FILE.write_text(json.dumps({
+        "relayUrl": relay_url, "key": key, "deviceName": name
+    }, indent=2), "utf-8")
+
+cfg = load_config()
+RELAY_URL = cfg.get("relayUrl", "")
+RELAY_KEY = cfg.get("key", "") or cfg.get("psk", "")
 
 # ─── 全局状态 ────────────────────────────────────
-UI = None  # pywebview 窗口引用
-WS = None
-SHOULD_RECONNECT = True
-CONNECT_THREAD = None
-CONNECT_LOCK = threading.Lock()
-pair_code = str(100000 + int(time.time() * 1000) % 900000)
-device_id = ""
+UI = None
+pair_code = str(random.randint(100000, 999999))
+agent = None  # Agent 实例，首次连接时创建
 
-# ─── WebSocket 连接 ──────────────────────────────
-async def _ws_connect_headers():
-    """兼容不同 websockets 版本的请求头参数名"""
-    try:
-        import websockets
-        import inspect
-        sig = inspect.signature(websockets.connect)
-        if 'additional_headers' in sig.parameters:
-            return {'additional_headers': {"X-Key": RELAY_KEY}}
-    except:
-        pass
-    return {'extra_headers': {"X-Key": RELAY_KEY}}
+# ─── Agent 集成 ──────────────────────────────────
+def get_agent():
+    global agent
+    if agent is None:
+        from agent import Agent
+        agent = Agent(RELAY_URL, RELAY_KEY, DEVICE_NAME, pair_code)
+        agent.on_log = lambda msg: notify_ui("log", {"text": msg})
+        agent.on_status = lambda s: notify_ui("relay_status", {
+            "status": "connected" if s.get("connected") else "disconnected"
+        })
+        agent.on_command = lambda c: notify_ui("log", {"text": f"收到命令: {c.get('type','?')} {c.get('command','')[:50]}"})
+        agent.on_result = lambda r: notify_ui("command_result", {"payload": r})
+    return agent
 
-async def ws_connect():
-    global WS, device_id, SHOULD_RECONNECT
-    import websockets
-    url = RELAY_URL
-    ws_kwargs = await _ws_connect_headers()
-    ws_kwargs['ping_interval'] = 30
-    while SHOULD_RECONNECT:
-        try:
-            async with websockets.connect(url, **ws_kwargs) as ws:
-                with CONNECT_LOCK:
-                    WS = ws
-                notify_ui("log", {"text": "已连接到中转服务器"})
-                notify_ui("relay_status", {"status": "connected"})
-                await ws.send(json.dumps({
-                    "type": "register", "deviceName": DEVICE_NAME,
-                    "os": sys.platform, "arch": platform.machine(),
-                    "hostname": platform.node(), "authCode": pair_code,
-                }))
-                async for msg in ws:
-                    try:
-                        data = json.loads(msg)
-                        handle_message(data)
-                    except:
-                        pass
-        except Exception as e:
-            notify_ui("agent_status", {"status": "disconnected"})
-            notify_ui("log", {"text": f"连接断开: {e}"})
-            notify_ui("relay_status", {"status": "disconnected"})
-        finally:
-            with CONNECT_LOCK:
-                WS = None
-                CONNECT_THREAD = None
-            if SHOULD_RECONNECT:
-                await asyncio.sleep(5)
+def start_agent():
+    global agent
+    if agent:
+        agent.stop()
+    agent = None
+    a = get_agent()
+    a.start()
 
-def handle_message(data):
-    t = data.get("type")
-    p = data.get("payload", {})
-    rid = data.get("requestId", "")
-    if t == "register_result" and data.get("success"):
-        global device_id, WS
-        device_id = data.get("deviceId", "")
-        notify_ui("log", {"text": "注册成功"})
-
-    elif t == "agent_status":
-        is_online = data.get("status") == "online"
-        notify_ui("agent_status", {"status": "connected" if is_online else "disconnected"})
-    elif t == "agent_connected":
-        notify_ui("agent_status", {"status": "connected"})
-    elif t == "agent_disconnected":
-        notify_ui("agent_status", {"status": "disconnected"})
-    elif t == "command_result" or t == "session_op_result":
-        notify_ui("command_result", {"payload": p})
-    elif t == "agent_message":
-        notify_ui("log", {"text": f"智能体消息: {p.get('text', '')}"})
-    # 直接执行命令（不再需要 agent.py）
-    elif t == "execute_command":
-        cmd = p.get("command", "")
-        timeout = p.get("timeout", 30000)
-        notify_ui("log", {"text": f"执行: {cmd[:50]}"})
-        threading.Thread(target=_run_cmd, args=(rid, cmd, timeout), daemon=True).start()
-    elif t == "read_file":
-        path = p.get("path", "")
-        threading.Thread(target=_read_file, args=(rid, path), daemon=True).start()
-    elif t == "write_file":
-        path = p.get("path", "")
-        content = p.get("content", "")
-        threading.Thread(target=_write_file, args=(rid, path, content), daemon=True).start()
-    elif t == "get_device_info":
-        threading.Thread(target=_get_info, args=(rid,), daemon=True).start()
-    elif t == "session_op":
-        op = p.get("op", "")
-        notify_ui("log", {"text": f"会话操作: {op}"})
-        threading.Thread(target=_handle_session_op, args=(rid, p), daemon=True).start()
-
-
-import subprocess
-
-def _run_cmd(rid, command, timeout=30000):
-    """执行命令并发送结果"""
-    try:
-        proc = subprocess.run(
-            command, shell=True, capture_output=True, text=True,
-            cwd=os.getcwd(), timeout=timeout/1000
-        )
-        result = {
-            "exitCode": proc.returncode,
-            "stdout": proc.stdout,
-            "stderr": proc.stderr,
-            "killed": False,
-        }
-    except subprocess.TimeoutExpired:
-        result = {"exitCode": 1, "stdout": "", "stderr": "Command timed out", "killed": True}
-    except Exception as e:
-        result = {"exitCode": 1, "stdout": "", "stderr": str(e), "killed": False}
-    _send_response("command_result", rid, result)
-
-def _read_file(rid, path):
-    """读取文件"""
-    if not os.path.isabs(path):
-        path = os.path.join(os.getcwd(), path)
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            content = f.read()
-        _send_response("file_result", rid, {"success": True, "content": content, "path": path})
-    except Exception as e:
-        _send_response("file_result", rid, {"success": False, "error": str(e), "path": path})
-
-def _write_file(rid, path, content):
-    """写入文件"""
-    if not os.path.isabs(path):
-        path = os.path.join(os.getcwd(), path)
-    try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(content)
-        _send_response("file_result", rid, {"success": True, "path": path})
-    except Exception as e:
-        _send_response("file_result", rid, {"success": False, "error": str(e), "path": path})
-
-def _get_info(rid):
-    """获取系统信息"""
-    try:
-        import psutil
-        total = psutil.virtual_memory().total
-        free = psutil.virtual_memory().available
-    except:
-        total = 0
-        free = 0
-    _send_response("device_info", rid, {
-        "hostname": platform.node(),
-        "platform": sys.platform,
-        "arch": platform.machine(),
-        "cpus": os.cpu_count() or 0,
-        "totalMem": total,
-        "freeMem": free,
-        "uptime": time.time(),
-        "homedir": str(Path.home()),
-        "userInfo": {"username": os.getlogin()},
-    })
-
-def _handle_session_op(rid, payload):
-    """处理会话操作"""
-    op = payload.get("op", "")
-    global session_mgr
-    try:
-        if op == "create":
-            result = session_mgr.create(payload.get("workDir", ""), payload.get("name"))
-        elif op == "exec":
-            session = session_mgr.get_current()
-            if not session:
-                result = {"exitCode": 1, "stdout": "", "stderr": "没有当前会话，请先 create_session", "killed": False}
-            else:
-                result = _session_exec(session, payload.get("command", ""), payload.get("timeout", 30000))
-        elif op == "read_file":
-            session = session_mgr.get_current()
-            if not session:
-                result = {"success": False, "error": "没有当前会话"}
-            else:
-                result = _session_read_file(session, payload.get("path", ""))
-        elif op == "write_file":
-            session = session_mgr.get_current()
-            if not session:
-                result = {"success": False, "error": "没有当前会话"}
-            else:
-                result = _session_write_file(session, payload.get("path", ""), payload.get("content", ""))
-        elif op == "close":
-            result = session_mgr.close(payload.get("sessionId"))
-        elif op == "list":
-            result = session_mgr.list_all()
-        elif op == "switch":
-            result = session_mgr.switch(payload.get("sessionId", ""))
-        else:
-            result = {"success": False, "error": f"未知操作: {op}"}
-    except Exception as e:
-        result = {"success": False, "error": str(e)}
-    _send_response("session_op_result", rid, result)
-
-def _send_response(msg_type, rid, payload):
-    """线程安全地发送响应到 WebSocket"""
-    global WS, loop
-    if WS and loop:
-        import asyncio
-        asyncio.run_coroutine_threadsafe(
-            WS.send(json.dumps({"type": msg_type, "requestId": rid, "payload": payload})),
-            loop
-        )
-
-def _session_exec(session, command, timeout):
-    """在会话中执行命令"""
-    import asyncio
-    async def run():
-        proc = await asyncio.create_subprocess_shell(
-            command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-            cwd=session.cwd
-        )
-        try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout/1000)
-            return {"exitCode": proc.returncode or 0, "stdout": stdout.decode("utf-8", errors="replace") if stdout else "", "stderr": stderr.decode("utf-8", errors="replace") if stderr else "", "killed": False}
-        except asyncio.TimeoutError:
-            proc.kill()
-            stdout, stderr = await proc.communicate()
-            return {"exitCode": 1, "stdout": stdout.decode("utf-8", errors="replace") if stdout else "", "stderr": stderr.decode("utf-8", errors="replace") if stderr else "", "killed": True}
-    return asyncio.run(run())
-
-def _session_read_file(session, path):
-    if not os.path.isabs(path):
-        path = os.path.join(session.cwd, path)
-    path = os.path.normpath(path)
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            content = f.read()
-        return {"success": True, "content": content, "path": path}
-    except Exception as e:
-        return {"success": False, "error": str(e), "path": path}
-
-def _session_write_file(session, path, content):
-    if not os.path.isabs(path):
-        path = os.path.join(session.cwd, path)
-    path = os.path.normpath(path)
-    try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(content)
-        return {"success": True, "path": path}
-    except Exception as e:
-        return {"success": False, "error": str(e), "path": path}
-
-# 初始化会话管理器
-from agent import SessionManager, Session
-session_mgr = SessionManager()
+def stop_agent():
+    global agent
+    if agent:
+        agent.stop()
+        agent = None
 
 def notify_ui(action, data):
-    """通知 HTML UI"""
-    global UI
     if UI:
         try:
             js = f"if(window.handleBridge)window.handleBridge('{action}',{json.dumps(data)})"
@@ -300,99 +88,60 @@ def notify_ui(action, data):
 
 # ─── JS Bridge API ───────────────────────────────
 class Api:
-    def send_command(self, command):
-        global WS
-        if WS:
-            rid = "cmd_" + uuid.uuid4().hex[:8]
-            asyncio.run_coroutine_threadsafe(
-                WS.send(json.dumps({
-                    "type": "execute_command", "requestId": rid,
-                    "payload": {"command": command, "timeout": 30000},
-                })),
-                loop,
-            )
-            return {"requestId": rid}
-        return {"error": "未连接"}
-
-    def send_message(self, text):
-        global WS
-        if WS:
-            rid = "msg_" + uuid.uuid4().hex[:8]
-            asyncio.run_coroutine_threadsafe(
-                WS.send(json.dumps({
-                    "type": "agent_message", "requestId": rid, "text": text,
-                })),
-                loop,
-            )
-            return {"success": True}
-        return {"error": "未连接"}
-
     def get_status(self):
+        a = agent
         return {
-            "pairCode": pair_code, "deviceName": DEVICE_NAME,
-            "hostname": platform.node(), "platform": sys.platform,
-            "relayStatus": "已连接" if WS else "未连接",
-            "connected": WS is not None,
+            "pairCode": pair_code,
+            "deviceName": DEVICE_NAME,
+            "hostname": platform.node(),
+            "platform": sys.platform,
+            "relayStatus": "已连接" if (a and a.connected) else "未连接",
+            "connected": a is not None and a.connected,
         }
 
     def save_settings(self, key, relay_url):
-        global RELAY_KEY, RELAY_URL
-        cfg = {"key": key, "relayUrl": relay_url, "deviceName": DEVICE_NAME}
-        CONFIG_FILE.write_text(json.dumps(cfg, indent=2), "utf-8")
-        RELAY_KEY = key
+        global RELAY_URL, RELAY_KEY
         RELAY_URL = relay_url
+        RELAY_KEY = key
+        save_config(relay_url, key, DEVICE_NAME)
+        if agent:
+            stop_agent()
         return {"success": True}
 
     def get_settings(self):
         return {"key": RELAY_KEY, "relayUrl": RELAY_URL, "deviceName": DEVICE_NAME}
 
     def toggle_connect(self):
-        """连接/断开切换（线程安全）"""
-        global WS, SHOULD_RECONNECT, CONNECT_THREAD, CONNECT_LOCK
-        with CONNECT_LOCK:
-            if WS:
-                # 断开
-                SHOULD_RECONNECT = False
-                import asyncio
-                try:
-                    asyncio.run_coroutine_threadsafe(WS.close(), loop)
-                except:
-                    pass
-                WS = None
-                CONNECT_THREAD = None
-                notify_ui("relay_status", {"status": "disconnected"})
-                notify_ui("log", {"text": "已断开连接"})
+        if agent and agent.connected:
+            stop_agent()
+            notify_ui("relay_status", {"status": "disconnected"})
+            notify_ui("log", {"text": "已断开连接"})
+            return {"connected": False}
+        elif agent and agent._running:
+            notify_ui("log", {"text": "正在连接中..."})
+            return {"connected": False}
+        else:
+            if not RELAY_URL or not RELAY_KEY:
+                notify_ui("log", {"text": "请先设置中继地址和密钥"})
                 return {"connected": False}
-            elif CONNECT_THREAD and CONNECT_THREAD.is_alive():
-                # 正在连接中，忽略重复点击
-                notify_ui("log", {"text": "正在连接中..."})
-                return {"connected": False}
-            else:
-                # 连接
-                SHOULD_RECONNECT = True
-                CONNECT_THREAD = threading.Thread(target=start_ws, daemon=True)
-                CONNECT_THREAD.start()
-                notify_ui("log", {"text": "正在连接..."})
-                return {"connected": True}
+            start_agent()
+            notify_ui("log", {"text": "正在连接..."})
+            return {"connected": True}
 
     def refresh_pair_code(self):
-        """前端刷新配对码时调用，同步到后端和中继"""
-        global pair_code, WS, loop
-        import random
+        global pair_code
         pair_code = str(random.randint(100000, 999999))
-        if WS and loop:
-            import asyncio
-            asyncio.run_coroutine_threadsafe(
-                WS.send(json.dumps({
-                    "type": "update_code", "requestId": "refresh_" + str(int(time.time() * 1000)),
-                    "authCode": pair_code,
-                })),
-                loop
-            )
+        if agent:
+            agent.update_code(pair_code)
         return {"pairCode": pair_code}
 
+    def send_message(self, text):
+        if agent:
+            agent.send_message(text)
+            return {"success": True}
+        return {"error": "未连接"}
+
     def browse_folder(self):
-        """原生文件夹选择器"""
         import tkinter as tk
         from tkinter import filedialog
         root = tk.Tk()
@@ -403,44 +152,39 @@ class Api:
         return path or ""
 
     def get_sessions(self):
-        sessions_dir = Path.home() / ".yunqiao" / "sessions"
-        index_file = Path.home() / ".yunqiao" / "sessions.json"
-        sessions = []
-        default_id = None
-        if index_file.exists():
-            try:
-                data = json.loads(index_file.read_text("utf-8"))
-                default_id = data.get("defaultSessionId")
-                for sid in data.get("sessions", []):
-                    sf = sessions_dir / f"{sid}.json"
-                    if sf.exists():
-                        sd = json.loads(sf.read_text("utf-8"))
-                        sd["isDefault"] = sd["id"] == default_id
-                        sessions.append(sd)
-            except:
-                pass
-        return {"sessions": sessions, "currentId": default_id}
+        if agent:
+            return agent.sessions.list_all()
+        return {"sessions": [], "defaultId": None}
 
-loop = None
 
-def start_ws():
-    global loop
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(ws_connect())
-
+# ─── 启动 ────────────────────────────────────────
 def main():
+    global UI
     import webview
 
     ui_path = os.path.join(os.path.dirname(__file__), "ui.html")
-    window = webview.create_window(
-        "云桥 MCP v2.0", ui_path,
-        width=1100, height=720, min_size=(900, 600),
-        resizable=True, js_api=Api(),
+    if not os.path.exists(ui_path):
+        print(f"❌ 找不到 ui.html: {ui_path}")
+        sys.exit(1)
+
+    api = Api()
+
+    UI = webview.create_window(
+        title="云桥",
+        url=ui_path,
+        js_api=api,
+        width=420,
+        height=680,
+        min_size=(380, 500),
+        resizable=True,
     )
-    global UI
-    UI = window
-    webview.start(debug=False)
+
+    # 如果已配置，自动连接
+    if RELAY_URL and RELAY_KEY:
+        threading.Timer(2.0, start_agent).start()
+
+    webview.start()
+
 
 if __name__ == "__main__":
     main()
