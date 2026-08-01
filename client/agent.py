@@ -133,6 +133,7 @@ class Agent:
         self.on_command = lambda cmd: None    # 收到命令时
         self.on_result = lambda result: None  # 命令执行结果
         self.on_messages_read = lambda ids: None  # 上游 Agent 已读消息回执
+        self.on_activity = lambda a: None  # 上游 Agent 活跃度（连接数/任务数/调用数）
         
         # 内部状态
         self._ws = None
@@ -351,6 +352,10 @@ class Agent:
                     self._ticket_waiter.set_result(msg.get("ticket", ""))
                 else:
                     self._ticket_waiter.set_result(None)
+            return
+        
+        if msg_type == "agent_activity":
+            self._emit(self.on_activity, msg.get("payload", {}))
             return
         
         if msg_type == "agent_connected":

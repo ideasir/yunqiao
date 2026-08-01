@@ -57,7 +57,7 @@ tailwind.config = {
   <div class="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold text-black bg-[#ededed] flex-shrink-0 ">~</div>
   <span class="text-sm font-medium text-[#ededed]">云桥 MCP</span>
   <span class="text-xs text-[#666] font-mono">v2.0</span>
-  <div class="flex-1"></div>
+  <div class="flex-1 flex items-center justify-center gap-0.5" id="activityDots" title="Agent 活跃连接数"></div>
   <button onclick="copySkillInfo()" class="text-[10px] text-[#888] hover:text-[#ededed] border border-[#222] hover:border-[#333] rounded px-2 py-1 transition-colors cursor-pointer bg-transparent" title="复制云桥技能安装信息，粘贴发给智能体">📦 给智能体安装 skills</button>
   <button onclick="copyRepoUrl()" class="w-7 h-7 flex items-center justify-center rounded hover:bg-[#1a1a1a] transition-colors cursor-pointer" title="云桥仓库地址（点击复制）">
     <svg viewBox="0 0 16 16" width="16" height="16" fill="#888"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
@@ -855,6 +855,9 @@ function handleBridge(action, data) {
       addLog('done', '✅ Agent 已读取 ' + read + ' 条消息');
     }
   }
+  else if (action === 'agent_activity') {
+    renderActivityDots(data);
+  }
   else if (action === 'sync_status') {
     state.pairCode = data.pairCode || state.pairCode;
     state.workDir = data.workDir || state.workDir;
@@ -997,11 +1000,25 @@ function copyDiagInfo() {
   ];
   copyTextToClipboard(lines.join('\n'), '链路诊断信息已复制');
 }
+// 标题栏活跃灯排：灯总数 = 该用户连接配额，亮 = Agent 当前活跃连接
+function renderActivityDots(a) {
+  var el = document.getElementById('activityDots');
+  if (!el) return;
+  var total = (a && a.maxConnections) || 10;
+  var used = (a && a.connections) || 0;
+  var html = '';
+  for (var i = 0; i < total; i++) {
+    html += '<span class="w-1.5 h-1.5 rounded-full inline-block ' + (i < used ? 'bg-[#4ade80]' : 'bg-[#2a2a2a]') + '"></span>';
+  }
+  el.innerHTML = html;
+  el.title = 'Agent 活跃: ' + used + '/' + total + (a && a.runningTasks ? ' · 任务 ' + a.runningTasks : '') + (a && a.pendingCalls ? ' · 调用 ' + a.pendingCalls : '');
+}
 
 (function() {
   updateStatus();
   updateAgentBadge();
   renderTaskPanel();
+  renderActivityDots({});
   addLog('info', '欢迎使用云桥 MCP v2.0');
   updateHealth();
   setPermission('workspace');

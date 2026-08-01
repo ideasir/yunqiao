@@ -59,6 +59,29 @@ function newMcpTicket(userId) {
 }
 loadUsers();
 
+// ─── Agent 活跃度（实时推送，事件驱动） ─────────
+// 统计某用户当前：MCP 连接数 / 运行中任务 / 挂起的工具调用（含配额供灯排显示）
+function getActivity(userId) {
+  const connections = Array.from(transports.values()).filter(t => t.userId === userId).length;
+  const runningTasks = Array.from(tasks.values()).filter(t => t.userId === userId && t.status === 'running').length;
+  let pendingCalls = 0;
+  for (const [, entry] of pendingRequests) {
+    const d = devices.get(entry.deviceId);
+    if (d && d.userId === userId) pendingCalls++;
+  }
+  return { connections, runningTasks, pendingCalls, maxConnections: getLimits(userId).maxConnections };
+}
+
+// 事件驱动推送（长连接是实时的，变化发生时立即推；200ms 节流合并高频变化）
+const activityTimers = new Map();
+function scheduleActivityPush(userId) {
+  if (!userId || activityTimers.has(userId)) return;
+  activityTimers.set(userId, setTimeout(() => {
+    activityTimers.delete(userId);
+    broadcastToDevices({ type: 'agent_activity', payload: getActivity(userId) }, userId);
+  }, 200));
+}
+
 // ─── 异步任务 ───────────────────────────────────
 const TASK_TIMEOUT = parseInt(process.env.TASK_TIMEOUT || '1800000', 10);       // 运行超时，默认 30 分钟
 const TASK_RESULT_TTL = parseInt(process.env.TASK_RESULT_TTL || '900000', 10);  // 结果保留，默认 15 分钟
@@ -173,10 +196,12 @@ function sendAndWait(type, payload, deviceId) {
     const requestId = randomUUID();
     const timer = setTimeout(() => {
       pendingRequests.delete(requestId);
+      scheduleActivityPush(device.userId);  // 调用结束
       reject(new Error(`request timed out after ${COMMAND_TIMEOUT}ms`));
     }, COMMAND_TIMEOUT);
     pendingRequests.set(requestId, { deviceId, resolve, reject, timer });
     sendJSON(device.ws, { type, requestId, payload });
+    scheduleActivityPush(device.userId);  // 调用开始
   });
 }
 
@@ -188,6 +213,8 @@ function rejectDeviceRequests(deviceId, reason) {
       entry.reject(new Error(reason));
     }
   }
+  const d = devices.get(deviceId);
+  if (d) scheduleActivityPush(d.userId);  // 挂起调用被清，活跃度变化
 }
 
 // 客户端消息 → 在线 Agent 推送（SSE 短连接存活期间可即时收到通知，兜底靠 get_client_messages 轮询）
@@ -688,6 +715,7 @@ function createMcpServer(userId, authInfo = {}) {
       createdAt: Date.now(), finishedAt: null, viewed: true,
     });
     sendJSON(device.ws, { type: 'task_start', requestId: randomUUID(), taskId, payload: { command, timeout: timeout || TASK_TIMEOUT } });
+    scheduleActivityPush(userId);  // 任务提交，活跃度变化
     return { content: [{ type: 'text', text: `任务已提交: ${taskId}\n状态: running\n用 get_task_result 查询（taskId=${taskId}）` }] };
   }, 'exec_task'));
 
@@ -831,6 +859,7 @@ const httpServer = createServer(async (req, res) => {
       res.on('close', () => {
         transports.delete(transport.sessionId);
         broadcastToDevices({ type: 'agent_disconnected' }, userId);
+        scheduleActivityPush(userId);
       });
       await mcpServer.connect(transport);
       let latency = 0;
@@ -838,6 +867,7 @@ const httpServer = createServer(async (req, res) => {
         if (device.latency && device.userId === userId) { latency = device.latency; break; }
       }
       broadcastToDevices({ type: 'agent_connected', latency, platform: 'sandbox', hostname: 'OpenClaw Agent', relayPlatform: 'Ubuntu Linux' }, userId);
+      scheduleActivityPush(userId);
     } catch (err) {
       try { res.writeHead(500).end('Internal Server Error'); } catch {}
     }
@@ -1026,14 +1056,17 @@ wss.on('connection', (ws, req, user) => {
         task.viewed = false;  // 标记未查看，触发"任务完成通知"
         console.error(`[task] ${task.taskId} ${task.status} (${task.duration}ms)`);
         notifyTaskDone(task.userId, task);
+        scheduleActivityPush(task.userId);  // 任务完成，活跃度变化
       }
       return;
     }
 
     if (requestId && pendingRequests.has(requestId)) {
-      const { resolve, reject, timer } = pendingRequests.get(requestId);
+      const { resolve, reject, timer, deviceId: pendDeviceId } = pendingRequests.get(requestId);
       clearTimeout(timer);
       pendingRequests.delete(requestId);
+      const d = devices.get(pendDeviceId);
+      if (d) scheduleActivityPush(d.userId);  // 调用结束
       if (type === 'error') reject(new Error(msg.error));
       else resolve(msg);
     }

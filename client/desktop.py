@@ -73,6 +73,7 @@ def get_agent():
         agent.on_status = on_status
         agent.on_result = lambda r: notify_ui("command_result", {"payload": r})
         agent.on_messages_read = lambda ids: notify_ui("messages_read", {"ids": ids})
+        agent.on_activity = lambda a: notify_ui("agent_activity", a)
     return agent
 
 def start_agent():
