@@ -174,7 +174,14 @@ class Api:
                 "currentId": sl.get("defaultId"),
                 "workDir": agent.default_work_dir
             }
-        return {"sessions": [], "currentId": None, "workDir": ""}
+        # Agent 未启动时也返回默认工作区
+        import os as _os
+        dw = str(_os.path.expanduser('~/worker'))
+        return {
+            "sessions": [{"id": "default", "name": "默认工作区", "workDir": dw, "cwd": dw, "isDefault": True}],
+            "currentId": "default",
+            "workDir": dw
+        }
 
 
 # ─── 启动 ────────────────────────────────────────

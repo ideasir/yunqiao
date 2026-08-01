@@ -550,9 +550,7 @@ function setConn状态(status) {
       if (data && data.sessions) {
         state.sessions = data.sessions;
         state.currentSessionId = data.currentId || '';
-        if (data.sessions.length > 0) {
-          state.workDir = data.sessions[0].workDir || '';
-        }
+        state.workDir = data.workDir || '';
         updateStatus();
         renderSidebar();
       }
