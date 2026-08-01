@@ -111,18 +111,11 @@ def notify_ui(action, data):
 class Api:
     def get_status(self):
         a = agent
-        # 获取 Windows 友好版本名
-        try:
-            import subprocess as _sp
-            ver = _sp.check_output(['cmd', '/c', 'ver'], text=True, timeout=3).strip()
-            ver = ver.split('[')[-1].split(']')[0] if '[' in ver else 'Windows'
-        except:
-            ver = 'Windows'
         return {
             "pairCode": pair_code,
             "deviceName": DEVICE_NAME,
             "hostname": platform.node(),
-            "platform": ver,
+            "platform": "Windows",
             "relayStatus": "已连接" if (a and a.connected) else "未连接",
             "connected": a is not None and a.connected,
         }
