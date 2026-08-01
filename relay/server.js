@@ -85,6 +85,7 @@ function scheduleActivityPush(userId) {
 // ─── 异步任务 ───────────────────────────────────
 const TASK_TIMEOUT = parseInt(process.env.TASK_TIMEOUT || '1800000', 10);       // 运行超时，默认 30 分钟
 const TASK_RESULT_TTL = parseInt(process.env.TASK_RESULT_TTL || '900000', 10);  // 结果保留，默认 15 分钟
+const TASK_NOTIFY_TTL = parseInt(process.env.TASK_NOTIFY_TTL || '300000', 10);  // 任务完成通知有效期（默认 5 分钟），过期不再推送旧通知
 const TASK_MAX_CONCURRENT = parseInt(process.env.TASK_MAX_CONCURRENT || '50', 10); // 每设备并发上限（默认放宽到 50）
 const SSE_IDLE_TIMEOUT = parseInt(process.env.SSE_IDLE_TIMEOUT || '600000', 10);  // SSE 空闲超时（默认 10 分钟），防僵尸连接占满连接数
 const tasks = new Map();  // taskId -> { userId, deviceId, command, status, ... }
@@ -379,7 +380,13 @@ function withMsgHint(userId, handler) {
       }
       broadcastToDevices({ type: 'messages_read', ids }, userId);
     }
-    // 已完成未查看的任务（展示后标记已查看，避免通知堆积）
+    // 已完成未查看的任务（展示后标记已查看避免堆积；超过 TASK_NOTIFY_TTL 的旧通知直接过期不推）
+    const nowN = Date.now();
+    for (const t of tasks.values()) {
+      if (t.userId === userId && t.status !== 'running' && !t.viewed && t.finishedAt && (nowN - t.finishedAt) >= TASK_NOTIFY_TTL) {
+        t.viewed = true;  // 过期通知：强制标记已查看
+      }
+    }
     const doneTasks = Array.from(tasks.values()).filter(t => t.userId === userId && t.status !== 'running' && !t.viewed);
     if (doneTasks.length > 0) {
       const taskHint = doneTasks.map(t =>

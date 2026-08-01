@@ -1057,6 +1057,7 @@ function renderActivityDots(a) {
   renderTaskPanel();
   renderActivityDots({});
   addLog('info', '欢迎使用云桥 MCP v2.0');
+  addLog('info', '工作区是持久的：文件存放在默认工作区，重开客户端不会丢失');
   updateHealth();
   setPermission('workspace');
   // 从后端获取状态（pywebview API 可能延迟注入）
