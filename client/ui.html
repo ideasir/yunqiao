@@ -58,6 +58,10 @@ tailwind.config = {
   <span class="text-sm font-medium text-[#ededed]">云桥 MCP</span>
   <span class="text-xs text-[#666] font-mono">v2.0</span>
   <div class="flex-1"></div>
+  <button onclick="copySkillInfo()" class="text-[10px] text-[#888] hover:text-[#ededed] border border-[#222] hover:border-[#333] rounded px-2 py-1 transition-colors cursor-pointer bg-transparent" title="复制云桥技能安装信息，粘贴发给智能体">📦 给智能体安装 skills</button>
+  <button onclick="copyRepoUrl()" class="w-7 h-7 flex items-center justify-center rounded hover:bg-[#1a1a1a] transition-colors cursor-pointer" title="云桥仓库地址（点击复制）">
+    <svg viewBox="0 0 16 16" width="16" height="16" fill="#888"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+  </button>
   <div class="w-2 h-2 rounded-full bg-[#444]" id="conn状态"></div>
 
 </header>
@@ -365,6 +369,31 @@ function copyLog() {
     document.body.removeChild(ta);
     addLog('info', '日志已复制');
   });
+}
+
+var REPO_URL = 'https://github.com/ideasir/yunqiao';
+var SKILL_RAW_URL = 'https://raw.githubusercontent.com/ideasir/yunqiao/main/skills/yunqiao-usage/SKILL.md';
+function copyTextToClipboard(text, okLog) {
+  navigator.clipboard.writeText(text).then(function() {
+    addLog('done', okLog);
+  }).catch(function() {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    addLog('done', okLog + '（fallback）');
+  });
+}
+function copyRepoUrl() {
+  copyTextToClipboard(REPO_URL, '仓库地址已复制: ' + REPO_URL);
+}
+function copySkillInfo() {
+  var msg = '请为我安装"云桥"技能（yunqiao-usage）：\n\n' +
+    '技能内容地址（SKILL.md）：\n' + SKILL_RAW_URL + '\n\n' +
+    '请阅读并遵循该技能的使用规范（连接云桥后先调用 get_client_messages 读取客户端消息、按优先级处理用户指令等）。';
+  copyTextToClipboard(msg, '技能安装信息已复制，请粘贴发给智能体');
 }
 
 function sendCommand() {
