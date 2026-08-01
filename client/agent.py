@@ -275,6 +275,7 @@ class Agent:
             result = await self._exec_cmd(cmd, payload.get("timeout", 30000))
             await self._send("command_result", rid, result)
             self._emit(self.on_result, result)
+            self._emit(self.on_log, f"💻 {cmd[:100]}")
             return
         
         if msg_type == "read_file":
@@ -282,6 +283,7 @@ class Agent:
             self._emit(self.on_command, {"type": "read", "path": path})
             result = self._read_file(path)
             await self._send("file_result", rid, result)
+            self._emit(self.on_log, f"📖 读取: {path} {'✅' if result.get('success') else '❌ '+result.get('error','')}")
             return
         
         if msg_type == "write_file":
@@ -289,6 +291,7 @@ class Agent:
             self._emit(self.on_command, {"type": "write", "path": path})
             result = self._write_file(path, payload.get("content", ""))
             await self._send("file_result", rid, result)
+            self._emit(self.on_log, f"✏️ 写入: {path} {'✅' if result.get('success') else '❌ '+result.get('error','')}")
             return
         
         if msg_type == "get_device_info":
@@ -301,6 +304,10 @@ class Agent:
             self._emit(self.on_command, {"type": "session", "op": op})
             result = await self._handle_session_op(op, payload)
             await self._send("session_op_result", rid, result)
+            if op == "exec" and "exitCode" in result:
+                self._emit(self.on_log, f"💻 {payload.get('command','')[:100]}")
+            elif op in ("read_file", "write_file"):
+                self._emit(self.on_log, f"{'📖' if op == 'read_file' else '✏️'} {payload.get('path','')[:80]}")
             return
     
     async def _send(self, msg_type, rid, payload):
