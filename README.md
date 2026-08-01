@@ -126,6 +126,11 @@ export MAX_DOWNLOAD_MB=5      # 单次下载文件上限（MB）
 export AUTH_MAX_FAILS=5       # 连续失败 5 次
 export AUTH_LOCK_MS=300000    # 锁定 5 分钟
 
+# 异步任务（长命令，不怕 Agent 掉线）
+export TASK_TIMEOUT=1800000       # 单个任务运行超时（默认 30 分钟）
+export TASK_RESULT_TTL=900000     # 结果保留时长（默认 15 分钟，超时自动清理）
+export TASK_MAX_CONCURRENT=3      # 每设备同时运行的任务数上限
+
 # 审计日志（追责用，记录谁/何时/调用了什么/结果）
 export AUDIT_LOG=/opt/cloud-mcp/audit.log
 export AUDIT_MAX_BYTES=20971520   # 超过 20MB 自动轮转为 .old
@@ -293,6 +298,9 @@ node skills/yunqiao-client.mjs list
 | `write_file` | 写入远程文件 | deviceId, path, content |
 | `get_device_info` | 获取系统信息（OS、CPU、内存等） | deviceId |
 | `get_client_messages` | 读取客户端发来的消息（读取后自动标记已读并回执给客户端） | 无 |
+| `exec_task` | 提交异步任务（长命令后台执行，立即返回 taskId，适合 >60 秒的长任务） | command, timeout? |
+| `get_task_result` | 查询异步任务结果（按 taskId，结果保留约 15 分钟） | taskId |
+| `list_tasks` | 列出我的所有异步任务及状态（防止遗忘任务） | 无 |
 
 ### 配对码
 

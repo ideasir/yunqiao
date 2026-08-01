@@ -40,6 +40,22 @@ function findByKey(key) {
 }
 loadUsers();
 
+// ─── 异步任务 ───────────────────────────────────
+const TASK_TIMEOUT = parseInt(process.env.TASK_TIMEOUT || '1800000', 10);       // 运行超时，默认 30 分钟
+const TASK_RESULT_TTL = parseInt(process.env.TASK_RESULT_TTL || '900000', 10);  // 结果保留，默认 15 分钟
+const TASK_MAX_CONCURRENT = parseInt(process.env.TASK_MAX_CONCURRENT || '3', 10); // 每设备并发上限
+const tasks = new Map();  // taskId -> { userId, deviceId, command, status, ... }
+
+// 定期清理：完成的超期任务（防止任务表无限膨胀，也处理"Agent 忘了取"）
+const taskCleanup = setInterval(() => {
+  const now = Date.now();
+  for (const [id, t] of tasks) {
+    if (t.status !== 'running' && t.finishedAt && now - t.finishedAt > TASK_RESULT_TTL) {
+      tasks.delete(id);
+    }
+  }
+}, 60000);
+
 // ─── 审计日志 ───────────────────────────────────
 const AUDIT_LOG = process.env.AUDIT_LOG || '/opt/cloud-mcp/audit.log';
 const AUDIT_MAX_BYTES = parseInt(process.env.AUDIT_MAX_BYTES || '20971520', 10); // 默认 20MB 后轮转
@@ -67,6 +83,8 @@ function summarizeArgs(toolName, params) {
     case 'create_user': return { userId: p.userId, name: p.name };
     case 'delete_user': return { userId: p.userId };
     case 'set_user_limit': return { target: p.userId, maxConnections: p.maxConnections, qps: p.qps, maxOutputMB: p.maxOutputMB, maxDownloadMB: p.maxDownloadMB };
+    case 'exec_task': return { command: p.command, timeout: p.timeout };
+    case 'get_task_result': return { taskId: p.taskId };
     default: return { };
   }
 }
@@ -588,6 +606,66 @@ function createMcpServer(userId, authInfo = {}) {
     return { content: [{ type: 'text', text: `Error: ${o.error}` }], isError: true };
   }, 'download'));
 
+  // ═══ 异步任务 ═══════════════════════════════
+
+  server.registerTool('exec_task', {
+    description: '提交异步任务（长命令在客户端后台执行，立即返回 taskId，稍后用 get_task_result 查询）。适合长任务',
+    inputSchema: z.object({
+      command: z.string().describe('要执行的命令'),
+      timeout: z.number().optional().describe('超时（毫秒），默认 30 分钟'),
+    }),
+  }, wrapTool(userId, async ({ command, timeout }) => {
+    const { device, error } = getAuthedDevice(sessionState, userId, undefined, undefined);
+    if (!device) return { content: [{ type: 'text', text: `Error: ${error}` }], isError: true };
+    // 并发上限：每设备同时最多 TASK_MAX_CONCURRENT 个运行中任务
+    const running = Array.from(tasks.values()).filter(t => t.deviceId === device.id && t.status === 'running').length;
+    if (running >= TASK_MAX_CONCURRENT) {
+      return { content: [{ type: 'text', text: `Error: 该设备已有 ${running} 个任务在运行（上限 ${TASK_MAX_CONCURRENT}），请等待或使用 list_tasks 查看` }], isError: true };
+    }
+    const taskId = randomUUID();
+    tasks.set(taskId, {
+      taskId, userId, deviceId: device.id, command,
+      status: 'running', exitCode: null, stdout: '', stderr: '', killed: false,
+      createdAt: Date.now(), finishedAt: null,
+    });
+    sendJSON(device.ws, { type: 'task_start', requestId: randomUUID(), taskId, command, timeout: timeout || TASK_TIMEOUT });
+    return { content: [{ type: 'text', text: `任务已提交: ${taskId}\n状态: running\n用 get_task_result 查询（taskId=${taskId}）` }] };
+  }, 'exec_task'));
+
+  server.registerTool('get_task_result', {
+    description: '查询异步任务结果（按 taskId）。任务完成后结果保留约 15 分钟',
+    inputSchema: z.object({
+      taskId: z.string().describe('任务 ID'),
+    }),
+  }, wrapTool(userId, async ({ taskId }) => {
+    const task = tasks.get(taskId);
+    if (!task || task.userId !== userId) return { content: [{ type: 'text', text: `任务不存在或不属于你: ${taskId}` }], isError: true };
+    if (task.status === 'running') {
+      return { content: [{ type: 'text', text: `任务 ${taskId} 正在运行...` }] };
+    }
+    const text = [
+      `任务 ${taskId}: ${task.status}`,
+      `Exit Code: ${task.exitCode}`,
+      task.stdout ? `\nSTDOUT:\n${task.stdout}` : '',
+      task.stderr ? `\nSTDERR:\n${task.stderr}` : '',
+      task.killed ? '\n[超时被终止]' : '',
+    ].join('');
+    return { content: [{ type: 'text', text }] };
+  }, 'get_task_result'));
+
+  server.registerTool('list_tasks', {
+    description: '列出我的所有异步任务及当前状态（防止遗忘任务）',
+    inputSchema: z.object({}),
+  }, wrapTool(userId, async () => {
+    const mine = Array.from(tasks.values()).filter(t => t.userId === userId);
+    if (mine.length === 0) return { content: [{ type: 'text', text: '暂无任务' }] };
+    const text = mine.map(t => {
+      const age = t.status === 'running' ? '运行中' : (t.duration != null ? t.duration + 'ms' : '');
+      return `- ${t.taskId.slice(0, 8)} ${t.status} ${t.command.slice(0, 50)} ${age}`;
+    }).join('\n');
+    return { content: [{ type: 'text', text }] };
+  }, 'list_tasks'));
+
   return server;
 }
 
@@ -827,6 +905,22 @@ wss.on('connection', (ws, req, user) => {
         }
       }
       sendJSON(ws, { type: 'edit_result', requestId, success: true });
+      return;
+    }
+    if (type === 'task_result') {
+      // 客户端异步任务完成回传
+      const task = tasks.get(msg.taskId);
+      if (task) {
+        const p = msg.payload || {};
+        task.status = p.killed ? 'killed' : (p.exitCode === 0 ? 'done' : 'failed');
+        task.exitCode = p.exitCode;
+        task.stdout = p.stdout || '';
+        task.stderr = p.stderr || '';
+        task.killed = !!p.killed;
+        task.duration = p.duration || 0;
+        task.finishedAt = Date.now();
+        console.error(`[task] ${task.taskId} ${task.status} (${task.duration}ms)`);
+      }
       return;
     }
 
