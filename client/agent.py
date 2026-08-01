@@ -20,11 +20,9 @@ import asyncio
 import json
 import os
 import platform
-import subprocess
 import sys
 import time
 import threading
-import queue
 from pathlib import Path
 
 
@@ -134,7 +132,6 @@ class Agent:
         self._loop = None
         self._thread = None
         self._running = False
-        self._msg_queue = queue.Queue()  # 线程安全消息队列
     
     def _emit(self, callback, *args):
         """线程安全地调用回调"""
@@ -373,12 +370,7 @@ class Agent:
                 session = self.sessions.get_current()
                 if not session:
                     return {"exitCode": 1, "stdout": "", "stderr": "没有当前会话", "killed": False}
-                # 同步执行（在 async 上下文中调用同步函数）
-                import asyncio as aio
-                loop = aio.get_event_loop()
-                return loop.run_until_complete(
-                    self._exec_cmd(payload.get("command", ""), payload.get("timeout", 30000))
-                )
+                return asyncio.run(self._exec_cmd(payload.get("command", ""), payload.get("timeout", 30000)))
             elif op == "read_file":
                 session = self.sessions.get_current()
                 if not session:

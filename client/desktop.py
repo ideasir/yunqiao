@@ -9,14 +9,11 @@
   python desktop.py
 """
 
-import asyncio
 import json
 import os
 import platform
 import sys
-import time
 import threading
-import uuid
 import random
 from pathlib import Path
 
@@ -44,7 +41,7 @@ def save_config(relay_url, key, name, auto_connect=False):
 
 cfg = load_config()
 RELAY_URL = cfg.get("relayUrl", "")
-RELAY_KEY = cfg.get("key", "") or cfg.get("psk", "")
+RELAY_KEY = cfg.get("key", "")
 
 # ─── 全局状态 ────────────────────────────────────
 UI = None
@@ -175,7 +172,6 @@ class Api:
                 "workDir": agent.default_work_dir
             }
         # Agent 未启动时也返回默认工作区
-        import os as _os
         dw = str(Path(__file__).parent.parent / 'worker')
         return {
             "sessions": [{"id": "default", "name": "默认工作区", "workDir": dw, "cwd": dw, "isDefault": True}],
