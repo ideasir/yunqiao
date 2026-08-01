@@ -247,6 +247,17 @@ class Api:
             UI.destroy()
         return {"success": True}
 
+    def confirm_dialog(self, title, message):
+        """原生确认对话框（tkinter，Windows 风格）"""
+        import tkinter as tk
+        from tkinter import messagebox
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+        result = messagebox.askyesno(title, message)
+        root.destroy()
+        return bool(result)
+
 
 # ─── 启动 ────────────────────────────────────────
 def main():

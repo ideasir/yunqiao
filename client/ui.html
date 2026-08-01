@@ -540,15 +540,24 @@ function renderTaskPanel() {
   else if (!panelManual) panelOpen = true;
   applyPanelState();
 }
+// 原生确认框：桌面端走 pywebview（tkinter 原生），浏览器端降级 confirm
+function nativeConfirm(title, message) {
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.confirm_dialog) {
+    return window.pywebview.api.confirm_dialog(title, message);
+  }
+  return Promise.resolve(window.confirm(message));
+}
 function deleteTask(idx) {
   var m = state.pendingMessages[idx];
   if (!m) return;
-  if (!confirm('删除这条任务？')) return;
-  state.pendingMessages.splice(idx, 1);
-  renderTaskPanel();
-  updateAgentBadge();
-  syncDelete([m.id]);
-  addLog('info', '任务已删除');
+  nativeConfirm('删除任务', '删除这条任务？').then(function(ok) {
+    if (!ok) return;
+    state.pendingMessages.splice(idx, 1);
+    renderTaskPanel();
+    updateAgentBadge();
+    syncDelete([m.id]);
+    addLog('info', '任务已删除');
+  });
 }
 function clearDoneTasks() {
   state.pendingMessages = state.pendingMessages.filter(function(m) { return !m.done; });
@@ -823,10 +832,12 @@ function setDefaultSession(id) {
   addLog('status', '默认工作区已切换: ' + (s ? s.name : id));
 }
 function closeSession(id) {
-  if (!confirm('确定关闭此会话?')) return;
-  state.sessions = state.sessions.filter(function(s) { return s.id !== id; });
-  if (state.currentSessionId === id) { state.currentSessionId = state.sessions.length > 0 ? state.sessions[0].id : null; }
-  renderSidebar(); addLog('info', '会话已关闭: ' + id);
+  nativeConfirm('关闭会话', '确定关闭此会话?').then(function(ok) {
+    if (!ok) return;
+    state.sessions = state.sessions.filter(function(s) { return s.id !== id; });
+    if (state.currentSessionId === id) { state.currentSessionId = state.sessions.length > 0 ? state.sessions[0].id : null; }
+    renderSidebar(); addLog('info', '会话已关闭: ' + id);
+  });
 }
 
 function setPermission(type) {
