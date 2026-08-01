@@ -546,18 +546,23 @@ function setConn状态(status) {
   addLog('info', '欢迎使用云桥 MCP v2.0');
   setConn状态('disconnected');
   setPermission('workspace');
-  // 从后端加载会话和工作区
-  if (window.pywebview && window.pywebview.api) {
-    window.pywebview.api.get_sessions().then(function(data) {
-      if (data && data.sessions) {
-        state.sessions = data.sessions;
-        state.currentSessionId = data.currentId || '';
-        state.workDir = data.workDir || '';
-        updateStatus();
-        renderSidebar();
-      }
-    });
+  // 从后端加载会话和工作区（pywebview API 可能延迟注入）
+  function loadSessions() {
+    if (window.pywebview && window.pywebview.api) {
+      window.pywebview.api.get_sessions().then(function(data) {
+        if (data && data.sessions) {
+          state.sessions = data.sessions;
+          state.currentSessionId = data.currentId || '';
+          state.workDir = data.workDir || '';
+          updateStatus();
+          renderSidebar();
+        }
+      });
+    } else {
+      setTimeout(loadSessions, 500);
+    }
   }
+  setTimeout(loadSessions, 300);
 })();
 
 
