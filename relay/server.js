@@ -40,6 +40,20 @@ function findByKey(key) {
 }
 loadUsers();
 
+// ─── 认证与配额 ─────────────────────────────────
+// AUTH_REQUIRED=1：/mcp 必须带用户密钥/令牌认证，?user= 参数失效
+const AUTH_REQUIRED = (process.env.AUTH_REQUIRED || '0') === '1';
+const DEFAULT_LIMITS = {
+  maxConnections: parseInt(process.env.MAX_CONNECTIONS || '3', 10),
+  qps: parseInt(process.env.DEFAULT_QPS || '10', 10),
+  maxOutputMB: parseInt(process.env.MAX_OUTPUT_MB || '5', 10),
+};
+// 每个用户的配额（可在 users.limits 单独覆盖：放开=调大，收紧=调小）
+function getLimits(userId) {
+  const u = userId ? users[userId] : null;
+  return { ...DEFAULT_LIMITS, ...((u && u.limits) || {}) };
+}
+
 const ALLOWED_COMMANDS = (process.env.ALLOWED_COMMANDS || '').split(',').filter(Boolean);
 const ALLOWED_FILE_PREFIX = process.env.ALLOWED_FILE_PREFIX || '';
 
@@ -124,14 +138,14 @@ function reorderMessages(orderedIds, userId) {
 function getDefaultDevice(userId) {
   if (devices.size === 0) return null;
   for (const device of devices.values()) {
-    if (device.authCode && device.os !== 'web' && (!userId || device.userId === userId)) return device;
+    if (device.authCode && device.os !== 'web' && userId && device.userId === userId) return device;
   }
   for (const device of devices.values()) {
-    if (device.authCode && (!userId || device.userId === userId)) return device;
+    if (device.authCode && userId && device.userId === userId) return device;
   }
-  // 兜底也只返回本用户的设备，避免无认证身份越权访问其他用户的设备
+  // 兜底也只返回本用户的设备，匿名/跨用户一律拿不到任何设备
   for (const device of devices.values()) {
-    if (!userId || device.userId === userId) return device;
+    if (userId && device.userId === userId) return device;
   }
   return null;
 }
@@ -157,8 +171,10 @@ function checkAuthCode(device, code) {
 }
 
 function broadcastToDevices(msg, userId) {
+  // 匿名（无 userId）不广播给任何设备
+  if (!userId) return;
   for (const device of devices.values()) {
-    if (!userId || device.userId === userId) {
+    if (device.userId === userId) {
       sendJSON(device.ws, msg);
     }
   }
@@ -209,6 +225,39 @@ function withMsgHint(userId, handler) {
   };
 }
 
+// 每用户调用限流（1 秒滑动窗口）与输出大小限制
+const qpsCounters = new Map();
+function checkQps(userId) {
+  const limits = getLimits(userId);
+  const now = Date.now();
+  let c = qpsCounters.get(userId);
+  if (!c || now - c.start >= 1000) { c = { start: now, count: 0 }; qpsCounters.set(userId, c); }
+  if (c.count >= limits.qps) return false;
+  c.count++;
+  return true;
+}
+function withLimits(userId, handler) {
+  return async (params) => {
+    if (!checkQps(userId)) {
+      return { content: [{ type: 'text', text: 'Error: 调用过于频繁（超出该用户 QPS 限制）' }], isError: true };
+    }
+    const result = await handler(params);
+    if (result && Array.isArray(result.content)) {
+      let total = 0;
+      for (const c of result.content) if (c && c.text) total += c.text.length;
+      const maxBytes = getLimits(userId).maxOutputMB * 1024 * 1024;
+      if (total > maxBytes) {
+        return { content: [{ type: 'text', text: `Error: 输出过大（超过 ${getLimits(userId).maxOutputMB}MB 上限）` }], isError: true };
+      }
+    }
+    return result;
+  };
+}
+// 工具统一包装：限流 + 输出限制 + 未读消息提示
+function wrapTool(userId, handler) {
+  return withLimits(userId, withMsgHint(userId, handler));
+}
+
 function createMcpServer(userId, authInfo = {}) {
   const server = new McpServer({
     name: 'yunqiao',
@@ -218,9 +267,9 @@ function createMcpServer(userId, authInfo = {}) {
   server.registerTool('list_devices', {
     description: '列出所有已连接到中转的私人电脑设备',
     inputSchema: z.object({}),
-  }, withMsgHint(userId, async () => {
+  }, wrapTool(userId, async () => {
     const list = Array.from(devices.values())
-      .filter(d => !userId || d.userId === userId)
+      .filter(d => userId && d.userId === userId)
       .map(d => ({
         id: d.id, name: d.name, os: d.os, arch: d.arch,
         hostname: d.hostname, connectedAt: d.connectedAt,
@@ -243,7 +292,7 @@ function createMcpServer(userId, authInfo = {}) {
       name: z.string().optional().describe('用户名称'),
       key: z.string().optional().describe('密钥（不传则自动生成）'),
     }),
-  }, withMsgHint(userId, async ({ userId, name, key }) => {
+  }, wrapTool(userId, async ({ userId, name, key }) => {
     const denied = requireAdmin(authInfo);
     if (denied) return denied;
     const user = users[userId];
@@ -258,7 +307,7 @@ function createMcpServer(userId, authInfo = {}) {
   server.registerTool('list_users', {
     description: '列出所有用户（需要管理员密钥认证）',
     inputSchema: z.object({}),
-  }, withMsgHint(userId, async () => {
+  }, wrapTool(userId, async () => {
     const denied = requireAdmin(authInfo);
     if (denied) return denied;
     const list = Object.entries(users).map(([id, u]) =>
@@ -272,7 +321,7 @@ function createMcpServer(userId, authInfo = {}) {
     inputSchema: z.object({
       userId: z.string().describe('用户 ID'),
     }),
-  }, withMsgHint(userId, async ({ userId }) => {
+  }, wrapTool(userId, async ({ userId }) => {
     const denied = requireAdmin(authInfo);
     if (denied) return denied;
     if (userId === 'admin') return { content: [{ type: 'text', text: 'Error: 不能删除 admin' }], isError: true };
@@ -280,6 +329,40 @@ function createMcpServer(userId, authInfo = {}) {
     delete users[userId];
     saveUsers();
     return { content: [{ type: 'text', text: `用户已删除: ${userId}` }] };
+  }));
+
+  server.registerTool('set_user_limit', {
+    description: '设置用户资源配额（放开=调大，收紧=调小；不带任何限制参数则恢复默认）。需要管理员密钥认证',
+    inputSchema: z.object({
+      userId: z.string().describe('用户 ID'),
+      maxConnections: z.number().optional().describe('最大并发连接数'),
+      qps: z.number().optional().describe('每秒工具调用上限'),
+      maxOutputMB: z.number().optional().describe('单次输出上限（MB）'),
+    }),
+  }, wrapTool(userId, async ({ userId: uid, maxConnections, qps, maxOutputMB }) => {
+    const denied = requireAdmin(authInfo);
+    if (denied) return denied;
+    if (!users[uid]) return { content: [{ type: 'text', text: 'Error: 用户不存在' }], isError: true };
+    if (maxConnections === undefined && qps === undefined && maxOutputMB === undefined) {
+      delete users[uid].limits;
+    } else {
+      users[uid].limits = users[uid].limits || {};
+      if (maxConnections !== undefined) users[uid].limits.maxConnections = Math.max(1, maxConnections);
+      if (qps !== undefined) users[uid].limits.qps = Math.max(1, qps);
+      if (maxOutputMB !== undefined) users[uid].limits.maxOutputMB = Math.max(1, maxOutputMB);
+    }
+    saveUsers();
+    return { content: [{ type: 'text', text: `用户 ${uid} 配额: ${JSON.stringify(getLimits(uid))}` }] };
+  }));
+
+  server.registerTool('get_user_limits', {
+    description: '列出所有用户的资源配额。需要管理员密钥认证',
+    inputSchema: z.object({}),
+  }, wrapTool(userId, async () => {
+    const denied = requireAdmin(authInfo);
+    if (denied) return denied;
+    const list = Object.keys(users).map(uid => `- ${uid}: ${JSON.stringify(getLimits(uid))}`).join('\n');
+    return { content: [{ type: 'text', text: list || '暂无用户' }] };
   }));
 
   // 会话管理
@@ -294,7 +377,7 @@ function createMcpServer(userId, authInfo = {}) {
   ];
 
   for (const [name, desc, schema] of sessionTools) {
-    server.registerTool(name, { description: desc, inputSchema: z.object(schema) }, withMsgHint(userId, async (params) => {
+    server.registerTool(name, { description: desc, inputSchema: z.object(schema) }, wrapTool(userId, async (params) => {
       const device = getDefaultDevice(userId);
       if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
       if (!checkAuthCode(device, params.code)) {
@@ -312,7 +395,7 @@ function createMcpServer(userId, authInfo = {}) {
     inputSchema: z.object({
       deviceId: z.string().optional(), command: z.string(), timeout: z.number().optional(), code: z.string(),
     }),
-  }, withMsgHint(userId, async ({ deviceId, code, command, timeout }) => {
+  }, wrapTool(userId, async ({ deviceId, code, command, timeout }) => {
     const device = deviceId ? devices.get(deviceId) : getDefaultDevice(userId);
     if (!device) return { content: [{ type: 'text', text: 'Error: device not found' }], isError: true };
     if (!checkAuthCode(device, code)) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
@@ -325,7 +408,7 @@ function createMcpServer(userId, authInfo = {}) {
   server.registerTool('read_file_old', {
     description: '[旧版] 读取私人电脑上的文件',
     inputSchema: z.object({ deviceId: z.string().optional(), code: z.string(), path: z.string() }),
-  }, withMsgHint(userId, async ({ deviceId, code, path }) => {
+  }, wrapTool(userId, async ({ deviceId, code, path }) => {
     const device = deviceId ? devices.get(deviceId) : getDefaultDevice(userId);
     if (!device) return { content: [{ type: 'text', text: 'Error: device not found' }], isError: true };
     if (!checkAuthCode(device, code)) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
@@ -338,7 +421,7 @@ function createMcpServer(userId, authInfo = {}) {
   server.registerTool('write_file_old', {
     description: '[旧版] 写入私人电脑上的文件',
     inputSchema: z.object({ deviceId: z.string().optional(), code: z.string(), path: z.string(), content: z.string() }),
-  }, withMsgHint(userId, async ({ deviceId, code, path, content }) => {
+  }, wrapTool(userId, async ({ deviceId, code, path, content }) => {
     const device = deviceId ? devices.get(deviceId) : getDefaultDevice(userId);
     if (!device) return { content: [{ type: 'text', text: 'Error: device not found' }], isError: true };
     if (!checkAuthCode(device, code)) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
@@ -351,7 +434,7 @@ function createMcpServer(userId, authInfo = {}) {
   server.registerTool('get_client_messages', {
     description: '获取客户端发来的新消息（客户端 UI 发来的消息，读取后自动标记已读并回执给客户端）。建议每次会话开始时调用一次',
     inputSchema: z.object({}),
-  }, withMsgHint(userId, async () => {
+  }, wrapTool(userId, async () => {
     // 只取走本用户未读消息（顺带清理），并广播回执
     const unread = agentMessages.filter(m => m.userId === userId && !m.read);
     const ids = unread.map(m => m.id);
@@ -374,7 +457,7 @@ function createMcpServer(userId, authInfo = {}) {
   server.registerTool('get_device_info', {
     description: '获取远程电脑的系统信息',
     inputSchema: z.object({ code: z.string() }),
-  }, withMsgHint(userId, async ({ code }) => {
+  }, wrapTool(userId, async ({ code }) => {
     const device = getDefaultDevice(userId);
     if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
     if (!checkAuthCode(device, code)) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
@@ -392,7 +475,7 @@ function createMcpServer(userId, authInfo = {}) {
   server.registerTool('notify', {
     description: '发送通知消息到客户端日志',
     inputSchema: z.object({ text: z.string(), code: z.string() }),
-  }, withMsgHint(userId, async ({ text, code }) => {
+  }, wrapTool(userId, async ({ text, code }) => {
     const device = getDefaultDevice(userId);
     if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
     if (!checkAuthCode(device, code)) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
@@ -403,7 +486,7 @@ function createMcpServer(userId, authInfo = {}) {
   server.registerTool('download', {
     description: '下载远程电脑上的文件（返回 base64 编码）',
     inputSchema: z.object({ path: z.string(), code: z.string() }),
-  }, withMsgHint(userId, async ({ path, code }) => {
+  }, wrapTool(userId, async ({ path, code }) => {
     const device = getDefaultDevice(userId);
     if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
     if (!checkAuthCode(device, code)) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
@@ -463,11 +546,26 @@ const httpServer = createServer(async (req, res) => {
 
   if (url.pathname === MCP_PATH) {
     try {
-      // 认证：优先 X-Key / Authorization: Bearer（用户密钥），否则回退 ?user=（向后兼容，无管理员权限）
       const authKey = req.headers['x-key'] || (req.headers.authorization || '').replace(/^Bearer\s+/i, '') || '';
       const authUser = authKey ? findByKey(authKey) : null;
       const isAdminAuth = !!(authUser && authUser.role === 'admin');
-      const userId = (authUser && authUser.userId) || url.searchParams.get('user') || 'admin';
+      // 身份只来自认证；?user= 仅在非强制模式下兼容旧客户端（AUTH_REQUIRED=1 时忽略）
+      let userId = authUser ? authUser.userId : null;
+      if (!userId && !AUTH_REQUIRED) {
+        userId = url.searchParams.get('user') || null;
+      }
+      if (AUTH_REQUIRED && !authUser) {
+        res.writeHead(401, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: 'authentication required: X-Key or Bearer token' }));
+        return;
+      }
+      // 连接数限制（按用户配额）
+      const conns = Array.from(transports.values()).filter(t => t.userId === userId).length;
+      if (conns >= getLimits(userId).maxConnections) {
+        res.writeHead(429, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: `too many connections (max ${getLimits(userId).maxConnections})` }));
+        return;
+      }
       const mcpServer = createMcpServer(userId, { isAdminAuth, authUser });
       const transport = new SSEServerTransport(MCP_MESSAGE_PATH, res);
       transports.set(transport.sessionId, { server: mcpServer, transport, userId });
