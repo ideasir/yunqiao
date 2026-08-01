@@ -461,7 +461,7 @@ const httpServer = createServer(async (req, res) => {
         broadcastToDevices({ type: 'agent_disconnected' });
       });
       await mcpServer.connect(transport);
-      broadcastToDevices({ type: 'agent_connected' });
+      broadcastToDevices({ type: 'agent_connected', timestamp: Date.now() });
     } catch (err) {
       console.error('[mcp] SSE connect error:', err);
       try { res.writeHead(500).end('Internal Server Error'); } catch {}

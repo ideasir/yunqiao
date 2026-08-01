@@ -493,6 +493,11 @@ function handleBridge(action, data) {
     var s = document.getElementById('agent状态');
     if (data.status === 'connected') {
       s.textContent = '已配对'; s.style.color = '#4ade80';
+      // 显示延迟
+      var al = document.getElementById('agentLatency');
+      if (al && data.latency) { al.textContent = data.latency + ' ms'; al.style.color = '#4ade80'; }
+      var arl = document.getElementById('agentRelayLatency');
+      if (arl && data.latency) { arl.textContent = data.latency + ' ms'; arl.style.color = '#3b82f6'; }
       var agentDot = document.getElementById('agentDot');
       if (agentDot) agentDot.className = 'w-1.5 h-1.5 rounded-full bg-[#3b82f6] animate-pulse';
       var relayAgentDot = document.getElementById('relayAgentDot');
