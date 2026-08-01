@@ -351,46 +351,8 @@ const httpServer = createServer(async (req, res) => {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
 
   if (url.pathname === '/api/users') {
-    const adminKey = req.headers['x-admin-key'] || url.searchParams.get('adminKey');
-    const adminUser = findByKey(adminKey);
-    if (!adminUser || adminUser.role !== 'admin') {
-      res.writeHead(403, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Forbidden' }));
-      return;
-    }
-    if (req.method === 'GET') {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify(Object.entries(users).map(([id, u]) => ({ id, name: u.name, role: u.role, createdAt: u.createdAt }))));
-      return;
-    }
-    if (req.method === 'POST') {
-      let body = '';
-      req.on('data', c => body += c);
-      req.on('end', () => {
-        try {
-          const { userId, name, key } = JSON.parse(body);
-          if (!userId) { res.writeHead(400).end(JSON.stringify({ error: 'userId required' })); return; }
-          if (users[userId]) { res.writeHead(409).end(JSON.stringify({ error: 'exists' })); return; }
-          const newKey = key || randomBytes(16).toString('hex');
-          users[userId] = { key: newKey, name: name || userId, role: 'user', createdAt: new Date().toISOString() };
-          saveUsers();
-          res.writeHead(201, { 'content-type': 'application/json' });
-          res.end(JSON.stringify({ userId, key: newKey }));
-        } catch (e) { res.writeHead(400).end(JSON.stringify({ error: e.message })); }
-      });
-      return;
-    }
-    if (req.method === 'DELETE') {
-      const userId = url.searchParams.get('userId');
-      if (!userId || userId === 'admin') { res.writeHead(400).end(JSON.stringify({ error: 'invalid userId' })); return; }
-      if (!users[userId]) { res.writeHead(404).end(JSON.stringify({ error: 'not found' })); return; }
-      delete users[userId];
-      saveUsers();
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ ok: true }));
-      return;
-    }
-    res.writeHead(405).end('Method Not Allowed');
+    res.writeHead(403, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ error: 'API disabled' }));
     return;
   }
 
