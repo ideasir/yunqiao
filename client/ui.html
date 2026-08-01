@@ -470,7 +470,7 @@ function updateStatus() {
 
 }
 function handleBridge(action, data) {
-  if (action === 'log') { addLog('action', data.text); }
+  if (action === 'log') { addLog(data.text.startsWith('[') ? 'action' : 'info', data.text); }
   else if (action === 'sync_status') {
     state.pairCode = data.pairCode || state.pairCode;
     state.workDir = data.workDir || state.workDir;
