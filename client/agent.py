@@ -263,7 +263,9 @@ class Agent:
             return
         
         if msg_type == "agent_connected":
-            latency = int((time.time() * 1000 - msg.get('timestamp', 0)))
+            now_ms = int(time.time() * 1000)
+            latency = now_ms - int(msg.get('timestamp', now_ms))
+            if latency < 0: latency = 0  # 时差修正
             self._emit(self.on_status, {"agent": "connected", "connected": True, "latency": latency})
             return
         
