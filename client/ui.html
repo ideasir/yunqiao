@@ -569,7 +569,10 @@ function connectRelay() {
   if (state.ws) {
     try { state.ws.close(); } catch(e) {}
   }
-  state.ws = new WebSocket('wss://' + url + '/device?key=' + encodeURIComponent(key));
+  var wsUrl = url;
+  if (!wsUrl.startsWith('ws://') && !wsUrl.startsWith('wss://')) wsUrl = 'wss://' + wsUrl;
+  if (!wsUrl.endsWith('/device')) wsUrl = wsUrl + '/device';
+  state.ws = new WebSocket(wsUrl + '?key=' + encodeURIComponent(key));
   state.ws.onopen = function() {
     document.getElementById('connectBtn').textContent = '断开';
     document.getElementById('connectBtn').style.background = '#7f1d1d';
