@@ -287,7 +287,7 @@ class Agent:
         if msg_type == "session_op":
             op = payload.get("op", "")
             self._emit(self.on_command, {"type": "session", "op": op})
-            result = self._handle_session_op(op, payload)
+            result = await self._handle_session_op(op, payload)
             await self._send("session_op_result", rid, result)
             return
     
@@ -362,7 +362,7 @@ class Agent:
             "userInfo": {"username": os.getlogin()},
         }
     
-    def _handle_session_op(self, op, payload):
+    async def _handle_session_op(self, op, payload):
         try:
             if op == "create":
                 return self.sessions.create(payload.get("workDir", ""), payload.get("name"))
@@ -370,7 +370,7 @@ class Agent:
                 session = self.sessions.get_current()
                 if not session:
                     return {"exitCode": 1, "stdout": "", "stderr": "没有当前会话", "killed": False}
-                return asyncio.run(self._exec_cmd(payload.get("command", ""), payload.get("timeout", 30000)))
+                return await self._exec_cmd(payload.get("command", ""), payload.get("timeout", 30000))
             elif op == "read_file":
                 session = self.sessions.get_current()
                 if not session:
