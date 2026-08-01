@@ -407,6 +407,22 @@ function createMcpServer() {
     return { content: [{ type: 'text', text }] };
   });
 
+  server.registerTool('notify', {
+    description: '发送通知消息到客户端日志（用于显示 AI 思考过程、提示等）',
+    inputSchema: z.object({
+      text: z.string().describe('要显示的消息内容'),
+      code: z.string().describe('客户端显示的验证码'),
+    }),
+  }, async ({ text, code }) => {
+    const device = getDefaultDevice();
+    if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
+    if (device.authCode !== code) {
+      return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
+    }
+    sendJSON(device.ws, { type: 'notify', text });
+    return { content: [{ type: 'text', text: '已发送' }] };
+  });
+
   return server;
 }
 

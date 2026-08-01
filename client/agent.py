@@ -256,6 +256,10 @@ class Agent:
             self._emit(self.on_log, f"注册成功: {self.device_id[:8]}...")
             return
         
+        if msg_type == "notify":
+            self._emit(self.on_log, f"[通知] {msg.get('text', '')}")
+            return
+        
         if msg_type == "agent_connected":
             self._emit(self.on_status, {"agent": "connected", "connected": True})
             return
