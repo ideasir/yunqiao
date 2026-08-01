@@ -117,6 +117,11 @@ class Agent:
         # 会话管理
         self.sessions = SessionManager()
         
+        # 默认工作区
+        self.default_work_dir = str(Path.home() / 'worker')
+        os.makedirs(self.default_work_dir, exist_ok=True)
+        self.sessions.create(self.default_work_dir, '默认工作区')
+        
         # 回调函数（由 desktop.py 设置）
         self.on_log = lambda msg: None       # 日志消息
         self.on_status = lambda status: None  # 连接状态变化
