@@ -75,14 +75,8 @@ class SessionManager:
 import sys
 import time
 
-RELAY_URL = os.environ.get("RELAY_URL")
-if not RELAY_URL:
-    print("❌ 必须设置 RELAY_URL 环境变量（云桥 WebSocket 地址）")
-    sys.exit(1)
-RELAY_KEY = os.environ.get("RELAY_KEY")
-if not RELAY_KEY:
-    print("❌ 必须设置 RELAY_KEY 环境变量")
-    sys.exit(1)
+RELAY_URL = os.environ.get("RELAY_URL", "")
+RELAY_KEY = os.environ.get("RELAY_KEY", "")
 DEVICE_NAME = os.environ.get("DEVICE_NAME", platform.node())
 RECONNECT_DELAY = int(os.environ.get("RECONNECT_DELAY", "5000"))
 
@@ -225,5 +219,11 @@ async def connect():
 
 
 if __name__ == "__main__":
+    if not RELAY_URL:
+        print("❌ 必须设置 RELAY_URL 环境变量（云桥 WebSocket 地址）")
+        sys.exit(1)
+    if not RELAY_KEY:
+        print("❌ 必须设置 RELAY_KEY 环境变量")
+        sys.exit(1)
     print(f"[agent] starting, device name: {DEVICE_NAME}")
     asyncio.run(connect())
