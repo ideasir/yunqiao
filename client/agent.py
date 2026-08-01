@@ -377,6 +377,10 @@ class Agent:
             if not os.path.isabs(path):
                 session = self.sessions.get_current()
                 path = os.path.join(session.cwd, path) if session else path
+            path = os.path.normpath(path)
+            if not self._check_path(path):
+                await self._send("download_result", rid, {"success": False, "error": "超出工作区范围"})
+                return
             try:
                 import base64
                 with open(path, "rb") as f:

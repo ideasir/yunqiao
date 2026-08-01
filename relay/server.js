@@ -129,7 +129,31 @@ function getDefaultDevice(userId) {
   for (const device of devices.values()) {
     if (device.authCode && (!userId || device.userId === userId)) return device;
   }
-  return devices.values().next().value;
+  // 兜底也只返回本用户的设备，避免无认证身份越权访问其他用户的设备
+  for (const device of devices.values()) {
+    if (!userId || device.userId === userId) return device;
+  }
+  return null;
+}
+
+// ─── 配对码校验（防暴力） ──────────────────────
+const AUTH_MAX_FAILS = parseInt(process.env.AUTH_MAX_FAILS || '5');
+const AUTH_LOCK_MS = parseInt(process.env.AUTH_LOCK_MS || '300000');
+
+function checkAuthCode(device, code) {
+  if (!device) return false;
+  const now = Date.now();
+  if (device.authLockUntil && now < device.authLockUntil) return false;
+  if (device.authCode !== code) {
+    device.authFails = (device.authFails || 0) + 1;
+    if (device.authFails >= AUTH_MAX_FAILS) {
+      device.authLockUntil = now + AUTH_LOCK_MS;
+      console.error(`[auth] 设备 ${device.id} 配对码失败 ${device.authFails} 次，锁定 ${Math.round(AUTH_LOCK_MS / 60000)} 分钟`);
+    }
+    return false;
+  }
+  device.authFails = 0;
+  return true;
 }
 
 function broadcastToDevices(msg, userId) {
@@ -162,7 +186,15 @@ async function handleSessionOp(op, payload, deviceId) {
 // MCP 服务
 // ═══════════════════════════════════════════════
 
-function createMcpServer(userId) {
+// 管理工具（用户管理）要求管理员密钥认证，未认证一律拒绝
+function requireAdmin(authInfo) {
+  if (!authInfo || !authInfo.isAdminAuth) {
+    return { content: [{ type: 'text', text: 'Error: 需要管理员密钥认证（请求头 X-Key 或 Authorization: Bearer 传管理员密钥）' }], isError: true };
+  }
+  return null;
+}
+
+function createMcpServer(userId, authInfo = {}) {
   const server = new McpServer({
     name: 'yunqiao',
     version: '2.0.0',
@@ -190,13 +222,15 @@ function createMcpServer(userId) {
 
   // 用户管理（admin 权限）
   server.registerTool('create_user', {
-    description: '创建新用户',
+    description: '创建新用户（需要管理员密钥认证）',
     inputSchema: z.object({
       userId: z.string().describe('用户 ID'),
       name: z.string().optional().describe('用户名称'),
       key: z.string().optional().describe('密钥（不传则自动生成）'),
     }),
   }, async ({ userId, name, key }) => {
+    const denied = requireAdmin(authInfo);
+    if (denied) return denied;
     const user = users[userId];
     if (user && user.role !== 'admin') return { content: [{ type: 'text', text: 'Error: 需要 admin 权限' }], isError: true };
     if (users[userId]) return { content: [{ type: 'text', text: 'Error: 用户已存在' }], isError: true };
@@ -207,9 +241,11 @@ function createMcpServer(userId) {
   });
 
   server.registerTool('list_users', {
-    description: '列出所有用户',
+    description: '列出所有用户（需要管理员密钥认证）',
     inputSchema: z.object({}),
   }, async () => {
+    const denied = requireAdmin(authInfo);
+    if (denied) return denied;
     const list = Object.entries(users).map(([id, u]) =>
       `- ${id} (${u.name})${u.role === 'admin' ? ' 👑' : ''}`
     ).join('\n');
@@ -217,11 +253,13 @@ function createMcpServer(userId) {
   });
 
   server.registerTool('delete_user', {
-    description: '删除用户',
+    description: '删除用户（需要管理员密钥认证）',
     inputSchema: z.object({
       userId: z.string().describe('用户 ID'),
     }),
   }, async ({ userId }) => {
+    const denied = requireAdmin(authInfo);
+    if (denied) return denied;
     if (userId === 'admin') return { content: [{ type: 'text', text: 'Error: 不能删除 admin' }], isError: true };
     if (!users[userId]) return { content: [{ type: 'text', text: 'Error: 用户不存在' }], isError: true };
     delete users[userId];
@@ -244,7 +282,7 @@ function createMcpServer(userId) {
     server.registerTool(name, { description: desc, inputSchema: z.object(schema) }, async (params) => {
       const device = getDefaultDevice(userId);
       if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
-      if (device.authCode !== params.code) {
+      if (!checkAuthCode(device, params.code)) {
         return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
       }
       const op = name.replace('_session', '');
@@ -262,7 +300,7 @@ function createMcpServer(userId) {
   }, async ({ deviceId, code, command, timeout }) => {
     const device = deviceId ? devices.get(deviceId) : getDefaultDevice(userId);
     if (!device) return { content: [{ type: 'text', text: 'Error: device not found' }], isError: true };
-    if (device.authCode !== code) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
+    if (!checkAuthCode(device, code)) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
     if (!checkCommandAllowed(command)) return { content: [{ type: 'text', text: 'Error: command not allowed' }], isError: true };
     const output = await sendAndWait('execute_command', { command, timeout }, device.id);
     const o = output.payload;
@@ -275,7 +313,8 @@ function createMcpServer(userId) {
   }, async ({ deviceId, code, path }) => {
     const device = deviceId ? devices.get(deviceId) : getDefaultDevice(userId);
     if (!device) return { content: [{ type: 'text', text: 'Error: device not found' }], isError: true };
-    if (device.authCode !== code) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
+    if (!checkAuthCode(device, code)) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
+    if (!checkPathAllowed(path)) return { content: [{ type: 'text', text: 'Error: path outside allowed prefix' }], isError: true };
     const result = await sendAndWait('read_file', { path }, device.id);
     const o = result.payload;
     return { content: [{ type: 'text', text: o.success ? o.content : `Error: ${o.error}` }], isError: !o.success };
@@ -287,7 +326,8 @@ function createMcpServer(userId) {
   }, async ({ deviceId, code, path, content }) => {
     const device = deviceId ? devices.get(deviceId) : getDefaultDevice(userId);
     if (!device) return { content: [{ type: 'text', text: 'Error: device not found' }], isError: true };
-    if (device.authCode !== code) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
+    if (!checkAuthCode(device, code)) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
+    if (!checkPathAllowed(path)) return { content: [{ type: 'text', text: 'Error: path outside allowed prefix' }], isError: true };
     const result = await sendAndWait('write_file', { path, content }, device.id);
     const o = result.payload;
     return { content: [{ type: 'text', text: o.success ? `文件已写入: ${o.path}` : `Error: ${o.error}` }], isError: !o.success };
@@ -322,7 +362,7 @@ function createMcpServer(userId) {
   }, async ({ code }) => {
     const device = getDefaultDevice(userId);
     if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
-    if (device.authCode !== code) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
+    if (!checkAuthCode(device, code)) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
     const result = await sendAndWait('get_device_info', {}, device.id);
     const info = result.payload;
     const gb = (b) => (b / 1024 / 1024 / 1024).toFixed(1) + ' GB';
@@ -340,7 +380,7 @@ function createMcpServer(userId) {
   }, async ({ text, code }) => {
     const device = getDefaultDevice(userId);
     if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
-    if (device.authCode !== code) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
+    if (!checkAuthCode(device, code)) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
     sendJSON(device.ws, { type: 'notify', text });
     return { content: [{ type: 'text', text: '已发送' }] };
   });
@@ -351,7 +391,8 @@ function createMcpServer(userId) {
   }, async ({ path, code }) => {
     const device = getDefaultDevice(userId);
     if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
-    if (device.authCode !== code) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
+    if (!checkAuthCode(device, code)) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
+    if (!checkPathAllowed(path)) return { content: [{ type: 'text', text: 'Error: path outside allowed prefix' }], isError: true };
     const result = await sendAndWait('download', { path }, device.id);
     const o = result.payload;
     if (o.success) return { content: [{ type: 'text', text: `FILE:${path}|${o.size}|${o.data}` }] };
@@ -407,8 +448,12 @@ const httpServer = createServer(async (req, res) => {
 
   if (url.pathname === MCP_PATH) {
     try {
-      const userId = url.searchParams.get('user') || 'admin';
-      const mcpServer = createMcpServer(userId);
+      // 认证：优先 X-Key / Authorization: Bearer（用户密钥），否则回退 ?user=（向后兼容，无管理员权限）
+      const authKey = req.headers['x-key'] || (req.headers.authorization || '').replace(/^Bearer\s+/i, '') || '';
+      const authUser = authKey ? findByKey(authKey) : null;
+      const isAdminAuth = !!(authUser && authUser.role === 'admin');
+      const userId = (authUser && authUser.userId) || url.searchParams.get('user') || 'admin';
+      const mcpServer = createMcpServer(userId, { isAdminAuth, authUser });
       const transport = new SSEServerTransport(MCP_MESSAGE_PATH, res);
       transports.set(transport.sessionId, { server: mcpServer, transport, userId });
       res.on('close', () => {
@@ -494,6 +539,7 @@ wss.on('connection', (ws, req, user) => {
         hostname: hostname || 'unknown', ws,
         authCode: authCode || null, userId: user.userId,
         connectedAt: new Date().toISOString(), latency: 0,
+        authFails: 0, authLockUntil: null,
       });
       console.error(`[device] registered: ${name} (${deviceId}) user:${user.userId} code:${authCode || 'none'}`);
       sendJSON(ws, { type: 'register_result', requestId, success: true, deviceId });
@@ -523,9 +569,13 @@ wss.on('connection', (ws, req, user) => {
       const device = devices.get(deviceId);
       if (device) {
         device.authCode = msg.authCode;
+        device.authFails = 0;
+        device.authLockUntil = null;
         for (const [otherId, other] of devices) {
           if (otherId !== deviceId && other.hostname === device.hostname && other.userId === device.userId) {
             other.authCode = msg.authCode;
+            other.authFails = 0;
+            other.authLockUntil = null;
           }
         }
         sendJSON(ws, { type: 'update_code_result', requestId, success: true });

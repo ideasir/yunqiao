@@ -23,6 +23,8 @@ if (!SERVER_URL) {
   console.error('请设置 YUNQIAO_URL 环境变量（云桥 MCP 端点地址）');
   process.exit(1);
 }
+// 可选：用户密钥（有权限时传给 MCP 端点，获得用户身份；管理员密钥可获得管理权限）
+const YUNQIAO_KEY = process.env.YUNQIAO_KEY || '';
 
 async function main() {
   const args = process.argv.slice(2);
@@ -58,7 +60,9 @@ async function main() {
   // 用 CLI 传入的 authCode 覆盖环境变量
   const code = authCode;
 
-  const transport = new SSEClientTransport(new URL(SERVER_URL));
+  const transport = new SSEClientTransport(new URL(SERVER_URL), {
+    requestInit: YUNQIAO_KEY ? { headers: { 'X-Key': YUNQIAO_KEY } } : undefined,
+  });
   const client = new Client({ name: 'cloud-yunqiao-client', version: '1.0.0' });
 
   try {
