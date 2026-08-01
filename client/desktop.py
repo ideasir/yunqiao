@@ -269,6 +269,12 @@ def main():
     import webview
 
     ui_path = os.path.join(os.path.dirname(__file__), "ui.html")
+    if getattr(sys, 'frozen', False):
+        # PyInstaller 打包后 ui.html 在 _MEIPASS 根目录
+        ui_path = os.path.join(sys._MEIPASS, "ui.html")
+        if not os.path.exists(ui_path):
+            # 降级尝试 exe 所在目录
+            ui_path = os.path.join(os.path.dirname(sys.executable), "ui.html")
     if not os.path.exists(ui_path):
         print(f"❌ 找不到 ui.html: {ui_path}")
         sys.exit(1)
