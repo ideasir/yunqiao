@@ -85,7 +85,7 @@ function scheduleActivityPush(userId) {
 // ─── 异步任务 ───────────────────────────────────
 const TASK_TIMEOUT = parseInt(process.env.TASK_TIMEOUT || '1800000', 10);       // 运行超时，默认 30 分钟
 const TASK_RESULT_TTL = parseInt(process.env.TASK_RESULT_TTL || '900000', 10);  // 结果保留，默认 15 分钟
-const TASK_MAX_CONCURRENT = parseInt(process.env.TASK_MAX_CONCURRENT || '10', 10); // 每设备并发上限
+const TASK_MAX_CONCURRENT = parseInt(process.env.TASK_MAX_CONCURRENT || '50', 10); // 每设备并发上限（默认放宽到 50）
 const SSE_IDLE_TIMEOUT = parseInt(process.env.SSE_IDLE_TIMEOUT || '600000', 10);  // SSE 空闲超时（默认 10 分钟），防僵尸连接占满连接数
 const tasks = new Map();  // taskId -> { userId, deviceId, command, status, ... }
 
@@ -158,8 +158,8 @@ function readAuditTail(n) {
 // AUTH_REQUIRED=1：/mcp 必须带用户密钥/令牌认证，?user= 参数失效
 const AUTH_REQUIRED = (process.env.AUTH_REQUIRED || '0') === '1';
 const DEFAULT_LIMITS = {
-  maxConnections: parseInt(process.env.MAX_CONNECTIONS || '10', 10),
-  qps: parseInt(process.env.DEFAULT_QPS || '5', 10),
+  maxConnections: parseInt(process.env.MAX_CONNECTIONS || '50', 10),
+  qps: parseInt(process.env.DEFAULT_QPS || '50', 10),
   maxOutputMB: parseInt(process.env.MAX_OUTPUT_MB || '5', 10),
   maxDownloadMB: parseInt(process.env.MAX_DOWNLOAD_MB || '5', 10),
 };
@@ -379,13 +379,15 @@ function withMsgHint(userId, handler) {
       }
       broadcastToDevices({ type: 'messages_read', ids }, userId);
     }
-    // 已完成未查看的任务
+    // 已完成未查看的任务（展示后标记已查看，避免通知堆积）
     const doneTasks = Array.from(tasks.values()).filter(t => t.userId === userId && t.status !== 'running' && !t.viewed);
     if (doneTasks.length > 0) {
       const taskHint = doneTasks.map(t =>
         `[${t.status}] ${t.taskId.slice(0, 8)} ${(t.command || '').slice(0, 50)} 完成于 ${new Date(t.finishedAt).toLocaleTimeString()}`
       ).join('\n');
       extras.push(`\n📋 [任务完成通知]\n${taskHint}\n（用 get_task_result 查看结果，或 list_tasks 查看全部）`);
+      // 通知已展示，标记已查看（结果仍在任务表，可随时查询，但不重复推送）
+      doneTasks.forEach(t => { t.viewed = true; });
     }
     if (extras.length > 0 && result && Array.isArray(result.content)) {
       result.content = [...result.content, { type: 'text', text: extras.join('\n') }];
