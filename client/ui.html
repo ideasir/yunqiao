@@ -94,13 +94,14 @@ tailwind.config = {
     <div class="rounded-xl bg-[#141414] border border-[#222222]">
       <div class="flex items-center gap-2 px-3 py-2.5 border-b border-[#1f1f1f]">
         <div class="w-1.5 h-1.5 rounded-full bg-[#666]" id="agentDot"></div>
-        <span class="text-xs font-medium text-[#aaa]">上游 Agent</span>
+        <span class="text-xs font-medium text-[#ccc]">上游 Agent</span>
         <span class="ml-auto text-[10px] text-[#555] font-mono" id="agentProto">MCP/SSE</span>
       </div>
       <div class="px-3 py-2 space-y-1.5 text-xs">
-        <div class="flex justify-between"><span class="text-[#666]">状态</span><span class="text-[#bbb]" id="agent状态">待接入</span></div>
-        <div class="flex justify-between"><span class="text-[#666]">配对码</span><span class="font-mono text-[#ededed] font-semibold tracking-wider bg-[#1a1a1a] px-1.5 py-0.5 rounded" id="pairCode">------</span></div>
-        <div class="flex justify-between"><span class="text-[#666]">设备</span><span class="text-[#bbb] truncate max-w-[120px]" id="deviceName">-</span></div>
+        <div class="flex justify-between"><span class="text-[#888]">状态</span><span class="text-[#ddd]" id="agent状态">待接入</span></div>
+        <div class="flex justify-between"><span class="text-[#888]">配对码</span><span class="font-mono text-[#ededed] font-semibold tracking-wider bg-[#1a1a1a] px-1.5 py-0.5 rounded" id="pairCode">------</span></div>
+        <div class="flex justify-between"><span class="text-[#888]">设备</span><span class="text-[#ddd] truncate max-w-[120px]" id="deviceName">-</span></div>
+        <div class="flex justify-between"><span class="text-[#888]">延迟</span><span class="text-[#ddd] font-mono" id="agentLatency">-- ms</span></div>
       </div>
       <div class="flex gap-1.5 px-3 py-2 border-t border-[#1f1f1f]">
         <button class="flex-1 text-xs py-1 rounded-lg bg-[#222] text-[#ededed] hover:bg-[#2a2a2a] transition-all font-medium" onclick="copyPairCode()" title="复制地址和配对码">复制</button>
@@ -111,7 +112,7 @@ tailwind.config = {
     <!-- 连接线 Agent → Relay -->
     <div class="relative flex items-center justify-center" style="height: 32px;">
       <div class="absolute w-px h-full bg-[#333]"></div>
-      <span class="relative text-[10px] text-[#555] font-mono bg-[#0d0d0d] px-2 z-10">MCP/SSE</span>
+      <span class="relative text-[10px] text-[#555] font-mono bg-[#0d0d0d] px-2 z-10" id="agentRelayLatency">-- ms</span>
     </div>
 
     <!-- Relay 节点 -->
@@ -119,13 +120,13 @@ tailwind.config = {
       <div class="flex items-center gap-2 px-3 py-2.5 border-b border-[#1f1f1f]">
         <div class="w-1.5 h-1.5 rounded-full bg-[#666]" id="relayDot"></div>
         <div class="w-1.5 h-1.5 rounded-full hidden" id="relayAgentDot" style="background: #3b82f6;"></div>
-        <span class="text-xs font-medium text-[#aaa]">中转服务器</span>
+        <span class="text-xs font-medium text-[#ccc]">中转服务器</span>
         <span class="ml-auto text-[10px] text-[#555] font-mono"><span id="relayProtoSSE">SSE</span> + <span id="relayProtoWSS">WSS</span></span>
       </div>
       <div class="px-3 py-2 space-y-1.5 text-xs">
-        <div class="flex justify-between"><span class="text-[#666]">地址</span><span class="text-[#bbb] font-mono text-[11px] truncate max-w-[140px]" id="relayUrl">yunqiao.very.im</span></div>
-        <div class="flex justify-between"><span class="text-[#666]">延迟</span><span class="text-[#bbb] font-mono" id="relayLatency">-- ms</span></div>
-        <div class="flex justify-between"><span class="text-[#666]">连接</span><span class="text-[#bbb]" id="relayStatus">未连接</span></div>
+        <div class="flex justify-between"><span class="text-[#888]">地址</span><span class="text-[#ddd] font-mono text-[11px] truncate max-w-[140px]" id="relayUrl">yunqiao.very.im</span></div>
+        <div class="flex justify-between"><span class="text-[#888]">延迟</span><span class="text-[#ddd] font-mono" id="relayLatency">-- ms</span></div>
+        <div class="flex justify-between"><span class="text-[#888]">连接</span><span class="text-[#ddd]" id="relayStatus">未连接</span></div>
       </div>
       <div class="flex gap-1.5 px-3 py-2 border-t border-[#1f1f1f]">
         <button class="flex-1 text-xs py-1 rounded-lg bg-[#222] text-[#ededed] hover:bg-[#2a2a2a] transition-all font-medium" onclick="toggleConnect()" id="connectBtn" title="连接或断开中继服务器">连接</button>
@@ -136,7 +137,7 @@ tailwind.config = {
     <!-- 连接线 Relay → Client -->
     <div class="relative flex items-center justify-center" style="height: 32px;">
       <div class="absolute w-px h-full bg-[#333]"></div>
-      <span class="relative text-[10px] text-[#555] font-mono bg-[#0d0d0d] px-2 z-10">WSS</span>
+      <span class="relative text-[10px] text-[#555] font-mono bg-[#0d0d0d] px-2 z-10" id="relayClientLatency">-- ms</span>
     </div>
 
     <!-- Client 节点 -->
@@ -147,9 +148,9 @@ tailwind.config = {
         <span class="ml-auto text-[10px] text-[#555] font-mono" id="clientProto">WSS</span>
       </div>
       <div class="px-3 py-2 space-y-1.5 text-xs">
-        <div class="flex justify-between"><span class="text-[#666]">工作目录</span><span class="text-[#bbb] font-mono text-[11px] truncate max-w-[130px]" id="workDir">未设置</span></div>
-        <div class="flex justify-between"><span class="text-[#666]">平台</span><span class="text-[#bbb]" id="client平台">-</span></div>
-        <div class="flex justify-between"><span class="text-[#666]">主机名</span><span class="text-[#bbb] truncate max-w-[120px]" id="client主机名">-</span></div>
+        <div class="flex justify-between"><span class="text-[#888]">工作目录</span><span class="text-[#ddd] font-mono text-[11px] truncate max-w-[130px]" id="workDir">未设置</span></div>
+        <div class="flex justify-between"><span class="text-[#888]">平台</span><span class="text-[#ddd]" id="client平台">-</span></div>
+        <div class="flex justify-between"><span class="text-[#888]">主机名</span><span class="text-[#ddd] truncate max-w-[120px]" id="client主机名">-</span></div>
       </div>
       <div class="px-3 py-2 border-t border-[#1f1f1f]">
         <div class="text-[11px] font-medium text-[#777] mb-2">权限模式</div>
