@@ -118,11 +118,10 @@ tailwind.config = {
         <span class="ml-auto text-[10px] text-[#555] font-mono" id="agentProto">MCP/SSE</span>
       </div>
       <div class="px-3 py-2 space-y-1.5 text-xs">
-        <div class="flex justify-between"><span class="text-[#888]">状态</span><span class="text-[#ddd]" id="agent状态">待接入</span></div>
+        <div class="flex justify-between"><span class="text-[#888]">状态</span><span class="flex items-center gap-1.5"><span class="text-[9px] text-[#fbbf24] bg-[#1a1a1a] px-1.5 py-0.5 rounded hidden" id="agentUnread">未读消息 0</span><span class="text-[#ddd]" id="agent状态">待接入</span></span></div>
         <div class="flex justify-between"><span class="text-[#888]">配对码</span><span class="font-mono text-[#ededed] font-semibold tracking-wider bg-[#1a1a1a] px-1.5 py-0.5 rounded" id="pairCode">------</span></div>
         <div class="flex justify-between"><span class="text-[#888]">设备</span><span class="text-[#ddd] truncate max-w-[120px]" id="agentDevice">-</span></div>
         <div class="flex justify-between"><span class="text-[#888]">平台</span><span class="text-[#ddd]" id="agentPlatform">-</span></div>
-        <div class="flex justify-between"><span class="text-[#888]">待读消息</span><span class="text-[#ddd] font-mono" id="agentPending">-</span></div>
       </div>
       <div class="flex gap-1.5 px-3 py-2 border-t border-[#1f1f1f]">
         <button class="flex-1 text-xs py-1 rounded-lg bg-[#222] text-[#ededed] hover:bg-[#2a2a2a] transition-all font-medium" onclick="copyPairCode()" title="复制地址和配对码">复制</button>
@@ -286,11 +285,15 @@ function sendCommand() {
   }
 }
 function updateAgentBadge() {
-  var el = document.getElementById('agentPending');
+  var el = document.getElementById('agentUnread');
   if (!el) return;
   var n = state.pendingMessages.length;
-  el.textContent = n > 0 ? String(n) : '-';
-  el.style.color = n > 0 ? '#fbbf24' : '#555';
+  if (n > 0) {
+    el.textContent = '未读消息 ' + n;
+    el.classList.remove('hidden');
+  } else {
+    el.classList.add('hidden');
+  }
 }
 
 // ─── 任务队列面板 ────────────────────────────────
