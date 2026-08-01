@@ -715,15 +715,26 @@ function createSession() {
 function saveSessionModal() {
   var name = document.getElementById('modalSessionName').value.trim() || '工作区';
   var dir = document.getElementById('modalSessionDir').value.trim() || 'C:\\Users\\Administrator';
-  var id = 's_' + Date.now().toString(36);
-  state.sessions.push({ id: id, name: name, workDir: dir, cwd: dir, isDefault: state.sessions.length === 0 });
-  state.workDir = dir;
-  // 如果没有默认会话，则设为默认
-  if (!state.currentSessionId) {
-    state.currentSessionId = id;
+  // 桌面端：调后端 API 创建会话（影响 Agent 实际工作目录）
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.create_session) {
+    window.pywebview.api.create_session(dir, name).then(function(r) {
+      if (r && r.success) {
+        loadSessions();
+        addLog('done', '工作区已创建: ' + name);
+      } else {
+        addLog('err', '创建工作区失败: ' + ((r && r.error) || ''));
+      }
+    }).catch(function() { addLog('err', '创建工作区失败'); });
+  } else {
+    // 浏览器直连：纯前端模式
+    var id = 's_' + Date.now().toString(36);
+    state.sessions.push({ id: id, name: name, workDir: dir, cwd: dir, isDefault: state.sessions.length === 0 });
+    state.workDir = dir;
+    if (!state.currentSessionId) state.currentSessionId = id;
+    renderSidebar(); updateStatus();
+    addLog('info', '会话已创建: ' + name + ' (浏览器模式)');
   }
-  renderSidebar(); updateStatus();
-  addLog('info', '会话已创建: ' + name + ' (' + id + ')');
+  // 关闭弹窗
   var overlay = document.getElementById('sessionModal');
   var content = document.getElementById('sessionModalContent');
   content.style.transform = 'scale(0.9) translateY(20px)';
@@ -830,12 +841,22 @@ function switchSession(id) {
 }
 
 function setDefaultSession(id) {
-  state.currentSessionId = id;
-  renderSidebar();
- 
-  updateStatus();
   var s = state.sessions.find(function(s) { return s.id === id; });
-  addLog('status', '默认工作区已切换: ' + (s ? s.name : id));
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.switch_session) {
+    window.pywebview.api.switch_session(id).then(function(r) {
+      if (r && r.success) {
+        loadSessions();
+        addLog('done', '工作区已切换: ' + (s ? s.name : id));
+      } else {
+        addLog('err', '切换工作区失败');
+      }
+    });
+  } else {
+    state.currentSessionId = id;
+    renderSidebar();
+    updateStatus();
+    addLog('status', '默认工作区已切换: ' + (s ? s.name : id));
+  }
 }
 function closeSession(id) {
   nativeConfirm('关闭会话', '确定关闭此会话?').then(function(ok) {

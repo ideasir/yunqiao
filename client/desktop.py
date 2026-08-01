@@ -233,6 +233,24 @@ class Api:
             "workDir": dw
         }
 
+    def create_session(self, work_dir, name=None):
+        """在远端创建新工作区（用户通过 UI 设定，不走 #5 限制）"""
+        a = agent
+        if a:
+            result = a.sessions.create(work_dir, name)
+            return {"success": True, "session": result}
+        return {"success": False, "error": "未连接"}
+
+    def switch_session(self, session_id):
+        """切换当前工作区（影响 Agent 的默认工作目录）"""
+        a = agent
+        if a:
+            result = a.sessions.switch(session_id)
+            if result.get("success"):
+                return {"success": True}
+            return {"success": False, "error": result.get("error", "切换失败")}
+        return {"success": False, "error": "未连接"}
+
     def set_permission(self, mode):
         if agent:
             agent.set_permission(mode)
