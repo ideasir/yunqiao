@@ -540,9 +540,10 @@ function toggleConnect() {
         btn.style.color = '#fca5a5';
         addLog('status', '正在连接中转服务器...');
       });
-    } else {
-      connectRelay();
+      return;
     }
+    connectRelay();
+    return;
   } else {
     // 断开
     if (state.ws) {
