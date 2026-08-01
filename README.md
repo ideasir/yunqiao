@@ -117,7 +117,7 @@ export RELAY_KEY=请改成你自己的管理员密钥        # admin 用户的�
 export AUTH_REQUIRED=1
 
 # 每用户配额（宽绰但可控）
-export MAX_CONNECTIONS=3      # 每用户最大并发 MCP 连接（正常 1 个，留 2 个余量）
+export MAX_CONNECTIONS=10     # 每用户最大并发 MCP 连接（Agent 多会话/多连接时更宽松）
 export DEFAULT_QPS=5          # 每用户每秒工具调用上限（正常 Agent 不到 1 QPS）
 export MAX_OUTPUT_MB=5        # 单次工具返回上限（命令输出一般 <1MB）
 export MAX_DOWNLOAD_MB=5      # 单次下载文件上限（MB）
@@ -173,7 +173,7 @@ yq 123456 call get_audit_log '{"userId":"user-a","limit":20}'   # 按用户过�
 
 > 审计日志落盘在 `AUDIT_LOG` 指定文件（JSON Lines 格式，每行一条），只记录工具名、关键参数（命令全文/文件路径/大小）、结果与耗时，**不记录配对码和文件内容**。
 
-> 配额解读：`maxConnections=3` = 该用户最多同时保持 3 个 MCP 连接；`qps=5` = 每秒最多 5 次工具调用；`maxOutputMB=5` = 单次返回（命令输出）超过 5MB 被拒绝；`maxDownloadMB=5` = 单次下载文件超过 5MB 被拒绝。默认值已兼顾"不限制正常使用"与"不压垮 1G 服务器"。
+> 配额解读：`maxConnections=10` = 该用户最多同时保持 10 个 MCP 连接（宽松，覆盖多会话/多 Agent）；`qps=5` = 每秒最多 5 次工具调用；`maxOutputMB=5` = 单次返回（命令输出）超过 5MB 被拒绝；`maxDownloadMB=5` = 单次下载文件超过 5MB 被拒绝。默认值已兼顾"不限制正常使用"与"不压垮 1G 服务器"。
 
 建议用 Nginx 反代 + Let's Encrypt 配置 HTTPS：
 

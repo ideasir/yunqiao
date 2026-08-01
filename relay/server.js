@@ -44,6 +44,7 @@ loadUsers();
 const TASK_TIMEOUT = parseInt(process.env.TASK_TIMEOUT || '1800000', 10);       // 运行超时，默认 30 分钟
 const TASK_RESULT_TTL = parseInt(process.env.TASK_RESULT_TTL || '900000', 10);  // 结果保留，默认 15 分钟
 const TASK_MAX_CONCURRENT = parseInt(process.env.TASK_MAX_CONCURRENT || '3', 10); // 每设备并发上限
+const SSE_IDLE_TIMEOUT = parseInt(process.env.SSE_IDLE_TIMEOUT || '600000', 10);  // SSE 空闲超时（默认 10 分钟），防僵尸连接占满连接数
 const tasks = new Map();  // taskId -> { userId, deviceId, command, status, ... }
 
 // 定期清理：完成的超期任务（防止任务表无限膨胀，也处理"Agent 忘了取"）
@@ -55,6 +56,20 @@ const taskCleanup = setInterval(() => {
     }
   }
 }, 60000);
+
+// 定期清理僵尸 SSE 连接（客户端异常断开时 res close 可能不触发，
+// 残留会占满该用户的连接数导致永久 429——超时未活动即主动清理）
+const sseCleanup = setInterval(() => {
+  const now = Date.now();
+  for (const [sid, entry] of transports) {
+    if (now - (entry.lastActive || now) > SSE_IDLE_TIMEOUT) {
+      transports.delete(sid);
+      try { entry.transport.close(); } catch {}
+      broadcastToDevices({ type: 'agent_disconnected' }, entry.userId);
+      console.error(`[sse] 空闲连接已清理: ${sid}`);
+    }
+  }
+}, parseInt(process.env.SSE_CLEANUP_INTERVAL || '60000', 10));
 
 // ─── 审计日志 ───────────────────────────────────
 const AUDIT_LOG = process.env.AUDIT_LOG || '/opt/cloud-mcp/audit.log';
@@ -100,7 +115,7 @@ function readAuditTail(n) {
 // AUTH_REQUIRED=1：/mcp 必须带用户密钥/令牌认证，?user= 参数失效
 const AUTH_REQUIRED = (process.env.AUTH_REQUIRED || '0') === '1';
 const DEFAULT_LIMITS = {
-  maxConnections: parseInt(process.env.MAX_CONNECTIONS || '3', 10),
+  maxConnections: parseInt(process.env.MAX_CONNECTIONS || '10', 10),
   qps: parseInt(process.env.DEFAULT_QPS || '5', 10),
   maxOutputMB: parseInt(process.env.MAX_OUTPUT_MB || '5', 10),
   maxDownloadMB: parseInt(process.env.MAX_DOWNLOAD_MB || '5', 10),
@@ -285,15 +300,18 @@ function requireAdmin(authInfo) {
   return null;
 }
 
-// 工具响应附加未读消息提示：Agent 调用任何工具时都能看到客户端新消息提醒（硬约束兜底）
+// 工具响应附加未读消息提示：把消息内容直接贴进每个工具响应（Agent 调任何工具都能看到，想忽略都难）
 function withMsgHint(userId, handler) {
   return async (params) => {
     const result = await handler(params);
-    const unread = agentMessages.filter(m => m.userId === userId && !m.read).length;
-    if (unread > 0 && result && Array.isArray(result.content)) {
+    const unread = agentMessages.filter(m => m.userId === userId && !m.read);
+    if (unread.length > 0 && result && Array.isArray(result.content)) {
+      const hint = unread.map(m =>
+        `[${new Date(m.time).toLocaleTimeString()}]${m.urgent ? ' ⚠️紧急' : ''} ${m.deviceName}: ${(m.text || '').slice(0, 300)}`
+      ).join('\n');
       result.content = [...result.content, {
         type: 'text',
-        text: `\n📬 [来自客户端的消息] 你有 ${unread} 条未读消息，请先调用 get_client_messages 工具查看（可能是用户的新指令或提醒）。`,
+        text: `\n📬 [来自客户端的未读消息，请优先处理]\n${hint}\n（处理完请调用 get_client_messages 确认已读）`,
       }];
     }
     return result;
@@ -737,7 +755,7 @@ const httpServer = createServer(async (req, res) => {
       }
       const mcpServer = createMcpServer(userId, { isAdminAuth, authUser });
       const transport = new SSEServerTransport(MCP_MESSAGE_PATH, res);
-      transports.set(transport.sessionId, { server: mcpServer, transport, userId });
+      transports.set(transport.sessionId, { server: mcpServer, transport, userId, lastActive: Date.now() });
       res.on('close', () => {
         transports.delete(transport.sessionId);
         broadcastToDevices({ type: 'agent_disconnected' }, userId);
@@ -756,11 +774,13 @@ const httpServer = createServer(async (req, res) => {
 
   if (url.pathname === MCP_MESSAGE_PATH) {
     const sessionId = url.searchParams.get('sessionId');
-    if (!sessionId || !transports.has(sessionId)) {
+    const entry = transports.get(sessionId);
+    if (!sessionId || !entry) {
       res.writeHead(400).end('Missing or invalid sessionId');
       return;
     }
-    try { await transports.get(sessionId).transport.handlePostMessage(req, res); } catch {}
+    entry.lastActive = Date.now();  // 刷新连接活动时间
+    try { await entry.transport.handlePostMessage(req, res); } catch {}
     return;
   }
 
