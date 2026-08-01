@@ -246,6 +246,14 @@ class Agent:
             self._emit(self.on_log, f"注册成功: {self.device_id[:8]}...")
             return
         
+        if msg_type == "agent_connected":
+            self._emit(self.on_status, {"agent": "connected", "connected": True})
+            return
+        
+        if msg_type == "agent_disconnected":
+            self._emit(self.on_status, {"agent": "disconnected", "connected": True})
+            return
+        
         if msg_type == "execute_command":
             cmd = payload.get("command", "")
             self._emit(self.on_command, {"type": "execute", "command": cmd})
