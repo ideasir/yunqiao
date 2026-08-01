@@ -628,7 +628,7 @@ function createMcpServer(userId, authInfo = {}) {
       status: 'running', exitCode: null, stdout: '', stderr: '', killed: false,
       createdAt: Date.now(), finishedAt: null,
     });
-    sendJSON(device.ws, { type: 'task_start', requestId: randomUUID(), taskId, command, timeout: timeout || TASK_TIMEOUT });
+    sendJSON(device.ws, { type: 'task_start', requestId: randomUUID(), taskId, payload: { command, timeout: timeout || TASK_TIMEOUT } });
     return { content: [{ type: 'text', text: `任务已提交: ${taskId}\n状态: running\n用 get_task_result 查询（taskId=${taskId}）` }] };
   }, 'exec_task'));
 
@@ -908,9 +908,9 @@ wss.on('connection', (ws, req, user) => {
       return;
     }
     if (type === 'task_result') {
-      // 客户端异步任务完成回传
+      // 客户端异步任务完成回传（只接受任务所属设备的回传，防篡改）
       const task = tasks.get(msg.taskId);
-      if (task) {
+      if (task && task.deviceId === deviceId) {
         const p = msg.payload || {};
         task.status = p.killed ? 'killed' : (p.exitCode === 0 ? 'done' : 'failed');
         task.exitCode = p.exitCode;
@@ -935,6 +935,16 @@ wss.on('connection', (ws, req, user) => {
   ws.on('close', () => {
     const device = devices.get(deviceId);
     if (device) console.error(`[device] disconnected: ${device.name} (${deviceId})`);
+    // 该设备正在运行的任务标记失败（防悬空任务永久占并发名额）
+    for (const [tid, t] of tasks) {
+      if (t.deviceId === deviceId && t.status === 'running') {
+        t.status = 'failed';
+        t.stderr = '设备已断开连接';
+        t.exitCode = 1;
+        t.finishedAt = Date.now();
+        console.error(`[task] ${tid} failed (device disconnected)`);
+      }
+    }
     devices.delete(deviceId);
     rejectDeviceRequests(deviceId, `device '${deviceId}' disconnected`);
   });
