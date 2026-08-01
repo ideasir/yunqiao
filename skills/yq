@@ -7,7 +7,14 @@
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CLIENT="$SCRIPT_DIR/yunqiao-client.mjs"
-URL="${YUNQIAO_URL:-https://yunqiao.very.im/mcp}"
+
+# 动态 MCP 地址（https://server/mcp/<ticket>）与可选用户密钥（管理工具需要 admin 密钥）
+export YUNQIAO_URL="${YUNQIAO_URL:-}"
+export YUNQIAO_KEY="${YUNQIAO_KEY:-}"
+if [ -z "$YUNQIAO_URL" ]; then
+  echo "请设置 YUNQIAO_URL 为你的动态 MCP 地址（客户端点'复制配对码'会生成，格式 https://server/mcp/<ticket>）"
+  exit 1
+fi
 
 # 把参数安全转义为 JSON 字符串（避免引号/反斜杠破坏 JSON，Windows 路径必需）
 json_str() {
@@ -27,6 +34,10 @@ if [ $# -lt 2 ]; then
   echo "  notify <text>   - 发通知到客户端"
   echo "  msg             - 读取客户端发来的消息"
   echo "  download <path> - 下载文件"
+  echo "  call <工具名> '<json>' - 调用任意工具（管理工具需设置 YUNQIAO_KEY=管理员密钥）"
+  echo ""
+  echo "提示: 复杂命令（含管道 | 或引号）请用单引号整体包裹，如: yq 123456 exec 'dir | findstr txt'"
+  echo "环境: YUNQIAO_URL=动态MCP地址  YUNQIAO_KEY=用户密钥(管理工具用)"
   exit 1
 fi
 
@@ -36,47 +47,45 @@ shift 2
 
 case "$TOOL" in
   ls)
-    YUNQIAO_URL="$URL" node "$CLIENT" "$CODE" call list_devices '{}'
+    node "$CLIENT" "$CODE" call list_devices '{}'
     ;;
   exec)
     CMD_JSON=$(json_str "$*")
-    YUNQIAO_URL="$URL" node "$CLIENT" "$CODE" call exec "{\"command\":$CMD_JSON}"
+    node "$CLIENT" "$CODE" call exec "{\"command\":$CMD_JSON}"
     ;;
   read)
     P_JSON=$(json_str "$1")
-    YUNQIAO_URL="$URL" node "$CLIENT" "$CODE" call read_file "{\"path\":$P_JSON}"
+    node "$CLIENT" "$CODE" call read_file "{\"path\":$P_JSON}"
     ;;
   write)
     P_JSON=$(json_str "$1")
     C_JSON=$(json_str "$2")
-    YUNQIAO_URL="$URL" node "$CLIENT" "$CODE" call write_file "{\"path\":$P_JSON,\"content\":$C_JSON}"
+    node "$CLIENT" "$CODE" call write_file "{\"path\":$P_JSON,\"content\":$C_JSON}"
     ;;
   info)
-    YUNQIAO_URL="$URL" node "$CLIENT" "$CODE" call get_device_info '{}'
+    node "$CLIENT" "$CODE" call get_device_info '{}'
     ;;
   sessions)
-    YUNQIAO_URL="$URL" node "$CLIENT" "$CODE" call list_sessions '{}'
+    node "$CLIENT" "$CODE" call list_sessions '{}'
     ;;
   notify)
     T_JSON=$(json_str "$*")
-    YUNQIAO_URL="$URL" node "$CLIENT" "$CODE" call notify "{\"text\":$T_JSON}"
+    node "$CLIENT" "$CODE" call notify "{\"text\":$T_JSON}"
     ;;
   msg)
-    # 读取客户端发来的消息
-    YUNQIAO_URL="$URL" node "$CLIENT" "$CODE" call get_client_messages '{}'
-    ;;
-  call)
-    # 透传任意工具：yq <配对码> call <工具名> '<json参数>'
-    YUNQIAO_URL="$URL" node "$CLIENT" "$CODE" call "$1" "$2"
+    node "$CLIENT" "$CODE" call get_client_messages '{}'
     ;;
   download)
     P_JSON=$(json_str "$1")
-    YUNQIAO_URL="$URL" node "$CLIENT" "$CODE" call download "{\"path\":$P_JSON}"
+    node "$CLIENT" "$CODE" call download "{\"path\":$P_JSON}"
     ;;
   screenshot)
     PS_CMD='powershell -Command Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $v = [System.Windows.Forms.Screen]::AllScreens; $w=0; $h=0; foreach($s in $v){if($s.Bounds.Right -gt $w){$w=$s.Bounds.Right}; if($s.Bounds.Bottom -gt $h){$h=$s.Bounds.Bottom}}; $b=New-Object System.Drawing.Bitmap($w,$h); $g=[System.Drawing.Graphics]::FromImage($b); $g.CopyFromScreen(0,0,0,0,$b.Size); $b.Save("screenshot.png"); echo screenshot.png'
     CMD_JSON=$(json_str "$PS_CMD")
-    YUNQIAO_URL="$URL" node "$CLIENT" "$CODE" call exec "{\"command\":$CMD_JSON}"
+    node "$CLIENT" "$CODE" call exec "{\"command\":$CMD_JSON}"
+    ;;
+  call)
+    node "$CLIENT" "$CODE" call "$1" "$2"
     ;;
   *)
     echo "未知工具: $TOOL"

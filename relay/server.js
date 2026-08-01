@@ -810,7 +810,15 @@ const httpServer = createServer(async (req, res) => {
       } else if (authUser && authUser.userId === userId) {
         isAdminAuth = authUser.role === 'admin';
       }
-      // 连接数限制（按用户配额）
+      // 连接数限制：先即时清理该用户的超时僵尸连接（防"偶尔 429"），再统计
+      const now = Date.now();
+      for (const [sid, entry] of transports) {
+        if (entry.userId === userId && now - (entry.lastActive || now) > SSE_IDLE_TIMEOUT) {
+          transports.delete(sid);
+          try { entry.transport.close(); } catch {}
+          broadcastToDevices({ type: 'agent_disconnected' }, userId);
+        }
+      }
       const conns = Array.from(transports.values()).filter(t => t.userId === userId).length;
       if (conns >= getLimits(userId).maxConnections) {
         res.writeHead(429, { 'content-type': 'application/json' });
