@@ -772,15 +772,19 @@ const httpServer = createServer(async (req, res) => {
         res.end(JSON.stringify({ error: '无效的配对码' }));
         return;
       }
-      // 可选叠加：AUTH_REQUIRED 时要求用户密钥认证（管理员/用户 key）
+      // 用户密钥认证：带对应用户的密钥可获得身份（含管理员）；AUTH_REQUIRED=1 时强制
+      let isAdminAuth = false;
+      const authKey = req.headers['x-key'] || (req.headers.authorization || '').replace(/^Bearer\s+/i, '') || '';
+      const authUser = authKey ? findByKey(authKey) : null;
       if (AUTH_REQUIRED) {
-        const authKey = req.headers['x-key'] || (req.headers.authorization || '').replace(/^Bearer\s+/i, '') || '';
-        const authUser = authKey ? findByKey(authKey) : null;
         if (!authUser || authUser.userId !== userId) {
           res.writeHead(401, { 'content-type': 'application/json' });
           res.end(JSON.stringify({ error: 'authentication required' }));
           return;
         }
+        isAdminAuth = authUser.role === 'admin';
+      } else if (authUser && authUser.userId === userId) {
+        isAdminAuth = authUser.role === 'admin';
       }
       // 连接数限制（按用户配额）
       const conns = Array.from(transports.values()).filter(t => t.userId === userId).length;
@@ -789,7 +793,7 @@ const httpServer = createServer(async (req, res) => {
         res.end(JSON.stringify({ error: `too many connections (max ${getLimits(userId).maxConnections})` }));
         return;
       }
-      const mcpServer = createMcpServer(userId, { isAdminAuth: false, authedDeviceId: authedDevice.id });
+      const mcpServer = createMcpServer(userId, { isAdminAuth, authedDeviceId: authedDevice.id });
       const transport = new SSEServerTransport(MCP_MESSAGE_PATH, res);
       transports.set(transport.sessionId, { server: mcpServer, transport, userId, lastActive: Date.now() });
       res.on('close', () => {
