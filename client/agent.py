@@ -140,6 +140,7 @@ class Agent:
         self._thread = None
         self._running = False
         self.pending_messages = {}  # msgId -> {text, urgent, time}，等待上游 Agent 已读回执
+        self._ticket_waiter = None  # 动态 MCP 地址 ticket 请求的等待器
     
     def _emit(self, callback, *args):
         """线程安全地调用回调"""
@@ -233,6 +234,25 @@ class Agent:
                 self._loop
             )
 
+    def get_mcp_ticket(self):
+        """向中继请求新的动态 MCP 地址 ticket（旧 ticket 作废），返回 ticket 或 None"""
+        if not (self._ws and self._loop):
+            return None
+        try:
+            fut = asyncio.run_coroutine_threadsafe(self._request_ticket(), self._loop)
+            return fut.result(timeout=4)
+        except Exception:
+            return None
+
+    async def _request_ticket(self):
+        waiter = self._loop.create_future()
+        self._ticket_waiter = waiter
+        await self._ws.send(json.dumps({"type": "get_mcp_ticket", "requestId": "ticket"}))
+        try:
+            return await asyncio.wait_for(waiter, timeout=3)
+        except asyncio.TimeoutError:
+            return None
+
     def set_permission(self, mode):
         """设置权限模式: workspace 或 super"""
         self.permission = mode
@@ -323,6 +343,14 @@ class Agent:
             if read:
                 self._emit(self.on_log, f"✅ Agent 已读取 {len(read)} 条消息")
                 self._emit(self.on_messages_read, read)
+            return
+        
+        if msg_type == "mcp_ticket":
+            if self._ticket_waiter and not self._ticket_waiter.done():
+                if msg.get("success"):
+                    self._ticket_waiter.set_result(msg.get("ticket", ""))
+                else:
+                    self._ticket_waiter.set_result(None)
             return
         
         if msg_type == "agent_connected":

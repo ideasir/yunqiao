@@ -192,6 +192,16 @@ class Api:
             return {"success": True}
         return {"success": False, "error": "未连接"}
 
+    def get_mcp_ticket(self):
+        """向中继请求新的动态 MCP 地址 ticket（旧 ticket 作废）"""
+        a = agent
+        if a:
+            ticket = a.get_mcp_ticket()
+            if ticket:
+                return {"success": True, "ticket": ticket}
+            return {"success": False, "error": "获取失败，请检查中继连接"}
+        return {"success": False, "error": "未连接"}
+
     def browse_folder(self):
         import tkinter as tk
         from tkinter import filedialog

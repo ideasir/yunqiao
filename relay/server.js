@@ -27,6 +27,12 @@ function loadUsers() {
     users['admin'] = { key: process.env.RELAY_KEY || 'yunqiao-mcp-key-2026', name: '管理员', role: 'admin', createdAt: new Date().toISOString() };
     saveUsers();
   }
+  // 为没有 mcpTicket 的用户补齐（新机制：每用户一个当前有效的动态 MCP 地址）
+  let changed = false;
+  for (const u of Object.values(users)) {
+    if (!u.mcpTicket) { u.mcpTicket = randomBytes(16).toString('hex'); changed = true; }
+  }
+  if (changed) saveUsers();
 }
 function saveUsers() {
   mkdirSync(dirname(USERS_FILE), { recursive: true });
@@ -37,6 +43,19 @@ function findByKey(key) {
     if (u.key === key) return { userId: uid, ...u };
   }
   return null;
+}
+function findByTicket(ticket) {
+  for (const [uid, u] of Object.entries(users)) {
+    if (u.mcpTicket === ticket) return { userId: uid, ...u };
+  }
+  return null;
+}
+// 生成新的动态 MCP 地址 ticket（作废旧 ticket，保证只有最新一个有效）
+function newMcpTicket(userId) {
+  const ticket = randomBytes(16).toString('hex');
+  if (users[userId]) users[userId].mcpTicket = ticket;
+  saveUsers();
+  return ticket;
 }
 loadUsers();
 
@@ -370,8 +389,8 @@ function createMcpServer(userId, authInfo = {}) {
     name: 'yunqiao',
     version: '2.0.0',
   });
-  // 会话级状态：首次配对码验证成功后，该会话内免 code
-  const sessionState = { authedDeviceId: null };
+  // 会话级状态：首次配对码验证成功后，该会话内免 code（连接时已验则直接预授权）
+  const sessionState = { authedDeviceId: (authInfo && authInfo.authedDeviceId) || null };
 
   server.registerTool('list_devices', {
     description: '列出所有已连接到中转的私人电脑设备',
@@ -731,20 +750,37 @@ const httpServer = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === MCP_PATH) {
+  // 新 MCP 入口：/mcp/<动态ticket> + X-Code 配对码（不留后门，旧 /mcp 一律 404）
+  const ticketMatch = url.pathname.match(/^\/mcp\/([0-9a-f]{32})$/);
+  if (ticketMatch) {
     try {
-      const authKey = req.headers['x-key'] || (req.headers.authorization || '').replace(/^Bearer\s+/i, '') || '';
-      const authUser = authKey ? findByKey(authKey) : null;
-      const isAdminAuth = !!(authUser && authUser.role === 'admin');
-      // 身份只来自认证；非强制模式下兼容旧客户端（无认证回退 admin，?user= 可指定）
-      let userId = authUser ? authUser.userId : null;
-      if (!userId && !AUTH_REQUIRED) {
-        userId = url.searchParams.get('user') || 'admin';
-      }
-      if (AUTH_REQUIRED && !authUser) {
-        res.writeHead(401, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ error: 'authentication required: X-Key or Bearer token' }));
+      const ticketUser = findByTicket(ticketMatch[1]);
+      if (!ticketUser) {
+        res.writeHead(404, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Not Found' }));
         return;
+      }
+      const userId = ticketUser.userId;
+      // 配对码验证（连接时即验证，未通过一律拒绝）
+      const code = req.headers['x-code'] || url.searchParams.get('code') || '';
+      let authedDevice = null;
+      for (const d of devices.values()) {
+        if (d.userId === userId && checkAuthCode(d, code)) { authedDevice = d; break; }
+      }
+      if (!authedDevice) {
+        res.writeHead(401, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: '无效的配对码' }));
+        return;
+      }
+      // 可选叠加：AUTH_REQUIRED 时要求用户密钥认证（管理员/用户 key）
+      if (AUTH_REQUIRED) {
+        const authKey = req.headers['x-key'] || (req.headers.authorization || '').replace(/^Bearer\s+/i, '') || '';
+        const authUser = authKey ? findByKey(authKey) : null;
+        if (!authUser || authUser.userId !== userId) {
+          res.writeHead(401, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ error: 'authentication required' }));
+          return;
+        }
       }
       // 连接数限制（按用户配额）
       const conns = Array.from(transports.values()).filter(t => t.userId === userId).length;
@@ -753,7 +789,7 @@ const httpServer = createServer(async (req, res) => {
         res.end(JSON.stringify({ error: `too many connections (max ${getLimits(userId).maxConnections})` }));
         return;
       }
-      const mcpServer = createMcpServer(userId, { isAdminAuth, authUser });
+      const mcpServer = createMcpServer(userId, { isAdminAuth: false, authedDeviceId: authedDevice.id });
       const transport = new SSEServerTransport(MCP_MESSAGE_PATH, res);
       transports.set(transport.sessionId, { server: mcpServer, transport, userId, lastActive: Date.now() });
       res.on('close', () => {
@@ -897,6 +933,18 @@ wss.on('connection', (ws, req, user) => {
         reorderMessages(msg.orderedIds, device.userId);
       }
       sendJSON(ws, { type: 'reorder_result', requestId, success: true });
+      return;
+    }
+    if (type === 'get_mcp_ticket') {
+      // 客户端请求新的动态 MCP 地址 ticket（旧的作废，只有最新有效）
+      const device = devices.get(deviceId);
+      if (device) {
+        const ticket = newMcpTicket(device.userId);
+        console.error(`[ticket] 用户 ${device.userId} 生成新 MCP 地址 ticket（旧地址作废）`);
+        sendJSON(ws, { type: 'mcp_ticket', requestId, success: true, ticket });
+      } else {
+        sendJSON(ws, { type: 'mcp_ticket', requestId, success: false, error: 'device not registered' });
+      }
       return;
     }
     if (type === 'delete_messages') {

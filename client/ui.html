@@ -587,22 +587,42 @@ function syncTaskOrder() {
   }
 }
 
-function getMcpUrl() {
+function getMcpBase() {
   var relayUrl = document.getElementById('relayUrl').textContent;
-  // 推导 MCP 地址
-  var mcpUrl = relayUrl;
-  if (mcpUrl.startsWith('wss://')) mcpUrl = 'https://' + mcpUrl.slice(6);
-  else if (mcpUrl.startsWith('ws://')) mcpUrl = 'http://' + mcpUrl.slice(5);
-  else if (!mcpUrl.startsWith('http')) mcpUrl = 'https://' + mcpUrl;
-  mcpUrl = mcpUrl.replace('/device', '/mcp');
-  if (!mcpUrl.endsWith('/mcp')) mcpUrl = mcpUrl + '/mcp';
-  return mcpUrl;
+  var base = relayUrl;
+  if (base.startsWith('wss://')) base = 'https://' + base.slice(6);
+  else if (base.startsWith('ws://')) base = 'http://' + base.slice(5);
+  else if (!base.startsWith('http')) base = 'https://' + base;
+  return base.replace(/\/device$/, '').replace(/\/$/, '');
 }
 function copyPairCode() {
-  copyTextToClipboard('配对码: ' + state.pairCode, '配对码已复制（不包含地址）');
+  // 复制动态 MCP 地址 + 配对码（先向服务器要新 ticket，旧地址作废）
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.get_mcp_ticket) {
+    window.pywebview.api.get_mcp_ticket().then(function(r) {
+      if (r && r.success && r.ticket) {
+        var url = getMcpBase() + '/mcp/' + r.ticket;
+        copyTextToClipboard('云桥地址: ' + url + '\n配对码: ' + state.pairCode, '已复制：动态 MCP 地址 + 配对码（旧地址已作废）');
+      } else {
+        addLog('err', '获取 MCP 地址失败: ' + ((r && r.error) || '请检查中继连接'));
+      }
+    }).catch(function() { addLog('err', '获取 MCP 地址失败'); });
+  } else {
+    copyTextToClipboard('配对码: ' + state.pairCode, '配对码已复制');
+  }
 }
 function copyMcpUrl() {
-  copyTextToClipboard(getMcpUrl(), 'MCP 地址已复制（仅第一次连接需要发给智能体）: ' + getMcpUrl());
+  // 单独复制动态 MCP 地址（仅第一次连接需要发给智能体）
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.get_mcp_ticket) {
+    window.pywebview.api.get_mcp_ticket().then(function(r) {
+      if (r && r.success && r.ticket) {
+        copyTextToClipboard(getMcpBase() + '/mcp/' + r.ticket, '动态 MCP 地址已复制（旧地址已作废）');
+      } else {
+        addLog('err', '获取 MCP 地址失败: ' + ((r && r.error) || '请检查中继连接'));
+      }
+    }).catch(function() { addLog('err', '获取 MCP 地址失败'); });
+  } else {
+    addLog('err', '当前环境不支持获取动态 MCP 地址');
+  }
 }
 function refreshPairCode() {
   if (window.pywebview && window.pywebview.api && window.pywebview.api.refresh_pair_code) {

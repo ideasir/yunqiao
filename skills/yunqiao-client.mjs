@@ -60,8 +60,12 @@ async function main() {
   // 用 CLI 传入的 authCode 覆盖环境变量
   const code = authCode;
 
+  // 连接时带认证：用户密钥（X-Key）+ 配对码（X-Code），由服务器验证
+  const headers = {};
+  if (YUNQIAO_KEY) headers['X-Key'] = YUNQIAO_KEY;
+  if (code) headers['X-Code'] = code;
   const transport = new SSEClientTransport(new URL(SERVER_URL), {
-    requestInit: YUNQIAO_KEY ? { headers: { 'X-Key': YUNQIAO_KEY } } : undefined,
+    requestInit: Object.keys(headers).length ? { headers } : undefined,
   });
   const client = new Client({ name: 'cloud-yunqiao-client', version: '1.0.0' });
 

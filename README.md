@@ -310,6 +310,14 @@ node skills/yunqiao-client.mjs list
 - **会话级授权**：Agent 首次带配对码调用工具后，该 SSE 会话内后续调用可省略配对码（换连接需重新授权）
 - 复制按钮自动生成 `云桥 配对码 xxxxxx` 格式，方便直接发给 AI Agent
 
+### 动态 MCP 地址（安全接入，无后门）
+
+- 每个用户的 MCP 端点使用**动态地址**：`https://server/mcp/<ticket>`
+- 点击"复制配对码"会**同时向服务器申请新的动态地址**（旧地址立即作废，只有最新有效）
+- Agent 连接必须：`/mcp/<ticket>` + 请求头 `X-Code: <配对码>`，两者都通过服务器验证才建立会话
+- 旧路径 `/mcp` 已关闭（不留后门）
+- `yunqiao-client.mjs` 已支持：`YUNQIAO_URL=https://server/mcp/<ticket>` + `YUNQIAO_CODE=<配对码>`
+
 ---
 
 ### 桌面 → Agent 消息
