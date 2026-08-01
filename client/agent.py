@@ -277,7 +277,8 @@ class Agent:
             self._emit(self.on_result, result)
             cwd = self.sessions.get_current()
             cwd_str = cwd.cwd if cwd else os.getcwd()
-            self._emit(self.on_log, f"💻 {cwd_str}> {cmd[:80]}")
+            self._emit(self.on_log, f"💻 执行命令: {cmd[:80]}")
+            self._emit(self.on_log, f"📂 {cwd_str}")
             return
         
         if msg_type == "read_file":
@@ -285,7 +286,11 @@ class Agent:
             self._emit(self.on_command, {"type": "read", "path": path})
             result = self._read_file(path)
             await self._send("file_result", rid, result)
-            self._emit(self.on_log, f"📖 读取: {path} {'✅' if result.get('success') else '❌ '+result.get('error','')}")
+            if result.get("success"):
+                size = len(result.get("content", ""))
+                self._emit(self.on_log, f"📖 读取文件: {path} ({size} 字节)")
+            else:
+                self._emit(self.on_log, f"📖 读取文件: {path} ❌ {result.get('error','')}")
             return
         
         if msg_type == "write_file":
@@ -293,7 +298,11 @@ class Agent:
             self._emit(self.on_command, {"type": "write", "path": path})
             result = self._write_file(path, payload.get("content", ""))
             await self._send("file_result", rid, result)
-            self._emit(self.on_log, f"✏️ 写入: {path} {'✅' if result.get('success') else '❌ '+result.get('error','')}")
+            if result.get("success"):
+                size = len(payload.get("content", ""))
+                self._emit(self.on_log, f"✏️ 写入文件: {path} ({size} 字节)")
+            else:
+                self._emit(self.on_log, f"✏️ 写入文件: {path} ❌ {result.get('error','')}")
             return
         
         if msg_type == "get_device_info":
@@ -309,9 +318,14 @@ class Agent:
             if op == "exec" and "exitCode" in result:
                 cwd = self.sessions.get_current()
                 cwd_str = cwd.cwd if cwd else os.getcwd()
-                self._emit(self.on_log, f"💻 {cwd_str}> {payload.get('command','')[:80]}")
-            elif op in ("read_file", "write_file"):
-                self._emit(self.on_log, f"{'📖' if op == 'read_file' else '✏️'} {payload.get('path','')[:80]}")
+                self._emit(self.on_log, f"💻 执行命令: {payload.get('command','')[:80]}")
+                self._emit(self.on_log, f"📂 {cwd_str}")
+            elif op == "read_file":
+                p = payload.get('path','')
+                self._emit(self.on_log, f"📖 读取文件: {p}")
+            elif op == "write_file":
+                p = payload.get('path','')
+                self._emit(self.on_log, f"✏️ 写入文件: {p}")
             return
     
     async def _send(self, msg_type, rid, payload):
