@@ -117,8 +117,9 @@ class Agent:
         # 会话管理
         self.sessions = SessionManager()
         
-        # 默认工作区
-        self.default_work_dir = str(Path.home() / 'worker')
+        # 默认工作区：项目根目录下的 worker 目录
+        script_dir = Path(__file__).parent.parent  # client/ 的上一级 = 项目根
+        self.default_work_dir = str(script_dir / 'worker')
         os.makedirs(self.default_work_dir, exist_ok=True)
         self.sessions.create(self.default_work_dir, '默认工作区')
         
