@@ -235,21 +235,17 @@ class Api:
 
     def create_session(self, work_dir, name=None):
         """在远端创建新工作区（用户通过 UI 设定，不走 #5 限制）"""
-        a = agent
-        if a:
-            result = a.sessions.create(work_dir, name)
-            return {"success": True, "session": result}
-        return {"success": False, "error": "未连接"}
+        a = agent or get_agent()  # 未连接时也创建本地实例（连接后自动同步）
+        result = a.sessions.create(work_dir, name)
+        return {"success": True, "session": result}
 
     def switch_session(self, session_id):
         """切换当前工作区（影响 Agent 的默认工作目录）"""
-        a = agent
-        if a:
-            result = a.sessions.switch(session_id)
-            if result.get("success"):
-                return {"success": True}
-            return {"success": False, "error": result.get("error", "切换失败")}
-        return {"success": False, "error": "未连接"}
+        a = agent or get_agent()
+        result = a.sessions.switch(session_id)
+        if result.get("success"):
+            return {"success": True}
+        return {"success": False, "error": result.get("error", "切换失败")}
 
     def set_permission(self, mode):
         if agent:
