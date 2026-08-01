@@ -49,6 +49,12 @@ tailwind.config = {
   .lg-fbtn.active { background: #222; color: #ededed; }
   .cmd-body pre { margin: 0; font-family: inherit; white-space: pre-wrap; word-break: break-all; }
   .entry { user-select: text; -webkit-user-select: text; }
+
+  /* 自定义复选框（替代浏览器默认样式，贴合深色主题） */
+  input[type="checkbox"] { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border: 1px solid #555; border-radius: 3px; background: #1a1a1a; cursor: pointer; position: relative; vertical-align: middle; }
+  input[type="checkbox"]:hover { border-color: #888; }
+  input[type="checkbox"]:checked { background: #4ade80; border-color: #4ade80; }
+  input[type="checkbox"]:checked::after { content: ''; position: absolute; left: 4px; top: 1px; width: 4px; height: 8px; border: solid #0a0a0a; border-width: 0 2px 2px 0; transform: rotate(45deg); }
 </style>
 
 </head>
