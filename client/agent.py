@@ -270,6 +270,7 @@ class Agent:
                 "agentId": sid[:8] if sid else "agent",
                 "agentPlatform": msg.get("platform", "sandbox"),
                 "agentHostname": msg.get("hostname", "OpenClaw"),
+                "relayPlatform": msg.get("relayPlatform", ""),
             })
             return
         

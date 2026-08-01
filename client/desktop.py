@@ -63,6 +63,7 @@ def get_agent():
                     "agentId": s.get("agentId", ""),
                     "agentPlatform": s.get("agentPlatform", ""),
                     "agentHostname": s.get("agentHostname", ""),
+                    "relayPlatform": s.get("relayPlatform", ""),
                 })
             else:
                 notify_ui("relay_status", {
