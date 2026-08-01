@@ -1,0 +1,56 @@
+#!/bin/bash
+# yq - 云桥快捷命令
+# 用法: yq <配对码> <工具> [参数...]
+# 示例: yq 123456 exec dir
+#       yq 123456 read_file test.txt
+#       yq 123456 write_file test.txt "hello"
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+CLIENT="$SCRIPT_DIR/yunqiao-client.mjs"
+URL="${YUNQIAO_URL:-https://yunqiao.very.im/mcp}"
+
+if [ $# -lt 2 ]; then
+  echo "用法: yq <配对码> <工具> [参数...]"
+  echo ""
+  echo "工具:"
+  echo "  ls              - 列出设备"
+  echo "  exec <cmd>      - 执行命令"
+  echo "  read <path>     - 读取文件"
+  echo "  write <path> <content> - 写入文件"
+  echo "  info            - 设备信息"
+  echo "  sessions        - 列出会话"
+  echo "  notify <text>   - 发通知到客户端"
+  exit 1
+fi
+
+CODE="$1"
+TOOL="$2"
+shift 2
+
+case "$TOOL" in
+  ls)
+    YUNQIAO_URL="$URL" node "$CLIENT" "$CODE" call list_devices '{}'
+    ;;
+  exec)
+    YUNQIAO_URL="$URL" node "$CLIENT" "$CODE" call exec "{\"command\":\"$*\"}"
+    ;;
+  read)
+    YUNQIAO_URL="$URL" node "$CLIENT" "$CODE" call read_file "{\"path\":\"$1\"}"
+    ;;
+  write)
+    YUNQIAO_URL="$URL" node "$CLIENT" "$CODE" call write_file "{\"path\":\"$1\",\"content\":\"$2\"}"
+    ;;
+  info)
+    YUNQIAO_URL="$URL" node "$CLIENT" "$CODE" call get_device_info '{}'
+    ;;
+  sessions)
+    YUNQIAO_URL="$URL" node "$CLIENT" "$CODE" call list_sessions '{}'
+    ;;
+  notify)
+    YUNQIAO_URL="$URL" node "$CLIENT" "$CODE" call notify "{\"text\":\"$*\"}"
+    ;;
+  *)
+    echo "未知工具: $TOOL"
+    exit 1
+    ;;
+esac
