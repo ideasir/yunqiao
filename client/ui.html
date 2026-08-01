@@ -252,7 +252,13 @@ function sendCommand() {
 
 function copyPairCode() {
   var relayUrl = document.getElementById('relayUrl').textContent;
-  var mcpUrl = relayUrl.replace('/device', '/mcp').replace('ws://', 'http://').replace('wss://', 'https://');
+  // 推导 MCP 地址
+  var mcpUrl = relayUrl;
+  if (mcpUrl.startsWith('wss://')) mcpUrl = 'https://' + mcpUrl.slice(6);
+  else if (mcpUrl.startsWith('ws://')) mcpUrl = 'http://' + mcpUrl.slice(5);
+  else if (!mcpUrl.startsWith('http')) mcpUrl = 'https://' + mcpUrl;
+  mcpUrl = mcpUrl.replace('/device', '/mcp');
+  if (!mcpUrl.endsWith('/mcp')) mcpUrl = mcpUrl + '/mcp';
   navigator.clipboard.writeText('云桥地址: ' + mcpUrl + '\n配对码: ' + state.pairCode);
   addLog('info', '已复制：云桥地址 + 配对码');
 }
