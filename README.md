@@ -120,6 +120,7 @@ export AUTH_REQUIRED=1
 export MAX_CONNECTIONS=3      # 每用户最大并发 MCP 连接（正常 1 个，留 2 个余量）
 export DEFAULT_QPS=5          # 每用户每秒工具调用上限（正常 Agent 不到 1 QPS）
 export MAX_OUTPUT_MB=5        # 单次工具返回上限（命令输出一般 <1MB）
+export MAX_DOWNLOAD_MB=5      # 单次下载文件上限（MB）
 
 # 配对码防暴力
 export AUTH_MAX_FAILS=5       # 连续失败 5 次
@@ -157,7 +158,7 @@ yq 123456 call set_user_limit '{"userId":"user-a"}'
 yq 123456 call get_user_limits '{}'
 ```
 
-> 配额解读：`maxConnections=3` = 该用户最多同时保持 3 个 MCP 连接；`qps=5` = 每秒最多 5 次工具调用；`maxOutputMB=5` = 单次返回（命令输出/文件）超过 5MB 被拒绝。默认值已兼顾"不限制正常使用"与"不压垮 1G 服务器"。
+> 配额解读：`maxConnections=3` = 该用户最多同时保持 3 个 MCP 连接；`qps=5` = 每秒最多 5 次工具调用；`maxOutputMB=5` = 单次返回（命令输出）超过 5MB 被拒绝；`maxDownloadMB=5` = 单次下载文件超过 5MB 被拒绝。默认值已兼顾"不限制正常使用"与"不压垮 1G 服务器"。
 
 建议用 Nginx 反代 + Let's Encrypt 配置 HTTPS：
 

@@ -47,6 +47,7 @@ const DEFAULT_LIMITS = {
   maxConnections: parseInt(process.env.MAX_CONNECTIONS || '3', 10),
   qps: parseInt(process.env.DEFAULT_QPS || '5', 10),
   maxOutputMB: parseInt(process.env.MAX_OUTPUT_MB || '5', 10),
+  maxDownloadMB: parseInt(process.env.MAX_DOWNLOAD_MB || '5', 10),
 };
 // 每个用户的配额（可在 users.limits 单独覆盖：放开=调大，收紧=调小）
 function getLimits(userId) {
@@ -238,13 +239,14 @@ function checkQps(userId) {
   c.count++;
   return true;
 }
-function withLimits(userId, handler) {
+function withLimits(userId, handler, toolName) {
   return async (params) => {
     if (!checkQps(userId)) {
       return { content: [{ type: 'text', text: 'Error: 调用过于频繁（超出该用户 QPS 限制）' }], isError: true };
     }
     const result = await handler(params);
-    if (result && Array.isArray(result.content)) {
+    // download 的输出大小由 handler 内按 maxDownloadMB 检查，这里豁免
+    if (toolName !== 'download' && result && Array.isArray(result.content)) {
       let total = 0;
       for (const c of result.content) if (c && c.text) total += c.text.length;
       const maxBytes = getLimits(userId).maxOutputMB * 1024 * 1024;
@@ -256,8 +258,8 @@ function withLimits(userId, handler) {
   };
 }
 // 工具统一包装：限流 + 输出限制 + 未读消息提示
-function wrapTool(userId, handler) {
-  return withLimits(userId, withMsgHint(userId, handler));
+function wrapTool(userId, handler, toolName) {
+  return withLimits(userId, withMsgHint(userId, handler), toolName);
 }
 
 function createMcpServer(userId, authInfo = {}) {
@@ -340,18 +342,20 @@ function createMcpServer(userId, authInfo = {}) {
       maxConnections: z.number().optional().describe('最大并发连接数'),
       qps: z.number().optional().describe('每秒工具调用上限'),
       maxOutputMB: z.number().optional().describe('单次输出上限（MB）'),
+      maxDownloadMB: z.number().optional().describe('单次下载文件上限（MB）'),
     }),
-  }, wrapTool(userId, async ({ userId: uid, maxConnections, qps, maxOutputMB }) => {
+  }, wrapTool(userId, async ({ userId: uid, maxConnections, qps, maxOutputMB, maxDownloadMB }) => {
     const denied = requireAdmin(authInfo);
     if (denied) return denied;
     if (!users[uid]) return { content: [{ type: 'text', text: 'Error: 用户不存在' }], isError: true };
-    if (maxConnections === undefined && qps === undefined && maxOutputMB === undefined) {
+    if (maxConnections === undefined && qps === undefined && maxOutputMB === undefined && maxDownloadMB === undefined) {
       delete users[uid].limits;
     } else {
       users[uid].limits = users[uid].limits || {};
       if (maxConnections !== undefined) users[uid].limits.maxConnections = Math.max(1, maxConnections);
       if (qps !== undefined) users[uid].limits.qps = Math.max(1, qps);
       if (maxOutputMB !== undefined) users[uid].limits.maxOutputMB = Math.max(1, maxOutputMB);
+      if (maxDownloadMB !== undefined) users[uid].limits.maxDownloadMB = Math.max(1, maxDownloadMB);
     }
     saveUsers();
     return { content: [{ type: 'text', text: `用户 ${uid} 配额: ${JSON.stringify(getLimits(uid))}` }] };
@@ -486,7 +490,7 @@ function createMcpServer(userId, authInfo = {}) {
   }));
 
   server.registerTool('download', {
-    description: '下载远程电脑上的文件（返回 base64 编码）',
+    description: '下载远程电脑上的文件（返回 base64 编码，受该用户 maxDownloadMB 限制）',
     inputSchema: z.object({ path: z.string(), code: z.string() }),
   }, wrapTool(userId, async ({ path, code }) => {
     const device = getDefaultDevice(userId);
@@ -495,9 +499,15 @@ function createMcpServer(userId, authInfo = {}) {
     if (!checkPathAllowed(path)) return { content: [{ type: 'text', text: 'Error: path outside allowed prefix' }], isError: true };
     const result = await sendAndWait('download', { path }, device.id);
     const o = result.payload;
-    if (o.success) return { content: [{ type: 'text', text: `FILE:${path}|${o.size}|${o.data}` }] };
+    if (o.success) {
+      const maxMB = getLimits(userId).maxDownloadMB;
+      if (o.size > maxMB * 1024 * 1024) {
+        return { content: [{ type: 'text', text: `Error: 文件过大（${(o.size / 1024 / 1024).toFixed(1)}MB > ${maxMB}MB 上限）` }], isError: true };
+      }
+      return { content: [{ type: 'text', text: `FILE:${path}|${o.size}|${o.data}` }] };
+    }
     return { content: [{ type: 'text', text: `Error: ${o.error}` }], isError: true };
-  }));
+  }, 'download'));
 
   return server;
 }

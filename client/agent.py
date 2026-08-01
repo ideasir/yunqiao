@@ -25,6 +25,9 @@ import time
 import threading
 from pathlib import Path
 
+# 管理员级路径白名单（与 relay 的 ALLOWED_FILE_PREFIX 一致，可选；统一转正斜杠）
+ALLOWED_FILE_PREFIX = os.environ.get('ALLOWED_FILE_PREFIX', '').strip().replace('\\', '/').rstrip('/')
+
 
 # ═══════════════════════════════════════════════════════════
 # 会话管理
@@ -495,7 +498,14 @@ class Agent:
             return {"exitCode": 1, "stdout": "", "stderr": str(e), "killed": False, "duration": 0}
     
     def _check_path(self, path):
-        """检查路径是否在工作区范围内"""
+        """检查路径是否在允许范围内（管理员白名单 + 工作区）"""
+        # 管理员级路径白名单（与 relay 的 ALLOWED_FILE_PREFIX 一致，可选）
+        if ALLOWED_FILE_PREFIX:
+            p = os.path.normpath(path).replace('\\', '/')
+            prefix = ALLOWED_FILE_PREFIX.rstrip('/')
+            if p != prefix and not p.startswith(prefix + '/'):
+                return False
+        # 工作区模式
         if self.permission != "workspace":
             return True
         session = self.sessions.get_current()
@@ -572,7 +582,13 @@ class Agent:
     async def _handle_session_op(self, op, payload):
         try:
             if op == "create":
-                return self.sessions.create(payload.get("workDir", ""), payload.get("name"))
+                work_dir = payload.get("workDir", "")
+                # 工作区模式下，Agent 不能自己划定工作区，只能用用户设定的默认工作区
+                if self.permission == "workspace" and work_dir:
+                    if os.path.normpath(work_dir) != os.path.normpath(self.default_work_dir):
+                        return {"success": False, "error": "工作区模式下不能自定义工作目录，只能使用默认工作区"}
+                    work_dir = self.default_work_dir
+                return self.sessions.create(work_dir, payload.get("name"))
             elif op == "exec":
                 session = self.sessions.get_current()
                 if not session:
