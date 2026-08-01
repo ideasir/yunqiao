@@ -126,6 +126,10 @@ export MAX_DOWNLOAD_MB=5      # 单次下载文件上限（MB）
 export AUTH_MAX_FAILS=5       # 连续失败 5 次
 export AUTH_LOCK_MS=300000    # 锁定 5 分钟
 
+# 审计日志（追责用，记录谁/何时/调用了什么/结果）
+export AUDIT_LOG=/opt/cloud-mcp/audit.log
+export AUDIT_MAX_BYTES=20971520   # 超过 20MB 自动轮转为 .old
+
 # 可选：命令/路径白名单
 # export ALLOWED_COMMANDS=npm,python,git,dir
 # export ALLOWED_FILE_PREFIX=/srv/workspace
@@ -156,7 +160,13 @@ yq 123456 call set_user_limit '{"userId":"user-a"}'
 
 # 查看所有用户配额
 yq 123456 call get_user_limits '{}'
+
+# 审计日志（追责：谁在何时调用了什么）
+yq 123456 call get_audit_log '{}'                              # 最近 50 条
+yq 123456 call get_audit_log '{"userId":"user-a","limit":20}'   # 按用户过滤
 ```
+
+> 审计日志落盘在 `AUDIT_LOG` 指定文件（JSON Lines 格式，每行一条），只记录工具名、关键参数（命令全文/文件路径/大小）、结果与耗时，**不记录配对码和文件内容**。
 
 > 配额解读：`maxConnections=3` = 该用户最多同时保持 3 个 MCP 连接；`qps=5` = 每秒最多 5 次工具调用；`maxOutputMB=5` = 单次返回（命令输出）超过 5MB 被拒绝；`maxDownloadMB=5` = 单次下载文件超过 5MB 被拒绝。默认值已兼顾"不限制正常使用"与"不压垮 1G 服务器"。
 

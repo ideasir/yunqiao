@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { randomUUID, randomBytes } from 'node:crypto';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync, statSync, renameSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
@@ -39,6 +39,44 @@ function findByKey(key) {
   return null;
 }
 loadUsers();
+
+// ─── 审计日志 ───────────────────────────────────
+const AUDIT_LOG = process.env.AUDIT_LOG || '/opt/cloud-mcp/audit.log';
+const AUDIT_MAX_BYTES = parseInt(process.env.AUDIT_MAX_BYTES || '20971520', 10); // 默认 20MB 后轮转
+
+function appendAudit(entry) {
+  try {
+    mkdirSync(dirname(AUDIT_LOG), { recursive: true });
+    if (existsSync(AUDIT_LOG) && statSync(AUDIT_LOG).size > AUDIT_MAX_BYTES) {
+      renameSync(AUDIT_LOG, AUDIT_LOG + '.old');  // 简单轮转：保留一份 .old
+    }
+    appendFileSync(AUDIT_LOG, JSON.stringify(entry) + '\n', 'utf-8');
+  } catch {}
+}
+// 审计参数摘要：只取追责需要的字段，绝不记录配对码/文件内容
+function summarizeArgs(toolName, params) {
+  const p = params || {};
+  switch (toolName) {
+    case 'exec': case 'execute_command': return { command: p.command, cwd: p.cwd, timeout: p.timeout };
+    case 'read_file': case 'read_file_old': return { path: p.path };
+    case 'write_file': case 'write_file_old': return { path: p.path, contentLen: (p.content || '').length };
+    case 'download': return { path: p.path };
+    case 'create_session': return { workDir: p.workDir, name: p.name };
+    case 'switch_session': case 'close_session': return { sessionId: p.sessionId };
+    case 'notify': return { text: (p.text || '').slice(0, 100) };
+    case 'create_user': return { userId: p.userId, name: p.name };
+    case 'delete_user': return { userId: p.userId };
+    case 'set_user_limit': return { target: p.userId, maxConnections: p.maxConnections, qps: p.qps, maxOutputMB: p.maxOutputMB, maxDownloadMB: p.maxDownloadMB };
+    default: return { };
+  }
+}
+function readAuditTail(n) {
+  try {
+    if (!existsSync(AUDIT_LOG)) return [];
+    const lines = readFileSync(AUDIT_LOG, 'utf-8').split('\n').filter(Boolean);
+    return lines.slice(-n).map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+  } catch { return []; }
+}
 
 // ─── 认证与配额 ─────────────────────────────────
 // AUTH_REQUIRED=1：/mcp 必须带用户密钥/令牌认证，?user= 参数失效
@@ -241,10 +279,21 @@ function checkQps(userId) {
 }
 function withLimits(userId, handler, toolName) {
   return async (params) => {
+    const t0 = Date.now();
     if (!checkQps(userId)) {
+      appendAudit({ ts: new Date().toISOString(), userId, tool: toolName || '?', args: summarizeArgs(toolName, params), ok: false, error: 'qps-limit', durationMs: Date.now() - t0 });
       return { content: [{ type: 'text', text: 'Error: 调用过于频繁（超出该用户 QPS 限制）' }], isError: true };
     }
     const result = await handler(params);
+    // 审计：谁、何时、调了什么、传了什么参数、结果如何（追责用）
+    appendAudit({
+      ts: new Date().toISOString(),
+      userId,
+      tool: toolName || '?',
+      args: summarizeArgs(toolName, params),
+      ok: !(result && result.isError),
+      durationMs: Date.now() - t0,
+    });
     // download 的输出大小由 handler 内按 maxDownloadMB 检查，这里豁免
     if (toolName !== 'download' && result && Array.isArray(result.content)) {
       let total = 0;
@@ -286,7 +335,7 @@ function createMcpServer(userId, authInfo = {}) {
       `- ${d.name} (${d.id})\n  OS: ${d.os} ${d.arch}\n  Hostname: ${d.hostname}\n  Connected: ${d.connectedAt}\n  Verified: ${d.verified ? '✅' : '❌'}`
     ).join('\n\n');
     return { content: [{ type: 'text', text }] };
-  }));
+  }, 'list_devices'));
 
   // 用户管理（admin 权限）
   server.registerTool('create_user', {
@@ -306,7 +355,7 @@ function createMcpServer(userId, authInfo = {}) {
     users[userId] = { key, name: name || userId, role: 'user', createdAt: new Date().toISOString() };
     saveUsers();
     return { content: [{ type: 'text', text: `用户已创建: ${userId}\n密钥: ${key}` }] };
-  }));
+  }, 'create_user'));
 
   server.registerTool('list_users', {
     description: '列出所有用户（需要管理员密钥认证）',
@@ -318,7 +367,7 @@ function createMcpServer(userId, authInfo = {}) {
       `- ${id} (${u.name})${u.role === 'admin' ? ' 👑' : ''}`
     ).join('\n');
     return { content: [{ type: 'text', text: list || '暂无用户' }] };
-  }));
+  }, 'list_users'));
 
   server.registerTool('delete_user', {
     description: '删除用户（需要管理员密钥认证）',
@@ -333,7 +382,7 @@ function createMcpServer(userId, authInfo = {}) {
     delete users[userId];
     saveUsers();
     return { content: [{ type: 'text', text: `用户已删除: ${userId}` }] };
-  }));
+  }, 'delete_user'));
 
   server.registerTool('set_user_limit', {
     description: '设置用户资源配额（放开=调大，收紧=调小；不带任何限制参数则恢复默认）。需要管理员密钥认证',
@@ -359,7 +408,7 @@ function createMcpServer(userId, authInfo = {}) {
     }
     saveUsers();
     return { content: [{ type: 'text', text: `用户 ${uid} 配额: ${JSON.stringify(getLimits(uid))}` }] };
-  }));
+  }, 'set_user_limit'));
 
   server.registerTool('get_user_limits', {
     description: '列出所有用户的资源配额。需要管理员密钥认证',
@@ -369,7 +418,26 @@ function createMcpServer(userId, authInfo = {}) {
     if (denied) return denied;
     const list = Object.keys(users).map(uid => `- ${uid}: ${JSON.stringify(getLimits(uid))}`).join('\n');
     return { content: [{ type: 'text', text: list || '暂无用户' }] };
-  }));
+  }, 'get_user_limits'));
+
+  server.registerTool('get_audit_log', {
+    description: '查看审计日志（谁、何时、调用了什么工具、参数、结果）。需要管理员密钥认证',
+    inputSchema: z.object({
+      limit: z.number().optional().describe('条数，默认 50'),
+      userId: z.string().optional().describe('按用户过滤'),
+    }),
+  }, wrapTool(userId, async ({ limit, userId: filterUid }) => {
+    const denied = requireAdmin(authInfo);
+    if (denied) return denied;
+    const rows = readAuditTail(Math.max(1, Math.min(500, limit || 50)))
+      .filter(r => !filterUid || r.userId === filterUid)
+      .slice(-(limit || 50));
+    if (rows.length === 0) return { content: [{ type: 'text', text: '暂无审计记录' }] };
+    const text = rows.map(r =>
+      `[${(r.ts || '').slice(11, 19)}] ${r.userId} ${r.tool} ${JSON.stringify(r.args || {})} ${r.ok ? '✓' : '✗'} ${r.durationMs || 0}ms`
+    ).join('\n');
+    return { content: [{ type: 'text', text }] };
+  }, 'get_audit_log'));
 
   // 会话管理
   const sessionTools = [
@@ -392,7 +460,7 @@ function createMcpServer(userId, authInfo = {}) {
       const op = name.replace('_session', '');
       const result = await handleSessionOp(op === 'exec' ? 'exec' : op, params, device.id);
       return formatResult(name, result, params);
-    }));
+    }, name));
   }
 
   // 旧工具
@@ -409,7 +477,7 @@ function createMcpServer(userId, authInfo = {}) {
     const output = await sendAndWait('execute_command', { command, timeout }, device.id);
     const o = output.payload;
     return { content: [{ type: 'text', text: `Exit Code: ${o.exitCode}${o.stdout ? '\nSTDOUT:' + o.stdout : ''}${o.stderr ? '\nSTDERR:' + o.stderr : ''}${o.killed ? '\n[超时]' : ''}` }] };
-  }));
+  }, 'execute_command'));
 
   server.registerTool('read_file_old', {
     description: '[旧版] 读取私人电脑上的文件',
@@ -422,7 +490,7 @@ function createMcpServer(userId, authInfo = {}) {
     const result = await sendAndWait('read_file', { path }, device.id);
     const o = result.payload;
     return { content: [{ type: 'text', text: o.success ? o.content : `Error: ${o.error}` }], isError: !o.success };
-  }));
+  }, 'read_file_old'));
 
   server.registerTool('write_file_old', {
     description: '[旧版] 写入私人电脑上的文件',
@@ -435,7 +503,7 @@ function createMcpServer(userId, authInfo = {}) {
     const result = await sendAndWait('write_file', { path, content }, device.id);
     const o = result.payload;
     return { content: [{ type: 'text', text: o.success ? `文件已写入: ${o.path}` : `Error: ${o.error}` }], isError: !o.success };
-  }));
+  }, 'write_file_old'));
 
   server.registerTool('get_client_messages', {
     description: '获取客户端发来的新消息（客户端 UI 发来的消息，读取后自动标记已读并回执给客户端）。建议每次会话开始时调用一次',
@@ -458,7 +526,7 @@ function createMcpServer(userId, authInfo = {}) {
       `${m.urgent ? '⚠️ [紧急] ' : ''}[${new Date(m.time).toLocaleTimeString()}] ${m.deviceName}: ${m.text}`
     ).join('\n');
     return { content: [{ type: 'text', text }] };
-  }));
+  }, 'get_client_messages'));
 
   server.registerTool('get_device_info', {
     description: '获取远程电脑的系统信息',
@@ -476,7 +544,7 @@ function createMcpServer(userId, authInfo = {}) {
       `Home Directory: ${info.homedir}`, `User: ${info.userInfo?.username || 'unknown'}`,
     ].join('\n');
     return { content: [{ type: 'text', text }] };
-  }));
+  }, 'get_device_info'));
 
   server.registerTool('notify', {
     description: '发送通知消息到客户端日志',
@@ -487,7 +555,7 @@ function createMcpServer(userId, authInfo = {}) {
     if (!checkAuthCode(device, code)) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
     sendJSON(device.ws, { type: 'notify', text });
     return { content: [{ type: 'text', text: '已发送' }] };
-  }));
+  }, 'notify'));
 
   server.registerTool('download', {
     description: '下载远程电脑上的文件（返回 base64 编码，受该用户 maxDownloadMB 限制）',
