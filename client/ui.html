@@ -500,10 +500,14 @@ function handleBridge(action, data) {
   }
   else if (action === 'relay_status') {
     var dot = document.getElementById('relayDot');
+    var btn = document.getElementById('connectBtn');
     if (data.status === 'connected') {
       dot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
       var clientDot = document.getElementById('clientDot');
       if (clientDot) clientDot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
+      btn.textContent = '断开';
+      btn.style.background = '#7f1d1d';
+      btn.style.color = '#fca5a5';
     } else {
       dot.className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
       var clientDot = document.getElementById('clientDot');
@@ -513,6 +517,10 @@ function handleBridge(action, data) {
         relayAgentDot.classList.add('hidden');
         relayAgentDot.className = 'w-1.5 h-1.5 rounded-full hidden';
       }
+      btn.textContent = '连接';
+      btn.style.background = '#222';
+      btn.style.color = '#ededed';
+    }
     }
   }
 }
@@ -531,24 +539,7 @@ function setConn状态(status) {
 
 
 function toggleConnect() {
-  var btn = document.getElementById('connectBtn');
-  if (btn.textContent === '连接') {
-    window.pywebview.api.toggle_connect().then(function() {
-      btn.textContent = '断开';
-      btn.style.background = '#7f1d1d';
-      btn.style.color = '#fca5a5';
-      addLog('status', '正在连接中转服务器...');
-    });
-  } else {
-    window.pywebview.api.toggle_connect().then(function() {
-      btn.textContent = '连接';
-      btn.style.background = '';
-      btn.style.color = '';
-      document.getElementById('relayDot').className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
-      document.getElementById('relayStatus').textContent = '未连接';
-      addLog('info', '已断开连接');
-    });
-  }
+  window.pywebview.api.toggle_connect();
 }
 
 function connectRelay() {
