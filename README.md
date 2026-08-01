@@ -248,7 +248,7 @@ node skills/yunqiao-client.mjs <配对码> messages
 node skills/yunqiao-client.mjs <配对码> call get_client_messages '{}'
 ```
 
-建议 Agent 在每次会话开始时调用一次 `get_client_messages`，检查用户是否有新的指令或提示。
+建议 Agent 在每次会话开始时调用一次 `get_client_messages`，检查用户是否有新的指令或提示。也建议加载 `skills/yunqiao-usage/SKILL.md` 作为使用规范（含消息优先级、确认回执等约定）。
 
 ---
 

@@ -194,6 +194,21 @@ function requireAdmin(authInfo) {
   return null;
 }
 
+// 工具响应附加未读消息提示：Agent 调用任何工具时都能看到客户端新消息提醒（硬约束兜底）
+function withMsgHint(userId, handler) {
+  return async (params) => {
+    const result = await handler(params);
+    const unread = agentMessages.filter(m => m.userId === userId && !m.read).length;
+    if (unread > 0 && result && Array.isArray(result.content)) {
+      result.content = [...result.content, {
+        type: 'text',
+        text: `\n📬 [来自客户端的消息] 你有 ${unread} 条未读消息，请先调用 get_client_messages 工具查看（可能是用户的新指令或提醒）。`,
+      }];
+    }
+    return result;
+  };
+}
+
 function createMcpServer(userId, authInfo = {}) {
   const server = new McpServer({
     name: 'yunqiao',
@@ -203,7 +218,7 @@ function createMcpServer(userId, authInfo = {}) {
   server.registerTool('list_devices', {
     description: '列出所有已连接到中转的私人电脑设备',
     inputSchema: z.object({}),
-  }, async () => {
+  }, withMsgHint(userId, async () => {
     const list = Array.from(devices.values())
       .filter(d => !userId || d.userId === userId)
       .map(d => ({
@@ -218,7 +233,7 @@ function createMcpServer(userId, authInfo = {}) {
       `- ${d.name} (${d.id})\n  OS: ${d.os} ${d.arch}\n  Hostname: ${d.hostname}\n  Connected: ${d.connectedAt}\n  Verified: ${d.verified ? '✅' : '❌'}`
     ).join('\n\n');
     return { content: [{ type: 'text', text }] };
-  });
+  }));
 
   // 用户管理（admin 权限）
   server.registerTool('create_user', {
@@ -228,7 +243,7 @@ function createMcpServer(userId, authInfo = {}) {
       name: z.string().optional().describe('用户名称'),
       key: z.string().optional().describe('密钥（不传则自动生成）'),
     }),
-  }, async ({ userId, name, key }) => {
+  }, withMsgHint(userId, async ({ userId, name, key }) => {
     const denied = requireAdmin(authInfo);
     if (denied) return denied;
     const user = users[userId];
@@ -238,26 +253,26 @@ function createMcpServer(userId, authInfo = {}) {
     users[userId] = { key, name: name || userId, role: 'user', createdAt: new Date().toISOString() };
     saveUsers();
     return { content: [{ type: 'text', text: `用户已创建: ${userId}\n密钥: ${key}` }] };
-  });
+  }));
 
   server.registerTool('list_users', {
     description: '列出所有用户（需要管理员密钥认证）',
     inputSchema: z.object({}),
-  }, async () => {
+  }, withMsgHint(userId, async () => {
     const denied = requireAdmin(authInfo);
     if (denied) return denied;
     const list = Object.entries(users).map(([id, u]) =>
       `- ${id} (${u.name})${u.role === 'admin' ? ' 👑' : ''}`
     ).join('\n');
     return { content: [{ type: 'text', text: list || '暂无用户' }] };
-  });
+  }));
 
   server.registerTool('delete_user', {
     description: '删除用户（需要管理员密钥认证）',
     inputSchema: z.object({
       userId: z.string().describe('用户 ID'),
     }),
-  }, async ({ userId }) => {
+  }, withMsgHint(userId, async ({ userId }) => {
     const denied = requireAdmin(authInfo);
     if (denied) return denied;
     if (userId === 'admin') return { content: [{ type: 'text', text: 'Error: 不能删除 admin' }], isError: true };
@@ -265,7 +280,7 @@ function createMcpServer(userId, authInfo = {}) {
     delete users[userId];
     saveUsers();
     return { content: [{ type: 'text', text: `用户已删除: ${userId}` }] };
-  });
+  }));
 
   // 会话管理
   const sessionTools = [
@@ -279,7 +294,7 @@ function createMcpServer(userId, authInfo = {}) {
   ];
 
   for (const [name, desc, schema] of sessionTools) {
-    server.registerTool(name, { description: desc, inputSchema: z.object(schema) }, async (params) => {
+    server.registerTool(name, { description: desc, inputSchema: z.object(schema) }, withMsgHint(userId, async (params) => {
       const device = getDefaultDevice(userId);
       if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
       if (!checkAuthCode(device, params.code)) {
@@ -288,7 +303,7 @@ function createMcpServer(userId, authInfo = {}) {
       const op = name.replace('_session', '');
       const result = await handleSessionOp(op === 'exec' ? 'exec' : op, params, device.id);
       return formatResult(name, result, params);
-    });
+    }));
   }
 
   // 旧工具
@@ -297,7 +312,7 @@ function createMcpServer(userId, authInfo = {}) {
     inputSchema: z.object({
       deviceId: z.string().optional(), command: z.string(), timeout: z.number().optional(), code: z.string(),
     }),
-  }, async ({ deviceId, code, command, timeout }) => {
+  }, withMsgHint(userId, async ({ deviceId, code, command, timeout }) => {
     const device = deviceId ? devices.get(deviceId) : getDefaultDevice(userId);
     if (!device) return { content: [{ type: 'text', text: 'Error: device not found' }], isError: true };
     if (!checkAuthCode(device, code)) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
@@ -305,12 +320,12 @@ function createMcpServer(userId, authInfo = {}) {
     const output = await sendAndWait('execute_command', { command, timeout }, device.id);
     const o = output.payload;
     return { content: [{ type: 'text', text: `Exit Code: ${o.exitCode}${o.stdout ? '\nSTDOUT:' + o.stdout : ''}${o.stderr ? '\nSTDERR:' + o.stderr : ''}${o.killed ? '\n[超时]' : ''}` }] };
-  });
+  }));
 
   server.registerTool('read_file_old', {
     description: '[旧版] 读取私人电脑上的文件',
     inputSchema: z.object({ deviceId: z.string().optional(), code: z.string(), path: z.string() }),
-  }, async ({ deviceId, code, path }) => {
+  }, withMsgHint(userId, async ({ deviceId, code, path }) => {
     const device = deviceId ? devices.get(deviceId) : getDefaultDevice(userId);
     if (!device) return { content: [{ type: 'text', text: 'Error: device not found' }], isError: true };
     if (!checkAuthCode(device, code)) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
@@ -318,12 +333,12 @@ function createMcpServer(userId, authInfo = {}) {
     const result = await sendAndWait('read_file', { path }, device.id);
     const o = result.payload;
     return { content: [{ type: 'text', text: o.success ? o.content : `Error: ${o.error}` }], isError: !o.success };
-  });
+  }));
 
   server.registerTool('write_file_old', {
     description: '[旧版] 写入私人电脑上的文件',
     inputSchema: z.object({ deviceId: z.string().optional(), code: z.string(), path: z.string(), content: z.string() }),
-  }, async ({ deviceId, code, path, content }) => {
+  }, withMsgHint(userId, async ({ deviceId, code, path, content }) => {
     const device = deviceId ? devices.get(deviceId) : getDefaultDevice(userId);
     if (!device) return { content: [{ type: 'text', text: 'Error: device not found' }], isError: true };
     if (!checkAuthCode(device, code)) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
@@ -331,12 +346,12 @@ function createMcpServer(userId, authInfo = {}) {
     const result = await sendAndWait('write_file', { path, content }, device.id);
     const o = result.payload;
     return { content: [{ type: 'text', text: o.success ? `文件已写入: ${o.path}` : `Error: ${o.error}` }], isError: !o.success };
-  });
+  }));
 
   server.registerTool('get_client_messages', {
     description: '获取客户端发来的新消息（客户端 UI 发来的消息，读取后自动标记已读并回执给客户端）。建议每次会话开始时调用一次',
     inputSchema: z.object({}),
-  }, async () => {
+  }, withMsgHint(userId, async () => {
     // 只取走本用户未读消息（顺带清理），并广播回执
     const unread = agentMessages.filter(m => m.userId === userId && !m.read);
     const ids = unread.map(m => m.id);
@@ -354,12 +369,12 @@ function createMcpServer(userId, authInfo = {}) {
       `${m.urgent ? '⚠️ [紧急] ' : ''}[${new Date(m.time).toLocaleTimeString()}] ${m.deviceName}: ${m.text}`
     ).join('\n');
     return { content: [{ type: 'text', text }] };
-  });
+  }));
 
   server.registerTool('get_device_info', {
     description: '获取远程电脑的系统信息',
     inputSchema: z.object({ code: z.string() }),
-  }, async ({ code }) => {
+  }, withMsgHint(userId, async ({ code }) => {
     const device = getDefaultDevice(userId);
     if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
     if (!checkAuthCode(device, code)) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
@@ -372,23 +387,23 @@ function createMcpServer(userId, authInfo = {}) {
       `Home Directory: ${info.homedir}`, `User: ${info.userInfo?.username || 'unknown'}`,
     ].join('\n');
     return { content: [{ type: 'text', text }] };
-  });
+  }));
 
   server.registerTool('notify', {
     description: '发送通知消息到客户端日志',
     inputSchema: z.object({ text: z.string(), code: z.string() }),
-  }, async ({ text, code }) => {
+  }, withMsgHint(userId, async ({ text, code }) => {
     const device = getDefaultDevice(userId);
     if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
     if (!checkAuthCode(device, code)) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
     sendJSON(device.ws, { type: 'notify', text });
     return { content: [{ type: 'text', text: '已发送' }] };
-  });
+  }));
 
   server.registerTool('download', {
     description: '下载远程电脑上的文件（返回 base64 编码）',
     inputSchema: z.object({ path: z.string(), code: z.string() }),
-  }, async ({ path, code }) => {
+  }, withMsgHint(userId, async ({ path, code }) => {
     const device = getDefaultDevice(userId);
     if (!device) return { content: [{ type: 'text', text: 'Error: 没有已连接的设备' }], isError: true };
     if (!checkAuthCode(device, code)) return { content: [{ type: 'text', text: 'Error: 验证码错误' }], isError: true };
@@ -397,7 +412,7 @@ function createMcpServer(userId, authInfo = {}) {
     const o = result.payload;
     if (o.success) return { content: [{ type: 'text', text: `FILE:${path}|${o.size}|${o.data}` }] };
     return { content: [{ type: 'text', text: `Error: ${o.error}` }], isError: true };
-  });
+  }));
 
   return server;
 }
