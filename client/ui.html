@@ -319,7 +319,7 @@ function saveSessionModal() {
   if (!state.currentSessionId) {
     state.currentSessionId = id;
   }
-  renderSidebar(); renderSessions(); updateStatus();
+  renderSidebar(); updateStatus();
   addLog('info', '会话已创建: ' + name + ' (' + id + ')');
   var overlay = document.getElementById('sessionModal');
   var content = document.getElementById('sessionModalContent');
@@ -406,7 +406,6 @@ function ctxDelete() {
   if (ctxSessionId) closeSession(ctxSessionId);
 }
 
-function renderSessions() {}
 
 function switchSession(id) {
   // 查看会话日志（不切换默认工作区）
@@ -419,7 +418,7 @@ function switchSession(id) {
 function setDefaultSession(id) {
   state.currentSessionId = id;
   renderSidebar();
-  renderSessions();
+ 
   updateStatus();
   var s = state.sessions.find(function(s) { return s.id === id; });
   addLog('status', '默认工作区已切换: ' + (s ? s.name : id));
@@ -428,7 +427,7 @@ function closeSession(id) {
   if (!confirm('确定关闭此会话?')) return;
   state.sessions = state.sessions.filter(function(s) { return s.id !== id; });
   if (state.currentSessionId === id) { state.currentSessionId = state.sessions.length > 0 ? state.sessions[0].id : null; }
-  renderSidebar(); renderSessions(); addLog('info', '会话已关闭: ' + id);
+  renderSidebar(); addLog('info', '会话已关闭: ' + id);
 }
 
 function setPermission(type) {
@@ -591,15 +590,6 @@ function setConn状态(status) {
 
 function toggleConnect() {
   window.pywebview.api.toggle_connect();
-}
-
-function trafficFlash() {
-  var relayDot = document.getElementById('relayDot');
-  if (trafficTimer) clearTimeout(trafficTimer);
-  relayDot.className = 'w-1.5 h-1.5 rounded-full bg-[#22d3ee]';
-  trafficTimer = setTimeout(function() {
-    relayDot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
-  }, 500);
 }
 function configRelay() {
   document.getElementById('modalRelayUrl').value = document.getElementById('relayUrl').textContent;
