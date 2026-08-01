@@ -364,13 +364,20 @@ function withMsgHint(userId, handler) {
   return async (params) => {
     const result = await handler(params);
     const extras = [];
-    // 未读消息
+    // 未读消息：内容已展示给 Agent，即视为已读（移除 + 广播回执，客户端 UI 任务划掉）
     const unread = agentMessages.filter(m => m.userId === userId && !m.read);
     if (unread.length > 0) {
       const hint = unread.map(m =>
         `[${new Date(m.time).toLocaleTimeString()}]${m.urgent ? ' ⚠️紧急' : ''} ${m.deviceName}: ${(m.text || '').slice(0, 300)}`
       ).join('\n');
       extras.push(`\n📬 [来自客户端的未读消息，请优先处理]\n${hint}\n（处理完请调用 get_client_messages 确认已读）`);
+      // 消息内容已展示给 Agent，视为已读：移除 + 回执（无需 Agent 主动确认）
+      const ids = unread.map(m => m.id);
+      const idSet = new Set(ids);
+      for (let i = agentMessages.length - 1; i >= 0; i--) {
+        if (idSet.has(agentMessages[i].id)) agentMessages.splice(i, 1);
+      }
+      broadcastToDevices({ type: 'messages_read', ids }, userId);
     }
     // 已完成未查看的任务
     const doneTasks = Array.from(tasks.values()).filter(t => t.userId === userId && t.status !== 'running' && !t.viewed);

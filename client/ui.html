@@ -116,8 +116,8 @@ tailwind.config = {
       <input type="text" id="cmdInput" class="flex-1 bg-transparent border-none text-[#ededed] px-3 py-3 font-mono text-xs outline-none placeholder-[#666]" placeholder="给 Agent 发消息，回车发送（! 前缀 = 紧急）" spellcheck="false" onkeydown="if(event.key==='Enter')sendCommand()" />
     </div>
 
-    <!-- 任务队列抽屉（日志区域右下角，无任务收缩/有任务自动展开） -->
-    <div id="taskPanel" class="absolute rounded-xl bg-[#141414] border border-[#222222] shadow-2xl z-40 select-none" style="bottom:52px; right:12px;">
+    <!-- 任务队列抽屉（日志区域右上角，无任务收缩/有任务自动展开） -->
+    <div id="taskPanel" class="absolute rounded-xl bg-[#141414] border border-[#222222] shadow-2xl z-40 select-none" style="top:74px; right:12px;">
       <div class="flex items-center gap-2 px-3 py-2 border-b border-[#1f1f1f] cursor-pointer" onclick="toggleTaskPanel()" title="点击展开/收起">
         <div class="w-1.5 h-1.5 rounded-full flex-shrink-0" id="taskPanelDot" style="background:#333;"></div>
         <span class="text-xs font-medium text-[#ccc] whitespace-nowrap">任务队列</span>
@@ -127,7 +127,10 @@ tailwind.config = {
       <div id="taskPanelBody">
         <div id="taskEmpty" class="px-3 py-3 text-[11px] text-[#555] text-center">暂无等待任务</div>
         <div id="taskList" class="overflow-y-auto" style="max-height:190px; display:none;"></div>
-        <div class="px-3 py-1.5 text-[9px] text-[#444] border-t border-[#1a1a1a] text-center">拖动排序，Agent 将按此顺序读取</div>
+        <div class="px-3 py-1.5 text-[9px] text-[#444] border-t border-[#1a1a1a] flex items-center justify-between">
+          <span>拖动排序，Agent 按顺序读取</span>
+          <button onclick="clearDoneTasks()" class="text-[#555] hover:text-[#ff6b6b] transition-colors bg-transparent border-0 cursor-pointer" title="清空已完成任务">清空已完成</button>
+        </div>
       </div>
     </div>
   </div>
@@ -414,7 +417,7 @@ function sendCommand() {
     // 桌面模式：消息进中继队列，Agent 读取后收到回执
     window.pywebview.api.send_message(text, urgent).then(function(r) {
       if (r && r.success && r.msgId) {
-        state.pendingMessages.push({ id: r.msgId, text: text, urgent: urgent });
+        state.pendingMessages.push({ id: r.msgId, text: text, urgent: urgent, done: false });
         updateAgentBadge();
         renderTaskPanel();
         addLog(urgent ? 'warn' : 'msg', (urgent ? '⚠️ [紧急] → Agent: ' : '→ Agent: ') + text);
@@ -433,7 +436,7 @@ function sendCommand() {
 function updateAgentBadge() {
   var el = document.getElementById('agentUnread');
   if (!el) return;
-  var n = state.pendingMessages.length;
+  var n = state.pendingMessages.filter(function(m) { return !m.done; }).length;
   if (n > 0) {
     el.textContent = '未读消息 ' + n;
     el.classList.remove('hidden');
@@ -473,51 +476,65 @@ function renderTaskPanel() {
   var empty = document.getElementById('taskEmpty');
   var count = document.getElementById('taskPanelCount');
   var dot = document.getElementById('taskPanelDot');
-  var n = state.pendingMessages.length;
+  var n = state.pendingMessages.filter(function(m) { return !m.done; }).length;
   count.textContent = n;
   if (dot) dot.style.background = n > 0 ? '#fbbf24' : '#333';
-  empty.style.display = n === 0 ? '' : 'none';
-  list.style.display = n === 0 ? 'none' : '';
+  empty.style.display = state.pendingMessages.length === 0 ? '' : 'none';
+  list.style.display = state.pendingMessages.length === 0 ? 'none' : '';
   list.innerHTML = '';
   state.pendingMessages.forEach(function(m, idx) {
     var row = document.createElement('div');
-    row.className = 'flex items-start gap-2 px-3 py-1.5 border-b border-[#1a1a1a] hover:bg-[#181818] cursor-grab text-xs';
-    row.draggable = true;
+    if (m.done) {
+      // 已完成：划掉 + 灰色 + ✓，保留删除
+      row.className = 'flex items-start gap-2 px-3 py-1.5 border-b border-[#1a1a1a] opacity-45 text-xs';
+      row.innerHTML =
+        '<span class="text-[9px] text-[#555] font-mono pt-0.5 flex-shrink-0">' + fmtTime(m.doneTime || m.time) + '</span>' +
+        '<span class="flex-1 break-all leading-tight text-[#777] line-through">' + esc(m.text) + '</span>' +
+        '<span class="text-[10px] text-[#4ade80] flex-shrink-0" title="已完成">✓</span>' +
+        '<button class="op-del text-[10px] text-[#666] hover:text-[#ff6b6b] leading-none flex-shrink-0" title="删除">✕</button>';
+      row.querySelector('.op-del').addEventListener('click', function(e) {
+        e.stopPropagation();
+        deleteTask(parseInt(row.dataset.idx, 10));
+      });
+    } else {
+      row.className = 'flex items-start gap-2 px-3 py-1.5 border-b border-[#1a1a1a] hover:bg-[#181818] cursor-grab text-xs';
+      row.draggable = true;
+      row.innerHTML =
+        '<span class="text-[9px] text-[#555] font-mono pt-0.5 flex-shrink-0">' + fmtTime(m.time) + '</span>' +
+        '<span class="' + (m.urgent ? 'text-[#ff6b6b]' : 'text-[#ddd]') + ' flex-1 break-all leading-tight">' +
+        (m.urgent ? '⚠️ ' : '') + esc(m.text) + '</span>' +
+        '<span class="flex flex-col gap-1 flex-shrink-0 ml-0.5">' +
+        '<button class="op-edit text-[10px] text-[#777] hover:text-[#ededed] leading-none" title="编辑">✎</button>' +
+        '<button class="op-del text-[10px] text-[#777] hover:text-[#ff6b6b] leading-none" title="删除">✕</button>' +
+        '</span>';
+      row.querySelector('.op-edit').addEventListener('click', function(e) {
+        e.stopPropagation();
+        editTask(parseInt(row.dataset.idx, 10));
+      });
+      row.querySelector('.op-del').addEventListener('click', function(e) {
+        e.stopPropagation();
+        deleteTask(parseInt(row.dataset.idx, 10));
+      });
+      row.addEventListener('dragstart', function(e) {
+        if (e.target && e.target.closest && e.target.closest('button')) { e.preventDefault(); return; }
+        dragMsgIdx = parseInt(this.dataset.idx, 10);
+        this.style.opacity = '0.4';
+        if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+      });
+      row.addEventListener('dragend', function() { this.style.opacity = ''; });
+      row.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      });
+      row.addEventListener('drop', function(e) {
+        e.preventDefault();
+        reorderTask(dragMsgIdx, parseInt(this.dataset.idx, 10));
+      });
+    }
     row.dataset.idx = idx;
-    row.innerHTML =
-      '<span class="text-[9px] text-[#555] font-mono pt-0.5 flex-shrink-0">' + fmtTime(m.time) + '</span>' +
-      '<span class="' + (m.urgent ? 'text-[#ff6b6b]' : 'text-[#ddd]') + ' flex-1 break-all leading-tight">' +
-      (m.urgent ? '⚠️ ' : '') + esc(m.text) + '</span>' +
-      '<span class="flex flex-col gap-1 flex-shrink-0 ml-0.5">' +
-      '<button class="op-edit text-[10px] text-[#777] hover:text-[#ededed] leading-none" title="编辑">✎</button>' +
-      '<button class="op-del text-[10px] text-[#777] hover:text-[#ff6b6b] leading-none" title="删除">✕</button>' +
-      '</span>';
-    row.querySelector('.op-edit').addEventListener('click', function(e) {
-      e.stopPropagation();
-      editTask(parseInt(row.dataset.idx, 10));
-    });
-    row.querySelector('.op-del').addEventListener('click', function(e) {
-      e.stopPropagation();
-      deleteTask(parseInt(row.dataset.idx, 10));
-    });
-    row.addEventListener('dragstart', function(e) {
-      if (e.target && e.target.closest && e.target.closest('button')) { e.preventDefault(); return; }
-      dragMsgIdx = parseInt(this.dataset.idx, 10);
-      this.style.opacity = '0.4';
-      if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
-    });
-    row.addEventListener('dragend', function() { this.style.opacity = ''; });
-    row.addEventListener('dragover', function(e) {
-      e.preventDefault();
-      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-    });
-    row.addEventListener('drop', function(e) {
-      e.preventDefault();
-      reorderTask(dragMsgIdx, parseInt(this.dataset.idx, 10));
-    });
     list.appendChild(row);
   });
-  // 抽屉自动行为：无任务收起，有任务自动展开（用户手动控制过则不打扰）
+  // 抽屉自动行为：无待读任务收起，有则展开（用户手动控制过则不打扰）
   if (n === 0) panelOpen = false;
   else if (!panelManual) panelOpen = true;
   applyPanelState();
@@ -531,6 +548,12 @@ function deleteTask(idx) {
   updateAgentBadge();
   syncDelete([m.id]);
   addLog('info', '任务已删除');
+}
+function clearDoneTasks() {
+  state.pendingMessages = state.pendingMessages.filter(function(m) { return !m.done; });
+  renderTaskPanel();
+  updateAgentBadge();
+  addLog('info', '已完成任务已清空');
 }
 function syncDelete(ids) {
   if (window.pywebview && window.pywebview.api && window.pywebview.api.delete_messages) {
@@ -848,13 +871,18 @@ function handleBridge(action, data) {
   }
   else if (action === 'messages_read') {
     var ids = data.ids || [];
-    var before = state.pendingMessages.length;
-    state.pendingMessages = state.pendingMessages.filter(function(m) { return ids.indexOf(m.id) === -1; });
-    var read = before - state.pendingMessages.length;
-    if (read > 0) {
+    var marked = 0;
+    state.pendingMessages.forEach(function(m) {
+      if (ids.indexOf(m.id) !== -1 && !m.done) {
+        m.done = true;
+        m.doneTime = Date.now();
+        marked++;
+      }
+    });
+    if (marked > 0) {
       updateAgentBadge();
       renderTaskPanel();
-      addLog('done', '✅ Agent 已读取 ' + read + ' 条消息');
+      addLog('done', '✅ Agent 已处理 ' + marked + ' 条消息（任务已划掉）');
     }
   }
   else if (action === 'agent_activity') {
