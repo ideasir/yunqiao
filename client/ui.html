@@ -166,7 +166,7 @@ tailwind.config = {
       </div>
       <div class="flex gap-1.5 px-3 py-2 border-t border-[#1f1f1f]">
         <button class="flex-1 text-xs py-1 rounded-lg bg-[#222] text-[#ededed] hover:bg-[#2a2a2a] transition-all font-medium" onclick="copyPairCode()" title="复制配对码（发给智能体）">复制配对码</button>
-        <button class="text-xs py-1 px-2 rounded-lg bg-[#1a1a1a] text-[#777] hover:text-[#ededed] transition-all" onclick="copyMcpUrl()" title="复制 MCP 地址（仅第一次连接需要发给智能体）">地址</button>
+        <button class="text-xs py-1 px-2 rounded-lg bg-[#1a1a1a] text-[#777] hover:text-[#fca5a5] transition-all" onclick="disconnectAgent()" title="断开当前 Agent 连接">断开</button>
         <button class="text-xs py-1 px-2 rounded-lg bg-[#1a1a1a] text-[#777] hover:text-[#ededed] transition-all" onclick="refreshPairCode()" title="刷新配对码">刷新</button>
       </div>
     </div>
@@ -676,6 +676,20 @@ function copyMcpUrl() {
   fetchMcpTicket(false).then(function(url) {
     copyTextToClipboard(url, '动态 MCP 地址已复制');
   }).catch(function(e) { addLog('err', '获取 MCP 地址失败: ' + e.message); });
+}
+function disconnectAgent() {
+  // 断开当前 Agent 连接（清理 SSE 传输）
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.disconnect_agent) {
+    window.pywebview.api.disconnect_agent().then(function(r) {
+      if (r && r.success) {
+        addLog('done', 'Agent 连接已断开');
+      } else {
+        addLog('err', '断开失败: ' + ((r && r.error) || '未知错误'));
+      }
+    }).catch(function() { addLog('err', '断开 Agent 失败'); });
+  } else {
+    addLog('err', '当前环境不支持断开 Agent');
+  }
 }
 function refreshPairCode() {
   if (window.pywebview && window.pywebview.api && window.pywebview.api.refresh_pair_code) {

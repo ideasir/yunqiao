@@ -315,6 +315,21 @@ class Api:
             UI.destroy()
         return {"success": True}
 
+    def disconnect_agent(self):
+        """断开当前所有 Agent SSE 连接，释放给其他智能体"""
+        a = agent
+        if a and a._ws:
+            # 通过 WebSocket 发送断开 Agent 的请求
+            try:
+                fut = asyncio.run_coroutine_threadsafe(
+                    a._send_ws({"type": "disconnect_agent", "requestId": "dc"}),
+                    a._loop
+                )
+                fut.result(timeout=3)
+            except Exception:
+                pass
+        return {"success": True}
+
     def confirm_dialog(self, title, message):
         """原生确认对话框（tkinter，Windows 风格）"""
         import tkinter as tk

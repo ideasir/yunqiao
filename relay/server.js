@@ -1089,9 +1089,25 @@ wss.on('connection', (ws, req, user) => {
         if (agentMessages.length > 200) agentMessages.shift();
         console.error(`[message] from ${device.name}: ${(msg.text || '').slice(0, 50)}`);
         sendJSON(ws, { type: 'agent_message_result', requestId, success: true });
-        // 尽量即时通知在线的 Agent 会话有新消息
         notifyAgentsNewMessage(device.userId);
       }
+      return;
+    }
+    if (type === 'disconnect_agent') {
+      // 客户端主动断开所有 Agent SSE 连接
+      const device = devices.get(deviceId);
+      if (device) {
+        for (const [sid, entry] of transports) {
+          if (entry.userId === device.userId) {
+            transports.delete(sid);
+            try { entry.transport.close(); } catch {}
+            broadcastToDevices({ type: 'agent_disconnected' }, device.userId);
+            console.error(`[agent] 客户端主动断开 Agent 连接: ${sid}`);
+          }
+        }
+        scheduleActivityPush(device.userId);
+      }
+      sendJSON(ws, { type: 'disconnect_agent_result', requestId, success: true });
       return;
     }
     if (type === 'update_code') {
