@@ -124,19 +124,26 @@ async function main() {
         }
       }
     } else if (action === 'listen') {
-      // 常驻模式：每 2 秒轮询客户端消息（push 不可靠时用 poll）
+      // 常驻模式：保持连接，每 2 秒拉取消息，断连自动重连
       console.log('[listen] 已连接，等待客户端消息...');
       let lastMsgId = '';
-      setInterval(async () => {
-        try {
-          const result = await client.callTool({ name: 'get_client_messages', arguments: {} });
-          const text = result.content?.[0]?.text || '';
-          if (text && !text.includes('暂无未读消息') && text !== lastMsgId) {
-            lastMsgId = text.slice(0, 50);
-            console.log('\n📩 客户端消息:\n' + text);
+      
+      const poll = async () => {
+        while (true) {
+          try {
+            const result = await client.callTool({ name: 'get_client_messages', arguments: {} });
+            const text = result.content?.[0]?.text || '';
+            if (text && !text.includes('没有新消息') && text !== lastMsgId) {
+              lastMsgId = text.slice(0, 80);
+              console.log('\n📩 ' + text);
+            }
+          } catch (e) {
+            console.error('[listen] 轮询错误:', e.message);
           }
-        } catch {}
-      }, 2000);
+          await new Promise(r => setTimeout(r, 2000));
+        }
+      };
+      poll();
       process.stdin.resume();
       return;
     } else {
