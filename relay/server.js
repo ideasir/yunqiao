@@ -90,6 +90,13 @@ function scheduleActivityPush(userId) {
   }, 200));
 }
 
+// 定期推送活跃状态，保持呼吸灯同步（即使之前的推送丢失）
+setInterval(() => {
+  for (const userId of Object.keys(users)) {
+    scheduleActivityPush(userId);
+  }
+}, 30000); // 每 30 秒
+
 // ─── 异步任务 ───────────────────────────────────
 const TASK_TIMEOUT = parseInt(process.env.TASK_TIMEOUT || '1800000', 10);       // 运行超时，默认 30 分钟
 const TASK_RESULT_TTL = parseInt(process.env.TASK_RESULT_TTL || '900000', 10);  // 结果保留，默认 15 分钟
@@ -1048,6 +1055,8 @@ wss.on('connection', (ws, req, user) => {
       delete u._lastDisconnectAt;
       console.error(`[device] registered: ${name} (${deviceId}) user:${user.userId} code:${authCode || 'none'}`);
       sendJSON(ws, { type: 'register_result', requestId, success: true, deviceId });
+      // 重连后立即推送当前活跃状态（呼吸灯同步）
+      scheduleActivityPush(user.userId);
       return;
     }
     if (type === 'agent_message') {
