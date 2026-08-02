@@ -1063,6 +1063,8 @@ function handleBridge(action, data) {
       if (cp) { cp.style.color = '#4ade80'; cp.style.textShadow = '0 0 8px rgba(74,222,128,0.3)'; }
       health.relay = 'on';
       health.relayLatency = data.latency || 0;
+      // 重置呼吸灯为全灰（等待服务器推送真实状态）
+      renderActivityDots({ connections: 0, maxConnections: 10 });
       updateHealth();
     } else {
       dot.className = 'w-1.5 h-1.5 rounded-full bg-[#666]';
