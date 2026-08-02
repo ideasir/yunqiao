@@ -1129,10 +1129,12 @@ function copyDiagInfo() {
 function renderActivityDots(a) {
   var el = document.getElementById('activityDots');
   if (!el) return;
-  // 防御：无数据或连接数为 0 时全灰
-  var total = (a && typeof a.maxConnections === 'number') ? a.maxConnections : 10;
-  var used = (a && typeof a.connections === 'number') ? Math.min(total, a.connections) : 0;
-  var busy = used > 0 && (((a && a.pendingCalls) || 0) + ((a && a.runningTasks) || 0)) > 0;
+  // 呼吸灯 = 活跃任务数（runningTasks + pendingCalls），不是 SSE 连接数
+  var total = (a && typeof a.maxConnections === 'number') ? a.maxConnections : 50;
+  var running = (a && typeof a.runningTasks === 'number') ? a.runningTasks : 0;
+  var pending = (a && typeof a.pendingCalls === 'number') ? a.pendingCalls : 0;
+  var used = Math.min(total, running + pending);
+  var busy = used > 0;
   var html = '';
   var center = (total - 1) / 2;
   for (var i = 0; i < total; i++) {
@@ -1145,8 +1147,7 @@ function renderActivityDots(a) {
     }
   }
   el.innerHTML = html;
-  el.title = '活跃: ' + used + '/' + total + (a && a.runningTasks ? ' 任务' + a.runningTasks : '') + (a && a.pendingCalls ? ' 调用' + a.pendingCalls : '');
-  // debug
+  el.title = '活跃: ' + used + '/' + total + ' (任务' + running + ' 调用' + pending + ')';
   var dbg = document.getElementById('debugDots');
   if (dbg) dbg.textContent = '[' + used + '/' + total + ']';
 }
