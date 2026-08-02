@@ -1034,6 +1034,18 @@ wss.on('connection', (ws, req, user) => {
         connectedAt: new Date().toISOString(), latency: 0,
         authFails: 0, authLockUntil: null,
       });
+      // 短断重连（<10分钟）：保留旧 ticket，MCP 地址不变
+      const u = users[user.userId];
+      const shortReconnect = u && u._lastDisconnectAt && (Date.now() - u._lastDisconnectAt < 600000);
+      if (shortReconnect) {
+        console.error(`[device] short reconnect（${Math.round((Date.now() - u._lastDisconnectAt) / 1000)}s），MCP 地址不变`);
+      } else if (u && u._lastDisconnectAt) {
+        // 长断：作废旧 ticket
+        u.mcpTicket = null;
+        saveUsers();
+        console.error(`[device] long disconnect（${Math.round((Date.now() - u._lastDisconnectAt) / 1000)}s），旧 ticket 作废`);
+      }
+      delete u._lastDisconnectAt;
       console.error(`[device] registered: ${name} (${deviceId}) user:${user.userId} code:${authCode || 'none'}`);
       sendJSON(ws, { type: 'register_result', requestId, success: true, deviceId });
       return;
@@ -1084,12 +1096,19 @@ wss.on('connection', (ws, req, user) => {
       return;
     }
     if (type === 'get_mcp_ticket') {
-      // 客户端请求新的动态 MCP 地址 ticket（旧的作废，只有最新有效）
+      // 返回当前有效的 MCP 地址 ticket（如有则复用，无则生成）
       const device = devices.get(deviceId);
       if (device) {
-        const ticket = newMcpTicket(device.userId);
-        authCache.delete(device.userId);  // 新 ticket，旧缓存失效
-        console.error(`[ticket] 用户 ${device.userId} 生成新 MCP 地址 ticket（旧地址作废）`);
+        const u = users[device.userId];
+        let ticket = u?.mcpTicket;
+        if (!ticket) {
+          ticket = randomBytes(16).toString('hex');
+          if (u) { u.mcpTicket = ticket; saveUsers(); }
+          console.error(`[ticket] 用户 ${device.userId} 生成新 MCP 地址 ticket`);
+        } else {
+          console.error(`[ticket] 用户 ${device.userId} 复用已有 ticket`);
+        }
+        authCache.delete(device.userId);
         sendJSON(ws, { type: 'mcp_ticket', requestId, success: true, ticket });
       } else {
         sendJSON(ws, { type: 'mcp_ticket', requestId, success: false, error: 'device not registered' });
@@ -1158,7 +1177,10 @@ wss.on('connection', (ws, req, user) => {
     const device = devices.get(deviceId);
     if (device) {
       console.error(`[device] disconnected: ${device.name} (${deviceId})`);
-      authCache.delete(device.userId);  // 设备断开，清除 auth 缓存
+      authCache.delete(device.userId);
+      // 记录断开时间，用于判断短断/长断
+      const u = users[device.userId];
+      if (u) u._lastDisconnectAt = Date.now();
     }
     // 该设备正在运行的任务标记失败（防悬空任务永久占并发名额）
     for (const [tid, t] of tasks) {
