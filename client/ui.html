@@ -1078,6 +1078,11 @@ function handleBridge(action, data) {
       var rad = document.getElementById('relayAgentDot');
       if (rad) { rad.classList.add('hidden'); }
       addLog('info', '中转服务器已断开');
+      // 清除延迟显示
+      var rl = document.getElementById('relayLatency');
+      if (rl) { rl.textContent = '-- ms'; rl.style.color = '#555'; }
+      var rcl = document.getElementById('relayClientLatency');
+      if (rcl) { rcl.textContent = '-- ms'; rcl.style.color = '#555'; }
       // 熄灭 WSS 协议标签
       var rw = document.getElementById('relayProtoWSS');
       if (rw) { rw.style.color = '#555'; rw.style.textShadow = ''; }
