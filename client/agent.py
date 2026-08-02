@@ -627,8 +627,8 @@ class Agent:
         # 检测绝对路径：Windows 盘符 C:\ 或 C:/（用负向后顾排除 URL 如 https:// 中的 s:/）
         if re.search(r'(?<![A-Za-z])[A-Za-z]:[\\/]', command):
             return False, "工作区模式禁止使用绝对路径"
-        # 检测 Linux/macOS 绝对路径 /path（要求 / 前是行首/空格/命令连接符，排除 URL 和路径分隔 a/b）
-        if re.search(r'(?:^|\s|[&|;(])/(?:[A-Za-z0-9_\-]|$)', command):
+        # 检测 Linux/macOS 绝对路径 /path（排除 Windows 开关 /X 和 URL；要求路径至少两个字符）
+        if re.search(r'(?:^|\s|[&|;(])/(?:[A-Za-z0-9_\-]{2,}|[A-Za-z0-9_\-]+/)', command):
             return False, "工作区模式禁止使用绝对路径"
         # 检测 .. 逃逸（要求 .. 前是行首/空格/命令连接符，排除 a...b 等文件名误报）
         if re.search(r'(?:^|\s|[&|;(])\.\.(?:[\\/]|[^\w]|$)', command):

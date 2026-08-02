@@ -13,8 +13,8 @@
  *   node yunqiao-client.mjs call get_device_info '{"deviceId":"xxx"}'
  */
 
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+import { Client } from '/opt/node-v24.11.1-linux-x64/lib/node_modules/mcporter/node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js';
+import { SSEClientTransport } from '/opt/node-v24.11.1-linux-x64/lib/node_modules/mcporter/node_modules/@modelcontextprotocol/sdk/dist/esm/client/sse.js';
 
 // 从全局环境变量读取验证码
 const AUTH_CODE = process.env.YUNQIAO_CODE || '';
