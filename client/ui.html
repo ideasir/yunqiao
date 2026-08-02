@@ -1115,13 +1115,17 @@ function renderActivityDots(a) {
   var total = (a && a.maxConnections) || 10;
   var used = (a && a.connections) || 0;
   var busy = (((a && a.pendingCalls) || 0) + ((a && a.runningTasks) || 0)) > 0;
-  var anim = busy ? 'blink-fast' : 'animate-pulse';
   var html = '';
+  // 从中间往两边扩散：计算每盏灯到中心的距离，延迟 = 距离 * 70ms
+  var center = (total - 1) / 2;
   for (var i = 0; i < total; i++) {
+    var dist = Math.abs(i - center);
+    var delay = Math.round(dist * 80) + 'ms';
     if (i < used) {
-      html += '<span class="w-1.5 h-1.5 rounded-full inline-block bg-[#4ade80] ' + anim + '" style="animation-delay:' + (i * 70) + 'ms"></span>';
+      var cls = busy ? 'blink-fast' : 'animate-pulse';
+      html += '<span class="w-1.5 h-1.5 rounded-full inline-block bg-[#4ade80] ' + cls + '" style="animation-delay:' + delay + '"></span>';
     } else {
-      html += '<span class="w-1.5 h-1.5 rounded-full inline-block bg-[#2a2a2a]"></span>';
+      html += '<span class="w-1.5 h-1.5 rounded-full inline-block bg-[#2a2a2a]" title="空闲"></span>';
     }
   }
   el.innerHTML = html;

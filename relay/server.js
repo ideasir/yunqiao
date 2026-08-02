@@ -941,12 +941,20 @@ const httpServer = createServer(async (req, res) => {
       }
       const mcpServer = createMcpServer(userId, { isAdminAuth, authedDeviceId: authedDevice.id });
       const transport = new SSEServerTransport(MCP_MESSAGE_PATH, res);
-      transports.set(transport.sessionId, { server: mcpServer, transport, userId, lastActive: Date.now() });
-      res.on('close', () => {
-        transports.delete(transport.sessionId);
-        broadcastToDevices({ type: 'agent_disconnected' }, userId);
-        scheduleActivityPush(userId);
-      });
+      const sid = transport.sessionId;
+      transports.set(sid, { server: mcpServer, transport, userId, lastActive: Date.now() });
+      
+      // 双保险：res close 和 req close 都触发清理
+      const cleanupTransport = () => {
+        if (transports.has(sid)) {
+          transports.delete(sid);
+          broadcastToDevices({ type: 'agent_disconnected' }, userId);
+          scheduleActivityPush(userId);
+        }
+      };
+      res.on('close', cleanupTransport);
+      req.on('close', cleanupTransport);
+      
       await mcpServer.connect(transport);
       let latency = 0;
       for (const device of devices.values()) {
