@@ -364,12 +364,11 @@ class Agent:
                 self.connected = False
                 self._ws = None
                 retry += 1
-                delay = min(60, 2 ** min(retry, 6))  # 2s, 4s, 8s, ..., 64s max
-                self._emit(self.on_log, f"连接断开（第{retry}次）: {e}，{delay}s 后重连")
+                self._emit(self.on_log, f"[重连] 第{retry}次断开: {e}")
                 self._emit(self.on_status, {"connected": False})
             
             if self._running:
-                await asyncio.sleep(max(2, min(60, 2 ** min(retry, 6))))
+                await asyncio.sleep(2)  # 立即重连，短暂间隔
     
     async def _handle_message(self, msg):
         """处理服务器下发的消息"""

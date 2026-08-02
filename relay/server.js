@@ -977,18 +977,12 @@ const httpServer = createServer(async (req, res) => {
 const wss = new WebSocketServer({ noServer: true });
 
 // 心跳：发 ping 计延迟；若 pong 超时（默认 3 个周期 = 45s）判定假死连接，主动断开
-// （TCP 假死时 ws close 可能不触发，残留会一直占着设备名额）
-const PONG_TIMEOUT = parseInt(process.env.PONG_TIMEOUT || '45000', 10);
+// 心跳：仅用于计算延迟，不主动断开连接
+// 客户端不主动断开则连接永不断（TCP 层面由 OS keepalive 保证）
 const heartbeat = setInterval(() => {
   const now = Date.now();
   for (const [id, device] of devices) {
     if (device.ws.readyState !== WebSocket.OPEN) continue;
-    // 上次 ping 后一直没收到 pong，超过阈值判定假死并断开
-    if (device._lastPingAt && now - device._lastPingAt > PONG_TIMEOUT) {
-      console.error(`[device] heartbeat timeout, closing: ${device.name} (${id})`);
-      device.ws.terminate();
-      continue;
-    }
     device._lastPingAt = now;
     device.ws.ping();
   }
