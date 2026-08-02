@@ -244,14 +244,18 @@ function rejectDeviceRequests(deviceId, reason) {
 
 // 客户端消息 → 在线 Agent 推送（SSE 短连接存活期间可即时收到通知，兜底靠 get_client_messages 轮询）
 function notifyAgentsNewMessage(userId) {
-  const unread = agentMessages.filter(m => m.userId === userId && !m.read).length;
+  const unread = agentMessages.filter(m => m.userId === userId && !m.read);
+  if (unread.length === 0) return;
   for (const { transport, userId: sessionUserId } of transports.values()) {
     if (sessionUserId !== userId) continue;
-    transport.send({
-      jsonrpc: '2.0',
-      method: 'notifications/message',
-      params: { unread },
-    }).catch(() => {});
+    // 推送完整消息内容（不只是计数），Agent 可即时看到
+    for (const m of unread) {
+      transport.send({
+        jsonrpc: '2.0',
+        method: 'notifications/message',
+        params: { id: m.id, text: m.text, urgent: m.urgent, deviceName: m.deviceName, time: m.time },
+      }).catch(() => {});
+    }
   }
 }
 
