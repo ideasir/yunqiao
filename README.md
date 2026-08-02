@@ -95,6 +95,8 @@ node skills/yunqiao-client.mjs <配对码> list
 
 部署到一台有公网 IP 的 VPS 上。
 
+> ⚠️ **首次启动必须设置 `RELAY_KEY` 环境变量**作为管理员密钥，否则服务器拒绝启动（已移除默认密钥，防止未配置的服务器用全网已知密码裸跑）。后续重启无需再设（密钥已持久化到 `.users.json`）。
+
 ```bash
 cd relay
 npm install
