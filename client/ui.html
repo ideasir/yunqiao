@@ -1143,7 +1143,7 @@ function renderActivityDots(a) {
     var dist = Math.abs(i - center);
     var delay = Math.round(dist * 80) + 'ms';
     if (i >= start && i < start + used) {
-      html += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#4ade80;animation:' + (busy ? 'blink-fast' : 'pulse') + ' 2s ease-in-out infinite;animation-delay:' + delay + '"></span>';
+      html += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#4ade80;animation:' + (busy ? 'blinkFast' : 'pulse') + ' 0.4s ease-in-out infinite;animation-delay:' + delay + '"></span>';
     } else {
       html += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#2a2a2a"></span>';
     }
