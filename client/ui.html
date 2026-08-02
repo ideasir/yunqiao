@@ -302,9 +302,9 @@ function setLogFilter(f) {
 }
 function addLog(type, text) {
   var _now = Date.now();
-  // 只去重 3 秒内同类型同文本的重复推送（防事件刷屏）；不同文本/不同时间正常记录，
-  // 否则用户连续发两条相同消息时第二条日志会被吞掉
-  if (text === _lastLogText && type === _lastLogType && _now - _lastLogTime < 3000) return;
+  // 去重：3 秒内同类型同文本跳过（但连接/断开事件除外）
+  if (text === _lastLogText && type === _lastLogType && _now - _lastLogTime < 3000
+      && !text.includes('中转服务器')) return;
   _lastLogText = text;
   _lastLogTime = _now;
   _lastLogType = type;
