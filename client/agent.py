@@ -322,7 +322,7 @@ class Agent:
                         self.relay_url,
                         extra_headers={"X-Key": self.relay_key, "X-PSK": self.relay_key},
                         ping_interval=15,
-                        ping_timeout=10,
+                        ping_timeout=30,
                         close_timeout=5
                     )
                 except TypeError:
@@ -330,7 +330,7 @@ class Agent:
                         self.relay_url,
                         additional_headers={"X-Key": self.relay_key, "X-PSK": self.relay_key},
                         ping_interval=15,
-                        ping_timeout=10,
+                        ping_timeout=30,
                         close_timeout=5
                     )
                 async with ws:
