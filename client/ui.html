@@ -1129,9 +1129,10 @@ function copyDiagInfo() {
 function renderActivityDots(a) {
   var el = document.getElementById('activityDots');
   if (!el) return;
-  var total = (a && a.maxConnections) || 10;
-  var used = Math.min(total, (a && a.connections) || 0);
-  var busy = (((a && a.pendingCalls) || 0) + ((a && a.runningTasks) || 0)) > 0;
+  // 防御：无数据或连接数为 0 时全灰
+  var total = (a && typeof a.maxConnections === 'number') ? a.maxConnections : 10;
+  var used = (a && typeof a.connections === 'number') ? Math.min(total, a.connections) : 0;
+  var busy = used > 0 && (((a && a.pendingCalls) || 0) + ((a && a.runningTasks) || 0)) > 0;
   var html = '';
   var center = (total - 1) / 2;
   for (var i = 0; i < total; i++) {
