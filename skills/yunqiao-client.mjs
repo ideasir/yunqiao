@@ -127,15 +127,12 @@ async function main() {
       // 常驻模式：保持 SSE 连接，接收客户端实时消息
       console.log('[listen] 已连接，等待客户端消息...');
       process.stdin.resume();
-      // 监听 SSE 通知
+      // 监听 JSON-RPC 通知（客户端消息推送）
       transport.onmessage = (msg) => {
-        try {
-          const data = JSON.parse(msg.data);
-          if (data.method === 'notifications/message') {
-            const { text, urgent, deviceName } = data.params || {};
-            console.log('\n' + (urgent ? '⚠️ [紧急] ' : '📩 ') + deviceName + ': ' + text);
-          }
-        } catch {}
+        if (msg.method === 'notifications/message') {
+          const { text, urgent, deviceName } = msg.params || {};
+          console.log('\n' + (urgent ? '⚠️ [紧急] ' : '📩 ') + deviceName + ': ' + text);
+        }
       };
       // 30 秒保活
       setInterval(async () => { try { await client.ping(); } catch {} }, 30000);
