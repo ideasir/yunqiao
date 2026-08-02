@@ -953,6 +953,8 @@ function handleBridge(action, data) {
   }
   else if (action === 'agent_activity') {
     renderActivityDots(data);
+    var dbg = document.getElementById('debugDots');
+    if (dbg) dbg.textContent = '[r:' + (data.runningTasks||0) + ' p:' + (data.pendingCalls||0) + ' c:' + (data.connections||0) + ']';
   }
   else if (action === 'sync_status') {
     state.pairCode = data.pairCode || state.pairCode;
