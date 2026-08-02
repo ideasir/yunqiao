@@ -633,34 +633,43 @@ function getMcpBase() {
   else if (!base.startsWith('http')) base = 'https://' + base;
   return base.replace(/\/device$/, '').replace(/\/$/, '');
 }
-function copyPairCode() {
-  // 复制动态 MCP 地址 + 配对码（先向服务器要新 ticket，旧地址作废）
-  if (window.pywebview && window.pywebview.api && window.pywebview.api.get_mcp_ticket) {
-    window.pywebview.api.get_mcp_ticket().then(function(r) {
-      if (r && r.success && r.ticket) {
-        var url = getMcpBase() + '/mcp/' + r.ticket;
-        copyTextToClipboard('云桥地址: ' + url + '\n配对码: ' + state.pairCode, '已复制：动态 MCP 地址 + 配对码（旧地址已作废）');
-      } else {
-        addLog('err', '获取 MCP 地址失败: ' + ((r && r.error) || '请检查中继连接'));
-      }
-    }).catch(function() { addLog('err', '获取 MCP 地址失败'); });
-  } else {
-    copyTextToClipboard('配对码: ' + state.pairCode, '配对码已复制');
+function fetchMcpTicket(forceRefresh) {
+  // 缓存 MCP ticket，避免每次复制都作废旧地址
+  if (!forceRefresh && state.mcpTicket && state.mcpUrl) {
+    return Promise.resolve(state.mcpUrl);
   }
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.get_mcp_ticket) {
+    return window.pywebview.api.get_mcp_ticket().then(function(r) {
+      if (r && r.success && r.ticket) {
+        state.mcpTicket = r.ticket;
+        state.mcpUrl = getMcpBase() + '/mcp/' + r.ticket;
+        return state.mcpUrl;
+      }
+      throw new Error((r && r.error) || '获取 MCP 地址失败');
+    });
+  }
+  return Promise.reject(new Error('API 不可用'));
+}
+function refreshMcpTicket() {
+  state.mcpTicket = '';
+  state.mcpUrl = '';
+  fetchMcpTicket(true).then(function(url) {
+    addLog('info', 'MCP 地址已刷新（旧地址已作废）');
+  }).catch(function(e) {
+    addLog('err', '刷新 MCP 地址失败: ' + e.message);
+  });
+}
+function copyPairCode() {
+  // 复制动态 MCP 地址 + 配对码（缓存 ticket，不重复生成）
+  fetchMcpTicket(false).then(function(url) {
+    copyTextToClipboard('云桥地址: ' + url + '\n配对码: ' + state.pairCode, '已复制：动态 MCP 地址 + 配对码');
+  }).catch(function(e) { addLog('err', '获取 MCP 地址失败: ' + e.message); });
 }
 function copyMcpUrl() {
-  // 单独复制动态 MCP 地址（仅第一次连接需要发给智能体）
-  if (window.pywebview && window.pywebview.api && window.pywebview.api.get_mcp_ticket) {
-    window.pywebview.api.get_mcp_ticket().then(function(r) {
-      if (r && r.success && r.ticket) {
-        copyTextToClipboard(getMcpBase() + '/mcp/' + r.ticket, '动态 MCP 地址已复制（旧地址已作废）');
-      } else {
-        addLog('err', '获取 MCP 地址失败: ' + ((r && r.error) || '请检查中继连接'));
-      }
-    }).catch(function() { addLog('err', '获取 MCP 地址失败'); });
-  } else {
-    addLog('err', '当前环境不支持获取动态 MCP 地址');
-  }
+  // 单独复制动态 MCP 地址
+  fetchMcpTicket(false).then(function(url) {
+    copyTextToClipboard(url, '动态 MCP 地址已复制');
+  }).catch(function(e) { addLog('err', '获取 MCP 地址失败: ' + e.message); });
 }
 function refreshPairCode() {
   if (window.pywebview && window.pywebview.api && window.pywebview.api.refresh_pair_code) {
@@ -1029,6 +1038,9 @@ function handleBridge(action, data) {
       if (cd) cd.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
       addLog('done', '中转服务器已连接');
       addLog('info', '配对码已推送: ' + state.pairCode + '，请复制发送给 Agent');
+      // 连接时清除缓存的 MCP ticket（配对码可能变了，下次复制重新生成）
+      state.mcpTicket = '';
+      state.mcpUrl = '';
       // 点亮 WSS 协议标签
       var rw = document.getElementById('relayProtoWSS');
       if (rw) { rw.style.color = '#4ade80'; rw.style.textShadow = '0 0 8px rgba(74,222,128,0.3)'; }
