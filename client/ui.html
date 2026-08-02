@@ -1219,10 +1219,12 @@ function toggleConnect() {
 }
 function configRelay() {
   document.getElementById('modalRelayUrl').value = document.getElementById('relayUrl').textContent;
-  // 尝试从后端读取当前配置
+  document.getElementById('modalRelayKey').value = state.relayKey || '';
+  document.getElementById('modalAutoConnect').checked = state.autoConnect || false;
+  // 异步读取后端配置（覆盖初始值）
   if (window.pywebview && window.pywebview.api) {
     window.pywebview.api.get_settings().then(function(cfg) {
-      if (cfg && cfg.key) state.relayKey = cfg.key;
+      if (cfg && cfg.key) { state.relayKey = cfg.key; document.getElementById('modalRelayKey').value = cfg.key; }
       if (cfg && cfg.relayUrl) document.getElementById('modalRelayUrl').value = cfg.relayUrl;
       if (cfg && typeof cfg.autoConnect !== 'undefined') {
         state.autoConnect = cfg.autoConnect;
@@ -1230,8 +1232,6 @@ function configRelay() {
       }
     }).catch(function() {});
   }
-  document.getElementById('modalRelayKey').value = state.relayKey || '';
-  document.getElementById('modalAutoConnect').checked = state.autoConnect || false;
   var overlay = document.getElementById('configModal');
   var content = document.getElementById('configModalContent');
   overlay.style.opacity = '1';
