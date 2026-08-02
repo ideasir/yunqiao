@@ -354,6 +354,7 @@ def main():
         min_size=(800, 500),
         resizable=True,
         frameless=True,   # 无系统标题栏，用自绘标题栏
+        easy_drag=False,  # 关闭 pywebview 全局 easy_drag（默认 True 会让整个窗口任意位置可拖，日志区无法选字）；改用 .pywebview-drag-region class 限定仅标题栏可拖
         shadow=True,      # 无边框窗口的阴影边框
     )
 

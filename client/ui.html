@@ -1079,13 +1079,9 @@ function windowMinimize() {
 function windowClose() {
   if (window.pywebview && window.pywebview.api && window.pywebview.api.window_close) window.pywebview.api.window_close();
 }
-// 标题栏拖拽：手动调 pywebview API，不依赖 easy_drag，日志区自然支持选字
-document.querySelector('header.pywebview-drag-region').addEventListener('mousedown', function(e) {
-  if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
-  if (window.pywebview && window.pywebview.api && window.pywebview.api.start_drag) {
-    window.pywebview.api.start_drag();
-  }
-});
+// 标题栏拖拽由 pywebview 原生处理（.pywebview-drag-region class + easy_drag=False），
+// 仅限标题栏可拖，日志区等正文区域不受影响，可正常拖动选字。
+// 不再手动调 start_drag()——它会与原生 onBodyMouseDown 冲突，且曾导致全局鼠标被接管。
 function copyDiagInfo() {
   var relayAddr = document.getElementById('relayUrl') ? document.getElementById('relayUrl').textContent : '-';
   var relayState = health.relay === 'on' ? '已连接' : (health.relay === 'connecting' ? '连接中' : '未连接');
