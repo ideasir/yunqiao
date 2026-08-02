@@ -124,28 +124,43 @@ async function main() {
         }
       }
     } else if (action === 'listen') {
-      // 常驻模式：保持连接，每 2 秒拉取消息，断连自动重连
-      console.log('[listen] 已连接，等待客户端消息...');
-      let lastMsgId = '';
-      
-      const poll = async () => {
-        while (true) {
-          try {
-            const result = await client.callTool({ name: 'get_client_messages', arguments: {} });
-            const text = result.content?.[0]?.text || '';
-            if (text && !text.includes('没有新消息') && text !== lastMsgId) {
-              lastMsgId = text.slice(0, 80);
-              console.log('\n📩 ' + text);
-            }
-          } catch (e) {
-            console.error('[listen] 轮询错误:', e.message);
-          }
-          await new Promise(r => setTimeout(r, 2000));
+      // 在 connect 之前设置 onmessage，避免被 Client 覆盖
+      const rawOnMessage = (msg) => {
+        if (msg && msg.method === 'notifications/message') {
+          const { text, urgent, deviceName } = msg.params || {};
+          console.log('\n' + (urgent ? '⚠️ ' : '📩 ') + (deviceName || '') + ': ' + text);
         }
       };
-      poll();
-      process.stdin.resume();
-      return;
+      
+      try {
+        await client.connect(transport);
+        transport.onmessage = rawOnMessage;
+        console.log('[listen] 已连接，等待客户端消息...');
+        
+        // 2 秒轮询兜底
+        let lastMsgId = '';
+        const poll = async () => {
+          while (true) {
+            try {
+              const result = await client.callTool({ name: 'get_client_messages', arguments: {} });
+              const text = result.content?.[0]?.text || '';
+              if (text && !text.includes('没有新消息') && text !== lastMsgId) {
+                lastMsgId = text.slice(0, 80);
+                console.log('\n📩 ' + text);
+              }
+            } catch (e) {
+              console.error('[listen] 轮询错误:', e.message);
+            }
+            await new Promise(r => setTimeout(r, 2000));
+          }
+        };
+        poll();
+        process.stdin.resume();
+        return;
+      } catch (e) {
+        console.error('[listen] 连接失败:', e.message);
+        process.exit(1);
+      }
     } else {
       console.error('未知操作: ' + action + '（可用: list, call, messages, listen）');
       process.exit(1);
