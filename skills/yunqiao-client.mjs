@@ -123,8 +123,25 @@ async function main() {
           }
         }
       }
+    } else if (action === 'listen') {
+      // 常驻模式：保持 SSE 连接，接收客户端实时消息
+      console.log('[listen] 已连接，等待客户端消息...');
+      process.stdin.resume();
+      // 监听 SSE 通知
+      transport.onmessage = (msg) => {
+        try {
+          const data = JSON.parse(msg.data);
+          if (data.method === 'notifications/message') {
+            const { text, urgent, deviceName } = data.params || {};
+            console.log('\n' + (urgent ? '⚠️ [紧急] ' : '📩 ') + deviceName + ': ' + text);
+          }
+        } catch {}
+      };
+      // 30 秒保活
+      setInterval(async () => { try { await client.ping(); } catch {} }, 30000);
+      return;
     } else {
-      console.error(`未知操作: ${action}（可用: list, call, messages）`);
+      console.error('未知操作: ' + action + '（可用: list, call, messages, listen）');
       process.exit(1);
     }
 
