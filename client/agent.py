@@ -309,9 +309,10 @@ class Agent:
         self._loop.run_until_complete(self._connect())
     
     async def _connect(self):
-        """WebSocket 连接循环"""
+        """WebSocket 连接循环（指数退避重连）"""
         import websockets
         self._emit(self.on_log, f"正在连接 {self.relay_url}")
+        retry = 0
         
         while self._running:
             try:
@@ -320,17 +321,22 @@ class Agent:
                     ws = await websockets.connect(
                         self.relay_url,
                         extra_headers={"X-Key": self.relay_key, "X-PSK": self.relay_key},
-                        ping_interval=15
+                        ping_interval=15,
+                        ping_timeout=10,
+                        close_timeout=5
                     )
                 except TypeError:
                     ws = await websockets.connect(
                         self.relay_url,
                         additional_headers={"X-Key": self.relay_key, "X-PSK": self.relay_key},
-                        ping_interval=15
+                        ping_interval=15,
+                        ping_timeout=10,
+                        close_timeout=5
                     )
                 async with ws:
                     self._ws = ws
                     self.connected = True
+                    retry = 0  # 重置重试计数
                     latency = int((time.time() - t0) * 1000)
                     self._emit(self.on_log, "已连接到中继服务器")
                     self._emit(self.on_status, {"connected": True, "latency": latency})
@@ -357,11 +363,13 @@ class Agent:
             except Exception as e:
                 self.connected = False
                 self._ws = None
-                self._emit(self.on_log, f"连接断开: {e}")
+                retry += 1
+                delay = min(60, 2 ** min(retry, 6))  # 2s, 4s, 8s, ..., 64s max
+                self._emit(self.on_log, f"连接断开（第{retry}次）: {e}，{delay}s 后重连")
                 self._emit(self.on_status, {"connected": False})
             
             if self._running:
-                await asyncio.sleep(5)
+                await asyncio.sleep(max(2, min(60, 2 ** min(retry, 6))))
     
     async def _handle_message(self, msg):
         """处理服务器下发的消息"""
