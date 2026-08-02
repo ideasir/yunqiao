@@ -125,11 +125,14 @@ const taskCleanup = setInterval(() => {
 const sseCleanup = setInterval(() => {
   const now = Date.now();
   for (const [sid, entry] of transports) {
+    // 设备在线时不过期 SSE（用户可随时通过客户端对话）
+    const hasDevice = Array.from(devices.values()).some(d => d.userId === entry.userId && d.ws && d.ws.readyState === 1);
+    if (hasDevice) continue;
     if (now - (entry.lastActive || now) > SSE_IDLE_TIMEOUT) {
       transports.delete(sid);
       try { entry.transport.close(); } catch {}
       broadcastToDevices({ type: 'agent_disconnected' }, entry.userId);
-      scheduleActivityPush(entry.userId);  // 僵尸清理后更新活跃度（否则灯残留一直闪）
+      scheduleActivityPush(entry.userId);
       console.error(`[sse] 空闲连接已清理: ${sid}`);
     }
   }
