@@ -52,6 +52,35 @@ class SessionManager:
         self.sessions = []
         self.default_id = None
 
+    def _save_path(self):
+        return os.path.join(os.environ.get("YUNQIAO_CONFIG", str(Path.home() / ".yunqiao")), "sessions.json")
+
+    def load(self):
+        p = self._save_path()
+        if os.path.exists(p):
+            try:
+                data = json.loads(open(p, "r", encoding="utf-8").read())
+                for s_data in data.get("sessions", []):
+                    s = Session(s_data["id"], s_data.get("name", ""), s_data.get("workDir", ""))
+                    s.cwd = s_data.get("cwd", s.workDir)
+                    s.lastActive = s_data.get("lastActive", time.time())
+                    s.alive = s_data.get("alive", True)
+                    self.sessions.append(s)
+                self.default_id = data.get("defaultId")
+            except:
+                pass
+
+    def _save(self):
+        try:
+            p = self._save_path()
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            open(p, "w", encoding="utf-8").write(json.dumps({
+                "sessions": [s.to_dict() for s in self.sessions],
+                "defaultId": self.default_id,
+            }, ensure_ascii=False, indent=2))
+        except:
+            pass
+
     def create(self, work_dir, name=None):
         import uuid
         sid = uuid.uuid4().hex[:8]
@@ -59,6 +88,7 @@ class SessionManager:
         s = Session(sid, name, work_dir)
         self.sessions.append(s)
         self.default_id = sid
+        self._save()
         return {"success": True, "id": sid, "name": name, "workDir": work_dir, "cwd": work_dir}
 
     def get_current(self):
@@ -75,6 +105,7 @@ class SessionManager:
                 self.sessions.remove(s)
                 if self.default_id == sid:
                     self.default_id = self.sessions[0].id if self.sessions else None
+                self._save()
                 return {"success": True}
         return {"success": False, "error": f"会话不存在: {sid}"}
 
@@ -85,6 +116,7 @@ class SessionManager:
         for s in self.sessions:
             if s.id == session_id:
                 self.default_id = session_id
+                self._save()
                 return {"success": True, "sessionId": s.id, "name": s.name, "workDir": s.workDir}
         return {"success": False, "error": f"会话不存在: {session_id}"}
 
@@ -120,6 +152,7 @@ class Agent:
         
         # 会话管理
         self.sessions = SessionManager()
+        self.sessions.load()
         
         # 默认工作区：打包成 exe 时在 exe 旁边（绿色版便携，文件持久）；
         # 源码运行时在项目根。不能用 __file__（PyInstaller 里指向临时解压目录，文件会"消失"）
@@ -129,7 +162,9 @@ class Agent:
             base_dir = Path(__file__).parent.parent  # 项目根
         self.default_work_dir = str(base_dir / 'worker')
         os.makedirs(self.default_work_dir, exist_ok=True)
-        self.sessions.create(self.default_work_dir, '默认工作区')
+        # 只有首次启动（无任何会话）才自动创建默认工作区
+        if not self.sessions.sessions:
+            self.sessions.create(self.default_work_dir, '默认工作区')
         
         # 回调函数（由 desktop.py 设置）
         self.on_log = lambda msg: None       # 日志消息
@@ -515,6 +550,14 @@ class Agent:
         ok, err = self._check_command(command)
         if not ok:
             return {"exitCode": 1, "stdout": "", "stderr": err, "killed": False, "duration": 0}
+        # Windows 编码: 先试 gbk，再 utf-8
+        def _decode(b):
+            if not b: return ""
+            for enc in ['gbk', 'utf-8']:
+                try: return b.decode(enc)
+                except: continue
+            return b.decode('utf-8', errors='replace')
+
         t0 = time.time()
         try:
             proc = await asyncio.create_subprocess_shell(
@@ -527,13 +570,6 @@ class Agent:
                 stdout, stderr = await asyncio.wait_for(
                     proc.communicate(), timeout=timeout / 1000
                 )
-                # Windows 编码: 先试 gbk，再 utf-8
-                def _decode(b):
-                    if not b: return ""
-                    for enc in ['gbk', 'utf-8']:
-                        try: return b.decode(enc)
-                        except: continue
-                    return b.decode('utf-8', errors='replace')
                 return {"exitCode": proc.returncode or 0,
                         "stdout": _decode(stdout),
                         "stderr": _decode(stderr),
@@ -584,22 +620,22 @@ class Agent:
         return resolved == workspace or resolved.startswith(workspace + os.sep)
     
     def _check_command(self, command):
-        """检查命令是否可能逃逸工作区"""
+        """检查命令是否可能逃逸工作区（工作区模式下的软限制，防误操作越界；非安全核心防线）"""
         if self.permission != "workspace":
             return True, ""
         import re
-        # 检测绝对路径 C:\ D:\ / 等
-        if re.search(r'\b[A-Za-z]:\\', command):
+        # 检测绝对路径：Windows 盘符 C:\ 或 C:/（用负向后顾排除 URL 如 https:// 中的 s:/）
+        if re.search(r'(?<![A-Za-z])[A-Za-z]:[\\/]', command):
             return False, "工作区模式禁止使用绝对路径"
-        # 检测 .. 逃逸
-        if re.search(r'(?:^|\s|[&|;])\.\.(?:\\|/|\s|$)', command):
-            return False, "工作区模式禁止使用 .. 逃逸"
-        # 检测 cd 命令
-        if re.search(r'(?:^|\s|[&|;])cd\s', command, re.IGNORECASE):
-            return False, "工作区模式禁止 cd 命令"
-        # 检测 pushd/popd
-        if re.search(r'(?:^|\s|[&|;])(?:pushd|popd)\s', command, re.IGNORECASE):
-            return False, "工作区模式禁止 pushd/popd"
+        # 检测 Linux/macOS 绝对路径 /path（要求 / 前是行首/空格/命令连接符，排除 URL 和路径分隔 a/b）
+        if re.search(r'(?:^|\s|[&|;(])/(?:[A-Za-z0-9_\-]|$)', command):
+            return False, "工作区模式禁止使用绝对路径"
+        # 检测 .. 逃逸（要求 .. 前是行首/空格/命令连接符，排除 a...b 等文件名误报）
+        if re.search(r'(?:^|\s|[&|;(])\.\.(?:[\\/]|[^\w]|$)', command):
+            return False, "工作区模式禁止 .. 逃逸"
+        # 检测切换目录命令：cd/chdir/Set-Location/pushd/popd（含 cd.. cd\ 等无空格形式；不匹配行尾避免 echo cd 误报）
+        if re.search(r'(?:^|\s|[&|;(])(?:cd|chdir|set-location|pushd|popd)(?:\s|\.+|[\\/])', command, re.IGNORECASE):
+            return False, "工作区模式禁止 cd/chdir/Set-Location/pushd/popd 切换目录"
         return True, ""
     
     def _read_file(self, path):
@@ -639,12 +675,22 @@ class Agent:
             uptime = time.time() - psutil.boot_time()
         except:
             total = 0; free = 0; uptime = 0
+        # os.getlogin() 在无 TTY 环境（系统服务/某些容器）会抛 OSError，
+        # 原代码它在 return 字典里、不在上方 try 块内，会直接崩溃并断开连接
+        try:
+            username = os.getlogin()
+        except OSError:
+            import getpass
+            try:
+                username = getpass.getuser()
+            except Exception:
+                username = os.environ.get('USERNAME') or os.environ.get('USER') or 'unknown'
         return {
             "hostname": platform.node(), "platform": sys.platform,
             "arch": platform.machine(), "cpus": os.cpu_count() or 0,
             "totalMem": total, "freeMem": free,
             "uptime": uptime, "homedir": str(Path.home()),
-            "userInfo": {"username": os.getlogin()},
+            "userInfo": {"username": username},
         }
     
     async def _handle_session_op(self, op, payload):

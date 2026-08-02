@@ -101,6 +101,7 @@ npm install
 
 # 自用模式（最简单）
 export PORT=9876
+export RELAY_KEY=请改成你自己的强密钥    # admin 管理员密钥（首次启动必须设置，无默认值）
 node server.js
 ```
 

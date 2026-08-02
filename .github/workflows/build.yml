@@ -28,7 +28,7 @@ jobs:
 
       - name: Build exe
         run: |
-          pyinstaller --onefile --windowed --name "云桥" desktop.py
+          pyinstaller 云桥.spec
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

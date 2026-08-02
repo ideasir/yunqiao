@@ -77,20 +77,21 @@ def get_agent():
     return agent
 
 def start_agent():
-    global agent
-    if agent:
-        agent.stop()
-    agent = None
     a = get_agent()
+    if a._running:
+        # 已在运行中，仅同步状态
+        threading.Timer(0.5, lambda: sync_ui_state(a)).start()
+        return
     a.start()
     # 同步会话和状态到 UI
     threading.Timer(1.0, lambda: sync_ui_state(a)).start()
 
 def sync_ui_state(a):
     sl = a.sessions.list_all()
+    cur = a.sessions.get_current()
     notify_ui("sync_status", {
         "pairCode": a.auth_code,
-        "workDir": a.default_work_dir,
+        "workDir": cur.workDir if cur else a.default_work_dir,
         "sessions": sl.get("sessions", []),
         "currentSessionId": sl.get("defaultId"),
     })
@@ -124,12 +125,14 @@ class Api:
         }
 
     def save_settings(self, key, relay_url, auto_connect=False):
-        global RELAY_URL, RELAY_KEY
+        global RELAY_URL, RELAY_KEY, agent
         RELAY_URL = relay_url
         RELAY_KEY = key
         save_config(relay_url, key, DEVICE_NAME, auto_connect)
         if agent:
-            stop_agent()
+            agent.stop()
+            # 必须置 None，否则下次 get_agent() 返回旧实例，仍用旧的 relay_url/key 重连
+            agent = None
         return {"success": True}
 
     def get_settings(self):
@@ -138,7 +141,7 @@ class Api:
 
     def toggle_connect(self):
         if agent and agent.connected:
-            stop_agent()
+            agent.stop()
             notify_ui("relay_status", {"status": "disconnected"})
             notify_ui("log", {"text": "已断开连接"})
             return {"connected": False}
@@ -217,12 +220,29 @@ class Api:
     def get_sessions(self):
         if agent:
             sl = agent.sessions.list_all()
+            cur = agent.sessions.get_current()
             return {
                 "sessions": sl.get("sessions", []),
                 "currentId": sl.get("defaultId"),
-                "workDir": agent.default_work_dir
+                "workDir": cur.workDir if cur else agent.default_work_dir
             }
-        # Agent 未启动时也返回默认工作区（与 agent.py 一致：exe 旁/worker 或项目根/worker）
+        # Agent 未启动，尝试从磁盘恢复
+        sessions_file = CONFIG_DIR / "sessions.json"
+        if sessions_file.exists():
+            try:
+                data = json.loads(sessions_file.read_text("utf-8"))
+                sessions = data.get("sessions", [])
+                default_id = data.get("defaultId")
+                if sessions:
+                    cur = next((s for s in sessions if s.get("id") == default_id), sessions[0])
+                    return {
+                        "sessions": sessions,
+                        "currentId": default_id,
+                        "workDir": cur.get("workDir") or cur.get("cwd", "")
+                    }
+            except:
+                pass
+        # 无缓存：返回默认
         if getattr(sys, 'frozen', False):
             base = Path(sys.executable).parent
         else:
@@ -258,8 +278,8 @@ class Api:
         result = a.sessions.close(session_id)
         if result.get("success"):
             return {"success": True}
-        # 后端不存在该会话（如未连接时的占位会话）：视为已删除
-        if "不存在" in (result.get("error") or ""):
+        # 会话不存在（已关闭或为占位会话）：视为已删除
+        if isinstance(result.get("error"), str) and "不存在" in result["error"]:
             return {"success": True}
         return {"success": False, "error": result.get("error", "关闭失败")}
 
@@ -276,6 +296,12 @@ class Api:
             agent.set_permission(mode)
             return {"success": True}
         return {"success": False, "error": "Agent 未启动"}
+
+    def start_drag(self):
+        """标题栏拖拽窗口"""
+        if UI:
+            UI.start_drag()
+        return {"success": True}
 
     def window_minimize(self):
         """无边框窗口的最小化"""
@@ -328,7 +354,6 @@ def main():
         min_size=(800, 500),
         resizable=True,
         frameless=True,   # 无系统标题栏，用自绘标题栏
-        easy_drag=True,   # 通过 .pywebview-drag-region 区域拖动窗口
         shadow=True,      # 无边框窗口的阴影边框
     )
 

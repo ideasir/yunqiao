@@ -24,7 +24,15 @@ function loadUsers() {
   }
   // 默认管理员用户
   if (!users['admin']) {
-    users['admin'] = { key: process.env.RELAY_KEY || 'yunqiao-mcp-key-2026', name: '管理员', role: 'admin', createdAt: new Date().toISOString() };
+    // 首次创建 admin 时必须由管理员显式提供 RELAY_KEY，禁止使用任何默认/硬编码密钥，
+    // 否则未配置的服务器会用全网已知的默认密码暴露在公网（原硬编码 'yunqiao-mcp-key-2026' 已移除）。
+    // 注意：仅"首次创建"才校验；若 .users.json 已存在且含 admin 密钥（历史合法持久化），不阻止启动。
+    if (!process.env.RELAY_KEY) {
+      console.error('[fatal] 首次启动必须设置 RELAY_KEY 环境变量作为管理员密钥，拒绝使用默认密钥启动。');
+      console.error('        请执行: export RELAY_KEY="<你自己的强密钥>"  然后重新启动。');
+      process.exit(1);
+    }
+    users['admin'] = { key: process.env.RELAY_KEY, name: '管理员', role: 'admin', createdAt: new Date().toISOString() };
     saveUsers();
   }
   // 为没有 mcpTicket 的用户补齐（新机制：每用户一个当前有效的动态 MCP 地址）
@@ -459,7 +467,9 @@ function withLimits(userId, handler, toolName) {
 }
 // 工具统一包装：限流 + 输出限制 + 未读消息提示
 function wrapTool(userId, handler, toolName) {
-  return withLimits(userId, withMsgHint(userId, handler), toolName);
+  // 先 withLimits（在原始输出上做大小检查/QPS/审计），再 withMsgHint 追加消息提示；
+  // 顺序不能反，否则消息提示会被计入输出大小，导致接近上限的合法结果被误判为"输出过大"而丢弃
+  return withMsgHint(userId, withLimits(userId, handler, toolName));
 }
 
 function createMcpServer(userId, authInfo = {}) {
@@ -735,9 +745,10 @@ function createMcpServer(userId, authInfo = {}) {
     inputSchema: z.object({
       command: z.string().describe('要执行的命令'),
       timeout: z.number().optional().describe('超时（毫秒），默认 30 分钟'),
+      code: z.string().optional().describe('6 位配对码（首次授权需要，已授权会话可省略）'),
     }),
-  }, wrapTool(userId, async ({ command, timeout }) => {
-    const { device, error } = getAuthedDevice(sessionState, userId, undefined, undefined);
+  }, wrapTool(userId, async ({ command, timeout, code }) => {
+    const { device, error } = getAuthedDevice(sessionState, userId, undefined, code);
     if (!device) return { content: [{ type: 'text', text: `Error: ${error}` }], isError: true };
     if (!checkCommandAllowed(command)) return { content: [{ type: 'text', text: 'Error: command not allowed' }], isError: true };
     // 并发上限：每设备同时最多 TASK_MAX_CONCURRENT 个运行中任务
@@ -852,11 +863,23 @@ const httpServer = createServer(async (req, res) => {
       const userId = ticketUser.userId;
       // 配对码验证（连接时即验证，未通过一律拒绝）
       const code = req.headers['x-code'] || url.searchParams.get('code') || '';
-      let authedDevice = null;
-      for (const d of devices.values()) {
-        if (d.userId === userId && checkAuthCode(d, code)) { authedDevice = d; break; }
-      }
-      if (!authedDevice) {
+      // 配对码验证：先无副作用地查找匹配设备，未命中时只对一个设备累计失败，
+      // 避免遍历所有设备时给每个设备 +1 放大锁定（多设备用户被 1 次错误尝试误锁）
+      const userDevices = Array.from(devices.values()).filter(d => d.userId === userId);
+      let authedDevice = userDevices.find(d => d.authCode === code) || null;
+      if (authedDevice) {
+        authedDevice.authFails = 0;
+        authedDevice.authLockUntil = null;
+      } else {
+        const now = Date.now();
+        const target = userDevices.find(d => !d.authLockUntil || now >= d.authLockUntil);
+        if (target) {
+          target.authFails = (target.authFails || 0) + 1;
+          if (target.authFails >= AUTH_MAX_FAILS) {
+            target.authLockUntil = now + AUTH_LOCK_MS;
+            console.error(`[auth] 设备 ${target.id} 配对码失败 ${target.authFails} 次，锁定 ${Math.round(AUTH_LOCK_MS / 60000)} 分钟`);
+          }
+        }
         res.writeHead(401, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ error: '无效的配对码' }));
         return;
