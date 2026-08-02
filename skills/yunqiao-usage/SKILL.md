@@ -11,10 +11,43 @@ description: 云桥（Yunqiao）远程电脑的使用规范——连接中继后
 
 - 配对码是客户端显示的一串 6 位数字（用户会发给你）；
 - **MCP 地址是动态的**：格式为 `https://server/mcp/<ticket>`，用户每次复制都会生成新地址（旧地址作废）。以用户发来的最新地址为准；
-- **连接时必须带配对码**（请求头 `X-Code`，`yunqiao-client.mjs` 用 `YUNQIAO_CODE` 环境变量）；
+- **连接时必须带配对码**：
+  - 方式一（推荐）：放 URL 查询参数 `?code=123456`，如 `https://yunqiao.very.im/mcp/<ticket>?code=123456`
+  - 方式二：请求头 `X-Code: 123456`
+- `yunqiao-client.mjs` 用 `YUNQIAO_CODE` 环境变量或 CLI 传参；
 - 首次调用操作型工具带上配对码完成授权，**之后本会话内的调用可省略配对码**；
 - 换连接（重连）后需重新带码授权一次；
 - 配对码错误会触发防暴力锁定（连续错 5 次锁 5 分钟），不要反复试错。
+
+### MCP 客户端配置示例
+
+**Claude Desktop / Cursor / 其他 SSE 客户端**：
+
+```json
+{
+  "mcpServers": {
+    "yunqiao": {
+      "url": "https://yunqiao.very.im/mcp/<ticket>?code=<配对码>"
+    }
+  }
+}
+```
+
+**OpenClaw / 支持 headers 的客户端**：
+
+```json
+{
+  "mcpServers": {
+    "yunqiao": {
+      "type": "sse",
+      "url": "https://yunqiao.very.im/mcp/<ticket>",
+      "headers": {
+        "X-Code": "<配对码>"
+      }
+    }
+  }
+}
+```
 
 ## 1. 连接后第一步：检查未读消息
 
