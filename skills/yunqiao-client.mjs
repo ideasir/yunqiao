@@ -124,23 +124,20 @@ async function main() {
         }
       }
     } else if (action === 'listen') {
-      // 常驻模式：保持 SSE 连接，接收客户端实时消息
+      // 常驻模式：每 2 秒轮询客户端消息（push 不可靠时用 poll）
       console.log('[listen] 已连接，等待客户端消息...');
+      let lastMsgId = '';
+      setInterval(async () => {
+        try {
+          const result = await client.callTool({ name: 'get_client_messages', arguments: {} });
+          const text = result.content?.[0]?.text || '';
+          if (text && !text.includes('暂无未读消息') && text !== lastMsgId) {
+            lastMsgId = text.slice(0, 50);
+            console.log('\n📩 客户端消息:\n' + text);
+          }
+        } catch {}
+      }, 2000);
       process.stdin.resume();
-      // 直接监听底层 EventSource（MCP SDK 可能不转发 onmessage）
-      if (transport._eventSource) {
-        transport._eventSource.onmessage = (event) => {
-          try {
-            const msg = JSON.parse(event.data);
-            if (msg.method === 'notifications/message') {
-              const { text, urgent, deviceName } = msg.params || {};
-              console.log('\n' + (urgent ? '⚠️ [紧急] ' : '📩 ') + (deviceName || '') + ': ' + text);
-            }
-          } catch {}
-        };
-      }
-      // 30 秒保活
-      setInterval(async () => { try { await client.ping(); } catch {} }, 30000);
       return;
     } else {
       console.error('未知操作: ' + action + '（可用: list, call, messages, listen）');
