@@ -421,6 +421,12 @@ class Agent:
             self._emit(self.on_status, {"agent": "disconnected", "connected": True})
             return
         
+        if msg_type == "device_locked":
+            until = payload.get("until", 0)
+            mins = max(1, round((until - time.time() * 1000) / 60000)) if until > time.time() * 1000 else 0
+            self._emit(self.on_log, f"[安全] 设备被锁定，{mins} 分钟后自动解锁")
+            return
+        
         if msg_type == "execute_command":
             cmd = payload.get("command", "")
             # 工作区模式检查

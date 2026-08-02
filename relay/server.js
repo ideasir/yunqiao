@@ -98,6 +98,11 @@ const TASK_MAX_CONCURRENT = parseInt(process.env.TASK_MAX_CONCURRENT || '50', 10
 const SSE_IDLE_TIMEOUT = parseInt(process.env.SSE_IDLE_TIMEOUT || '600000', 10);  // SSE 空闲超时（默认 10 分钟），防僵尸连接占满连接数
 const tasks = new Map();  // taskId -> { userId, deviceId, command, status, ... }
 
+// 配对码验证缓存：首次验证通过后缓存，SSE 重连免验
+// key: userId, value: { ticket, deviceId, since }
+const authCache = new Map();
+const AUTH_CACHE_TTL = parseInt(process.env.AUTH_CACHE_TTL || '3600000', 10); // 1 小时
+
 // 定期清理：完成的超期任务（防止任务表无限膨胀，也处理"Agent 忘了取"）
 const taskCleanup = setInterval(() => {
   const now = Date.now();
@@ -861,23 +866,37 @@ const httpServer = createServer(async (req, res) => {
         return;
       }
       const userId = ticketUser.userId;
-      // 配对码验证（连接时即验证，未通过一律拒绝）
+      // 配对码验证（SSE 重连免验：首次通过后缓存，后续同 ticket 免配对码）
       const code = req.headers['x-code'] || url.searchParams.get('code') || '';
-      // 配对码验证：先无副作用地查找匹配设备，未命中时只对一个设备累计失败，
-      // 避免遍历所有设备时给每个设备 +1 放大锁定（多设备用户被 1 次错误尝试误锁）
       const userDevices = Array.from(devices.values()).filter(d => d.userId === userId);
-      let authedDevice = userDevices.find(d => d.authCode === code) || null;
-      if (authedDevice) {
-        authedDevice.authFails = 0;
-        authedDevice.authLockUntil = null;
-      } else {
+      let authedDevice = null;
+
+      // 检查缓存：同一 ticket 已通过验证，跳过配对码
+      const cached = authCache.get(userId);
+      if (cached && cached.ticket === ticketMatch[1] && Date.now() - cached.since < AUTH_CACHE_TTL) {
+        authedDevice = userDevices.find(d => d.id === cached.deviceId) || userDevices[0] || null;
+      } else if (code) {
+        // 正常配对码验证
+        authedDevice = userDevices.find(d => d.authCode === code) || null;
+        if (authedDevice) {
+          authedDevice.authFails = 0;
+          authedDevice.authLockUntil = null;
+          // 缓存验证成功
+          authCache.set(userId, { ticket: ticketMatch[1], deviceId: authedDevice.id, since: Date.now() });
+        }
+      }
+
+      if (!authedDevice) {
         const now = Date.now();
         const target = userDevices.find(d => !d.authLockUntil || now >= d.authLockUntil);
-        if (target) {
+        if (target && code) {
+          // 仅当提供了配对码但验证失败时才计数（SSE 重连无码不算失败）
           target.authFails = (target.authFails || 0) + 1;
           if (target.authFails >= AUTH_MAX_FAILS) {
             target.authLockUntil = now + AUTH_LOCK_MS;
             console.error(`[auth] 设备 ${target.id} 配对码失败 ${target.authFails} 次，锁定 ${Math.round(AUTH_LOCK_MS / 60000)} 分钟`);
+            // 通知客户端设备被锁
+            broadcastToDevices({ type: 'device_locked', deviceId: target.id, until: target.authLockUntil }, userId);
           }
         }
         res.writeHead(401, { 'content-type': 'application/json' });
@@ -1075,6 +1094,7 @@ wss.on('connection', (ws, req, user) => {
       const device = devices.get(deviceId);
       if (device) {
         const ticket = newMcpTicket(device.userId);
+        authCache.delete(device.userId);  // 新 ticket，旧缓存失效
         console.error(`[ticket] 用户 ${device.userId} 生成新 MCP 地址 ticket（旧地址作废）`);
         sendJSON(ws, { type: 'mcp_ticket', requestId, success: true, ticket });
       } else {
@@ -1142,7 +1162,10 @@ wss.on('connection', (ws, req, user) => {
   });
   ws.on('close', () => {
     const device = devices.get(deviceId);
-    if (device) console.error(`[device] disconnected: ${device.name} (${deviceId})`);
+    if (device) {
+      console.error(`[device] disconnected: ${device.name} (${deviceId})`);
+      authCache.delete(device.userId);  // 设备断开，清除 auth 缓存
+    }
     // 该设备正在运行的任务标记失败（防悬空任务永久占并发名额）
     for (const [tid, t] of tasks) {
       if (t.deviceId === deviceId && t.status === 'running') {
