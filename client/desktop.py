@@ -468,9 +468,55 @@ class Api:
 
 
 # ─── 启动 ────────────────────────────────────────
+def check_codegraph_dependency():
+    """启动前置依赖检测：codegraph 是云桥的索引依赖，没装上不允许启动。
+    返回 (ok, err_msg)。ok=False 时调用方应阻止启动并提示。"""
+    try:
+        from agent import Agent
+        a = Agent.__new__(Agent)  # 只调用定位方法，不触发 __init__ 副作用
+        cg = a._find_codegraph()
+        if cg:
+            return True, ""
+        return False, "未安装 codegraph"
+    except Exception:
+        import subprocess
+        try:
+            r = subprocess.run(["codegraph", "--version"], capture_output=True, timeout=8)
+            if r.returncode == 0:
+                return True, ""
+        except Exception:
+            pass
+        return False, "未安装 codegraph"
+
+
+def prompt_install_codegraph():
+    """弹原生对话框提示安装 codegraph（阻塞式）。"""
+    import tkinter as tk
+    from tkinter import messagebox
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes('-topmost', True)
+    msg = (
+        "云桥需要 codegraph 才能使用代码索引功能（语义代码图谱）\n\n"
+        "检测到未安装 codegraph。\n\n"
+        "请先安装：\n"
+        "    npm install -g @colbymchenry/codegraph\n\n"
+        "安装完成后重新启动云桥。"
+    )
+    messagebox.showwarning("云桥 - 缺少依赖", msg)
+    root.destroy()
+
+
 def main():
     global UI
     import webview
+
+    # ── 启动前置依赖检测：codegraph（索引依赖）没装上不允许启动 ──
+    ok, _ = check_codegraph_dependency()
+    if not ok:
+        prompt_install_codegraph()
+        print("❌ 缺少依赖 codegraph，拒绝启动。请先执行: npm install -g @colbymchenry/codegraph")
+        sys.exit(1)
 
     ui_path = os.path.join(os.path.dirname(__file__), "ui.html")
     if getattr(sys, 'frozen', False):
