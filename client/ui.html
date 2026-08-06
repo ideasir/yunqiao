@@ -1449,32 +1449,40 @@ function renderActivityDots(a) {
     var n = Number(v);
     return isFinite(n) && n >= 0 ? n : d;
   }
-  // 灯排总数（含 1 颗接入灯 + 并发任务灯），封顶防溢出
-  var total = Math.max(2, Math.min(Math.round(num(a.maxConnections, 50)), 60));
-  var conn = num(a.connections, 0);
+  // 灯排总数（纯并发任务灯），封顶防溢出，最小 1
+  var total = Math.max(1, Math.min(Math.round(num(a.maxConnections, 50)), 60));
   var running = num(a.runningTasks, 0);
   var pending = num(a.pendingCalls, 0);
-  // 第 1 颗 = 接入状态灯：Agent 已接入（connections>0）才亮，不参与并发计数
-  var connected = conn > 0;
-  // 其余 = 并发任务灯：只反映真实并发（运行中任务 + 挂起调用），连接数不铺满灯排
-  var used = Math.min(total - 1, running + pending);
+  var used = Math.min(total, running + pending);
+  // 亮灯保持窗口：并发结束后 1 秒内仍保持点亮（并发太快一闪而过看不清，延迟熄灭便于观察）
+  var now = Date.now();
+  if (used > 0) {
+    window.__yqBusyAt = now;
+    window.__yqBusyLevel = Math.max(window.__yqBusyLevel || 0, used);
+  }
+  if (now < (window.__yqBusyAt || 0) + 1000) {
+    used = Math.max(used, window.__yqBusyLevel || 1);
+  } else {
+    window.__yqBusyLevel = 0;
+  }
+  used = Math.min(total, used);
   var busy = used > 0;
   var html = '';
-  // 接入灯（最左）
-  html += connected
-    ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#34d399;box-shadow:0 0 4px rgba(52,211,153,.7);animation:pulse 1.6s ease-in-out infinite" title="Agent 已接入"></span>'
-    : '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#333;box-shadow:inset 0 0 0 1px #4a4a4a" title="Agent 未接入"></span>';
-  // 并发任务灯（从接入灯右边开始，亮 running+pending 颗）
-  for (var i = 0; i < total - 1; i++) {
-    var delay = Math.round(i * 60) + 'ms';
-    if (i < used) {
-      html += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#4ade80;box-shadow:0 0 4px rgba(74,222,128,.6);animation:' + (busy ? 'blinkFast' : 'pulse') + ' 0.4s ease-in-out infinite;animation-delay:' + delay + '"></span>';
+  var center = (total - 1) / 2;
+  // 绿灯从中间往两边排列
+  var start = Math.floor((total - used) / 2);
+  for (var i = 0; i < total; i++) {
+    var dist = Math.abs(i - center);
+    var delay = Math.round(dist * 80) + 'ms';
+    if (i >= start && i < start + used) {
+      html += '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#4ade80;box-shadow:0 0 6px 1px rgba(74,222,128,.85);animation:' + (busy ? 'blinkFast' : 'pulse') + ' 1s ease-in-out infinite;animation-delay:' + delay + '"></span>';
     } else {
-      html += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#333;box-shadow:inset 0 0 0 1px #4a4a4a"></span>';
+      // 暗灯：调亮 + 细描边，保证“存在但未点亮”肉眼可见
+      html += '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#333;box-shadow:inset 0 0 0 1px #4a4a4a"></span>';
     }
   }
   el.innerHTML = html;
-  el.title = 'Agent ' + (connected ? '已接入' : '未接入') + ' · 并发任务: ' + used + '（运行' + running + ' 挂起' + pending + '）';
+  el.title = '并发任务: ' + used + '（运行' + running + ' 挂起' + pending + '）';
 }
 
 // 从后端获取状态（pywebview API 可能延迟注入）
