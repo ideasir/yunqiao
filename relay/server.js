@@ -636,7 +636,7 @@ function createMcpServer(userId, authInfo = {}) {
   const OPS_SCRIPTS = {
     'status': { desc: '查看中转服务器状态（进程、内存、磁盘、uptime）', fn: () => `echo "=== 中转服务器状态 ==="; echo "时间: $(date '+%F %T')"; echo "uptime: $(uptime -p)"; echo "磁盘: $(df -h / | tail -1)"; echo "内存: $(free -h | sed -n 2p)"; echo "relay进程: $(pgrep -f 'node server.js' | wc -l) 个"; echo "连接数: $(ss -tn state established '( dport = :9876 or sport = :9876 )' | wc -l)"` },
     'view_log': { desc: '查看 relay 最近日志（默认最后 200 行）', fn: (n) => `for f in /opt/cloud-mcp/relay.log /opt/cloud-mcp/relay/relay.log; do [ -f \"$f\" ] && tail -n ${Math.max(20, Math.min(500, n || 200))} \"$f\" && exit 0; done; journalctl -u openclaw-relay -n ${Math.max(20, Math.min(500, n || 200))} --no-pager 2>/dev/null || echo '未找到 relay 日志'` },
-    'update_relay': { desc: '从 GitHub 更新并重启中转服务器（下载→语法校验→替换→延迟重启）', fn: () => `set -e
+    'update_relay': { desc: '从 GitHub 更新并重启中转服务器（下载→语法校验→替换→延迟重启）', fn: (n, pid) => `set -e
 cd /opt/cloud-mcp/relay
 TMP=/opt/cloud-mcp/relay/.server.js.new
 curl -fsSL --max-time 30 -o $TMP https://raw.githubusercontent.com/ideasir/yunqiao/main/relay/server.js || { echo '下载失败'; exit 1; }
@@ -646,9 +646,15 @@ node --check /opt/cloud-mcp/relay/.server.check.js || { echo '语法校验失败
 rm -f /opt/cloud-mcp/relay/.server.check.js
 cp server.js server.js.bak-$(date +%Y%m%d%H%M%S)
 mv $TMP server.js
-echo '已替换 server.js (校验通过)'
-# 延迟重启：先回响应，2秒后重启（避免自锁）
-nohup bash -c 'sleep 2; pkill -f "relay/server.js" 2>/dev/null; pkill -f "node server.js" 2>/dev/null; sleep 1; cd /opt/cloud-mcp/relay && setsid nohup node server.js >> relay.log 2>&1 &' >/dev/null 2>&1 &
+# 用 PID 精确重启，避免 pkill 文本匹配误杀启动脚本自身
+cat > /opt/cloud-mcp/relay/.restart.sh << 'EOFSH'
+#!/bin/bash
+sleep 2
+kill ${OLD_PID} 2>/dev/null
+sleep 1
+cd /opt/cloud-mcp/relay && setsid nohup node server.js >> relay.log 2>&1 &
+EOFSH
+OLD_PID=${pid} bash /opt/cloud-mcp/relay/.restart.sh >/tmp/restart.out 2>&1 &
 echo '已触发延迟重启（2秒后生效）'` },
   };
   server.registerTool('relay_exec', {
@@ -662,7 +668,7 @@ echo '已触发延迟重启（2秒后生效）'` },
     const denied = requireAdmin(authInfo);
     if (denied) return denied;
     if (!OPS_SCRIPTS[op]) return { content: [{ type: 'text', text: 'Error: 未知运维操作' }], isError: true };
-    const script = OPS_SCRIPTS[op].fn(n);
+    const script = OPS_SCRIPTS[op].fn(n, process.pid);
     try {
       const cwdOk = existsSync('/opt/cloud-mcp');
       const out = execSync(script, { timeout: 60000, shell: true, encoding: 'utf-8', cwd: cwdOk ? '/opt/cloud-mcp' : process.cwd() });
