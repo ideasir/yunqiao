@@ -117,6 +117,15 @@ def notify_ui(action, data):
 class Api:
     def get_status(self):
         a = agent
+        # 主动拉取活跃度快照（UI 定时轮询完底，不依赖推送）；未连接时给保底结构
+        activity = {}
+        try:
+            if a is not None:
+                activity = a.get_activity()
+            else:
+                activity = {"connections": 0, "runningTasks": 0, "pendingCalls": 0, "maxConnections": 50}
+        except Exception:
+            activity = {"connections": 0, "runningTasks": 0, "pendingCalls": 0, "maxConnections": 50}
         return {
             "pairCode": pair_code,
             "deviceName": DEVICE_NAME,
@@ -125,6 +134,7 @@ class Api:
             "relayStatus": "已连接" if (a and a.connected) else "未连接",
             "connected": a is not None and a.connected,
             "homeDir": str(Path.home()),  # 用户主目录（新建工作区弹窗的默认目录，避免硬编码 C:\Users\Administrator 导致无权限）
+            "activity": activity,
         }
 
     def save_settings(self, key, relay_url, auto_connect=False):

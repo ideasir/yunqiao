@@ -182,6 +182,7 @@ class Agent:
         self._running = False
         self.pending_messages = {}  # msgId -> {text, urgent, time}，等待上游 Agent 已读回执
         self._ticket_waiter = None  # 动态 MCP 地址 ticket 请求的等待器
+        self._activity = {}  # 最近一次上游 Agent 活跃度快照（连接数/任务数/调用数），供 UI 主动拉取兜底
     
     def _emit(self, callback, *args):
         """线程安全地调用回调"""
@@ -221,6 +222,20 @@ class Agent:
                 self._send_ws({"type": "update_code", "authCode": code}),
                 self._loop
             )
+
+    def get_activity(self):
+        """返回最近一次上游 Agent 活跃度快照（供 UI 主动拉取，不依赖推送）"""
+        a = dict(self._activity or {})
+        # 未收到过任何快照时给个保底结构，避免前端拿到 None/空导致灯全灭
+        if "connections" not in a:
+            a["connections"] = 0
+        if "runningTasks" not in a:
+            a["runningTasks"] = 0
+        if "pendingCalls" not in a:
+            a["pendingCalls"] = 0
+        if "maxConnections" not in a:
+            a["maxConnections"] = 50
+        return a
     
     def send_message(self, text, urgent=False):
         """发送消息给上游 Agent，返回消息 ID（用于已读回执）
@@ -405,7 +420,11 @@ class Agent:
             return
         
         if msg_type == "agent_activity":
-            self._emit(self.on_activity, msg.get("payload", {}))
+            payload = msg.get("payload", {}) or {}
+            # 缓存最新活跃度快照（UI 主动拉取兜底，避免依赖推送导致灯不更新）
+            if isinstance(payload, dict):
+                self._activity = payload
+            self._emit(self.on_activity, payload)
             return
         
         if msg_type == "agent_action":

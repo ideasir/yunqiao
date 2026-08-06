@@ -1442,12 +1442,22 @@ function copyDiagInfo() {
 function renderActivityDots(a) {
   var el = document.getElementById('activityDots');
   if (!el) return;
-  // 呼吸灯 = 活跃任务数（runningTasks + pendingCalls），不是 SSE 连接数
-  var total = (a && typeof a.maxConnections === 'number') ? a.maxConnections : 50;
-  var running = (a && typeof a.runningTasks === 'number') ? a.runningTasks : 0;
-  var pending = (a && typeof a.pendingCalls === 'number') ? a.pendingCalls : 0;
-  var used = Math.min(total, running + pending);
-  var busy = used > 0;
+  a = a || {};
+  // 数值防御：字段缺失/NaN/负数/非数字一律回退到安全值，绝不因脏数据把灯搞灭
+  function num(v, d) {
+    if (v === undefined || v === null) return d;
+    var n = Number(v);
+    return isFinite(n) && n >= 0 ? n : d;
+  }
+  // 配额上限封顶（防标题栏溢出），最小 1
+  var total = Math.max(1, Math.min(Math.round(num(a.maxConnections, 50)), 60));
+  var conn = num(a.connections, 0);
+  var running = num(a.runningTasks, 0);
+  var pending = num(a.pendingCalls, 0);
+  // 并发灯 = 活跃连接数 + 运行中任务 + 挂起调用（连接数才是“并发”的本意，绝不能漏）
+  var used = Math.min(total, conn + running + pending);
+  // 忙 = 真有任务/调用在跑 → 快闪；纯连接空闲 → 慢呼吸
+  var busy = (running + pending) > 0;
   var html = '';
   var center = (total - 1) / 2;
   // 绿灯从中间往两边排列
@@ -1456,13 +1466,14 @@ function renderActivityDots(a) {
     var dist = Math.abs(i - center);
     var delay = Math.round(dist * 80) + 'ms';
     if (i >= start && i < start + used) {
-      html += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#4ade80;animation:' + (busy ? 'blinkFast' : 'pulse') + ' 0.4s ease-in-out infinite;animation-delay:' + delay + '"></span>';
+      html += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:' + (busy ? '#4ade80' : '#6ee7b7') + ';box-shadow:0 0 4px rgba(74,222,128,.6);animation:' + (busy ? 'blinkFast' : 'pulse') + ' 0.4s ease-in-out infinite;animation-delay:' + delay + '"></span>';
     } else {
-      html += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#2a2a2a"></span>';
+      // 暗灯：调亮 + 细描边，保证“存在但未点亮”肉眼可见（原 #2a2a2a 在黑底上完全隐形）
+      html += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#333;box-shadow:inset 0 0 0 1px #4a4a4a"></span>';
     }
   }
   el.innerHTML = html;
-  el.title = '活跃任务: ' + used + '/' + total;
+  el.title = 'Agent 并发: 连接' + conn + ' 任务' + running + ' 挂起' + pending + ' / 配额' + total;
 }
 
 // 从后端获取状态（pywebview API 可能延迟注入）
@@ -1475,6 +1486,8 @@ function loadStatus() {
       state.platform = s.platform || '';
       state.hostname = s.hostname || '';
       state.homeDir = s.homeDir || '';
+      // 用后端返回的活跃度快照刷新并发灯（主动拉取完底，不依赖推送）
+      if (s && s.activity) renderActivityDots(s.activity);
       updateStatus();
     });
   } else {
@@ -1509,6 +1522,14 @@ function loadSessions() {
   setPermission('workspace');
   setTimeout(loadStatus, 300);
   setTimeout(loadSessions, 300);
+  // 并发灯完底轮询：每 8s 主动拉一次状态刷新活跃灯（推送丢失/卡死也能自愈）
+  setInterval(function() {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.get_status) {
+      window.pywebview.api.get_status().then(function(s) {
+        if (s && s.activity) renderActivityDots(s.activity);
+      });
+    }
+  }, 8000);
 })();
 
 
