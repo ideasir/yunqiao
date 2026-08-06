@@ -635,7 +635,7 @@ function createMcpServer(userId, authInfo = {}) {
   // 中转服务器运维：通过 MCP 执行固定运维脚本（替代 SSH 日常运维），仅 admin
   const OPS_SCRIPTS = {
     'status': { desc: '查看中转服务器状态（进程、内存、磁盘、uptime）', fn: () => `echo "=== 中转服务器状态 ==="; echo "时间: $(date '+%F %T')"; echo "uptime: $(uptime -p)"; echo "磁盘: $(df -h / | tail -1)"; echo "内存: $(free -h | sed -n 2p)"; echo "relay进程: $(pgrep -f 'node server.js' | wc -l) 个"; echo "连接数: $(ss -tn state established '( dport = :9876 or sport = :9876 )' | wc -l)"` },
-    'view_log': { desc: '查看 relay 最近日志（默认最后 200 行）', fn: (n) => `tail -n ${Math.max(20, Math.min(500, n || 200))} /opt/cloud-mcp/relay/relay.log 2>/dev/null || journalctl -u openclaw-relay -n ${Math.max(20, Math.min(500, n || 200))} --no-pager 2>/dev/null || echo '日志文件不存在'` },
+    'view_log': { desc: '查看 relay 最近日志（默认最后 200 行）', fn: (n) => `for f in /opt/cloud-mcp/relay.log /opt/cloud-mcp/relay/relay.log; do [ -f \"$f\" ] && tail -n ${Math.max(20, Math.min(500, n || 200))} \"$f\" && exit 0; done; journalctl -u openclaw-relay -n ${Math.max(20, Math.min(500, n || 200))} --no-pager 2>/dev/null || echo '未找到 relay 日志'` },
     'update_relay': { desc: '从 GitHub 更新并重启中转服务器（下载→语法校验→替换→延迟重启）', fn: () => `set -e
 cd /opt/cloud-mcp/relay
 TMP=/opt/cloud-mcp/relay/.server.js.new
