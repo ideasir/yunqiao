@@ -1031,7 +1031,7 @@ class Agent:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            # 逐行读取 stdout，实时上报进度（阶段/文件数/统计）
+            # 逐行读取 stdout，实时上报进度（阶段/文件数/统计/当前文件明细）
             out_lines = []
             err_lines = []
             self._emit(self.on_progress, {"phase": "start", "text": "开始建立代码索引…", "percent": 5})
@@ -1042,17 +1042,22 @@ class Agent:
                         break
                     s = self._decode_out(line)
                     target.append(s)
-                    ls = s.lower()
-                    if 'scanning' in ls:
-                        self._emit(self.on_progress, {"phase": "scan", "text": "正在扫描项目文件…", "percent": 15})
-                    elif 'parsing' in ls:
-                        self._emit(self.on_progress, {"phase": "parse", "text": "正在解析代码…", "percent": 40})
-                    elif 'resolving' in ls:
-                        self._emit(self.on_progress, {"phase": "resolve", "text": "正在解析符号引用…", "percent": 65})
-                    elif 'linking' in ls:
-                        self._emit(self.on_progress, {"phase": "link", "text": "正在关联动态调用…", "percent": 85})
-                    elif 'indexed' in ls:
-                        self._emit(self.on_progress, {"phase": "done", "text": s.strip(), "percent": 95})
+                    ls = s.strip()
+                    lsl = ls.lower()
+                    # 文件级明细：能识别出“正在处理的具体文件”就上报，让进度条显示细节
+                    if 'scanning' in lsl:
+                        self._emit(self.on_progress, {"phase": "scan", "text": "正在扫描项目文件…", "detail": ls.strip(), "percent": 15})
+                    elif 'parsing' in lsl:
+                        self._emit(self.on_progress, {"phase": "parse", "text": "正在解析代码…", "detail": ls.strip(), "percent": 40})
+                    elif 'resolving' in lsl:
+                        self._emit(self.on_progress, {"phase": "resolve", "text": "正在解析符号引用…", "detail": ls.strip(), "percent": 65})
+                    elif 'linking' in lsl:
+                        self._emit(self.on_progress, {"phase": "link", "text": "正在关联动态调用…", "detail": ls.strip(), "percent": 85})
+                    elif 'indexed' in lsl:
+                        self._emit(self.on_progress, {"phase": "done", "text": ls, "percent": 95})
+                    elif is_err and ls:
+                        # 错误输出也透传，便于定位问题
+                        self._emit(self.on_progress, {"phase": "running", "text": "…", "detail": ls, "percent": None})
             reader = asyncio.create_task(read_stream(proc.stdout, out_lines))
             err_reader = asyncio.create_task(read_stream(proc.stderr, err_lines, True))
             try:

@@ -102,8 +102,9 @@ tailwind.config = {
     <div class="w-4 h-px my-0.5 bg-[#222]"></div>
     <div class="flex flex-col gap-1 items-center flex-1 overflow-y-auto w-full px-0.5" id="sidebarList"></div>
       <!-- 上下文菜单 -->
-    <div id="ctxMenu" class="fixed z-50 rounded-lg bg-[#1a1a1a] border border-[#333] shadow-xl py-1" style="display:none; min-width:140px;">
+    <div id="ctxMenu" class="fixed z-50 rounded-lg bg-[#1a1a1a] border border-[#333] shadow-xl py-1" style="display:none; min-width:160px;">
       <div class="px-3 py-1.5 text-xs text-[#aaa] hover:bg-[#222] hover:text-[#ededed] cursor-pointer transition-colors" onclick="ctxSetDefault()">设为默认工作区</div>
+      <div id="ctxIndexItem" class="px-3 py-1.5 text-xs text-[#a78bfa] hover:bg-[#222] hover:text-[#c4b5fd] cursor-pointer transition-colors" onclick="ctxBuildIndex()" title="为当前工作区建立代码知识图谱（需含代码文件）">🧠 建立索引</div>
       <div class="px-3 py-1.5 text-xs text-[#aaa] hover:bg-[#222] hover:text-[#ff6b6b] cursor-pointer transition-colors border-t border-[#222]" onclick="ctxDelete()">删除工作区</div>
     </div>
   </div>
@@ -567,27 +568,34 @@ function showIndexProgress(p) {
   var percent = p.percent != null ? Math.max(0, Math.min(100, p.percent)) : 0;
   var phase = p.phase || '';
   var text = p.text || '正在处理…';
+  var detail = p.detail || '';
   // 创建弹窗（首次）
   if (!__progressEl || !document.body.contains(__progressEl)) {
     __progressEl = document.createElement('div');
     __progressEl.id = 'indexProgress';
-    __progressEl.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:99990;background:#141414;border:1px solid #333;border-radius:14px;padding:22px 26px;min-width:320px;box-shadow:0 8px 40px rgba(0,0,0,.6);text-align:center;';
+    __progressEl.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:99990;background:#141414;border:1px solid #333;border-radius:14px;padding:22px 26px;min-width:380px;max-width:560px;box-shadow:0 8px 40px rgba(0,0,0,.6);text-align:center;';
     __progressEl.innerHTML =
       '<div style="font-size:14px;font-weight:600;color:#ededed;margin-bottom:4px;font-family:Inter,sans-serif;">🧠 正在建立代码索引</div>' +
-      '<div style="font-size:11px;color:#888;margin-bottom:16px;font-family:Noto Sans SC,sans-serif;">大项目索引可能需要几分钟，请稍候…</div>' +
-      '<div style="font-size:11px;color:#4ade80;margin-bottom:10px;font-family:Noto Sans SC,sans-serif;min-height:16px;" id="ipPhase">正在准备…</div>' +
+      '<div style="font-size:11px;color:#888;margin-bottom:14px;font-family:Noto Sans SC,sans-serif;">大项目索引可能需要几分钟，请稍候…</div>' +
+      '<div style="font-size:12px;color:#4ade80;margin-bottom:8px;font-family:Noto Sans SC,sans-serif;min-height:16px;font-weight:600;" id="ipPhase">正在准备…</div>' +
       '<div style="width:100%;height:8px;background:#222;border-radius:4px;overflow:hidden;">' +
       '  <div id="ipBar" style="width:0%;height:100%;background:linear-gradient(90deg,#4ade80,#3b82f6);border-radius:4px;transition:width .3s ease;"></div>' +
       '</div>' +
-      '<div style="margin-top:8px;font-size:11px;color:#666;font-family:Noto Sans SC,sans-serif;"><span id="ipPct">0</span>%</div>';
+      '<div style="margin-top:8px;font-size:11px;color:#666;font-family:Noto Sans SC,sans-serif;"><span id="ipPct">0</span>%</div>' +
+      '<div style="margin-top:10px;font-size:11px;color:#93c5fd;font-family:monospace;min-height:16px;word-break:break-all;max-height:60px;overflow-y:auto;text-align:left;background:#0d0d0d;border:1px solid #1f1f1f;border-radius:6px;padding:6px 8px;" id="ipDetail"></div>';
     document.body.appendChild(__progressEl);
   }
   var bar = document.getElementById('ipBar');
   var pctEl = document.getElementById('ipPct');
   var phaseEl = document.getElementById('ipPhase');
+  var detailEl = document.getElementById('ipDetail');
   if (bar) bar.style.width = percent + '%';
   if (pctEl) pctEl.textContent = percent;
   if (phaseEl) phaseEl.textContent = text;
+  // 文件级明细：显示“正在处理哪个文件/哪块代码”
+  if (detailEl && detail) {
+    detailEl.textContent = detail;
+  }
   // 完成/失败 → 短暂停留后关闭
   if (phase === 'done' || percent >= 100) {
     setTimeout(function() {
@@ -599,7 +607,7 @@ function showIndexProgress(p) {
           __progressEl = null;
         }, 320);
       }
-    }, 1200);
+    }, 1500);
   }
 }
 
@@ -1145,6 +1153,49 @@ function renderSidebar() {
       e.stopPropagation();
       ctxSessionId = s.id;
       var menu = document.getElementById('ctxMenu');
+      // 动态判断该工作区能否建立索引：查 codegraph 状态，决定菜单项灰/可点
+      var idxItem = document.getElementById('ctxIndexItem');
+      if (idxItem) {
+        idxItem.style.opacity = '0.4';
+        idxItem.style.pointerEvents = 'none';
+        idxItem.textContent = '🧠 建立索引…';
+      }
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.get_codegraph_status) {
+        window.pywebview.api.get_codegraph_status(s.workDir || '').then(function(st) {
+          if (idxItem) {
+            var state = st && st.state;
+            if (st && st.success && state === 'ready') {
+              idxItem.style.opacity = '1';
+              idxItem.style.pointerEvents = 'auto';
+              idxItem.textContent = '🧠 建立索引';
+              idxItem.title = (st.advice || '') + '（' + (st.fileCount || 0) + ' 个代码文件）';
+            } else if (st && st.success && state === 'indexed') {
+              idxItem.style.opacity = '0.6';
+              idxItem.style.pointerEvents = 'none';
+              idxItem.textContent = '✅ 已建立索引';
+              idxItem.title = st.advice || '';
+            } else {
+              // no_code / not_installed → 灰置不可点，悬停显示原因
+              idxItem.style.opacity = '0.4';
+              idxItem.style.pointerEvents = 'none';
+              idxItem.textContent = '🧠 暂不能建立索引';
+              idxItem.title = (st && st.advice) || '该工作区无法建立索引';
+            }
+          }
+        }).catch(function() {
+          if (idxItem) {
+            idxItem.style.opacity = '1';
+            idxItem.style.pointerEvents = 'auto';
+            idxItem.textContent = '🧠 建立索引';
+          }
+        });
+      } else {
+        if (idxItem) {
+          idxItem.style.opacity = '1';
+          idxItem.style.pointerEvents = 'auto';
+          idxItem.textContent = '🧠 建立索引';
+        }
+      }
       menu.style.display = 'block';
       menu.style.left = '48px';
       menu.style.top = Math.min(e.clientY, window.innerHeight - 80) + 'px';
@@ -1166,6 +1217,26 @@ function ctxDelete() {
   var menu = document.getElementById('ctxMenu');
   menu.style.display = 'none';
   if (ctxSessionId) closeSession(ctxSessionId);
+}
+// 右键菜单：建立索引（复用顶部工具条的逻辑，带用途说明）
+function ctxBuildIndex() {
+  var menu = document.getElementById('ctxMenu');
+  menu.style.display = 'none';
+  if (!ctxSessionId) return;
+  var s = state.sessions.find(function(x) { return x.id === ctxSessionId; });
+  var path = (s && s.workDir) || '';
+  if (!path) { addLog('err', '工作区路径未知'); return; }
+  // 先切到该工作区，再走统一的建索引流程
+  var goBuild = function() {
+    state.workDir = path;
+    userBuildIndex();
+  };
+  if (s && s.id !== state.currentSessionId) {
+    setDefaultSession(s.id);
+    setTimeout(goBuild, 400);
+  } else {
+    goBuild();
+  }
 }
 
 

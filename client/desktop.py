@@ -189,7 +189,7 @@ class Api:
 
     def get_codegraph_status(self, path=None):
         """查询当前工作区的索引状态，并给出'是否需要建索引'的建议。
-        供 UI 在确认框/提示中显示：文件规模、codegraph 是否安装、是否已建索引。"""
+        判断依据：工作区里是否有 codegraph 受支持的代码文件（而非任意文件）。"""
         import os, shutil
         try:
             a = get_agent()
@@ -200,34 +200,62 @@ class Api:
             return {"success": False, "error": "未设置工作区", "workDir": work_dir}
         # codegraph 是否安装
         installed = a._find_codegraph() is not None if a else False
-        # 文件数（忽略构建/依赖目录）
-        ignore = {'.git', 'node_modules', '__pycache__', '.venv', 'venv', 'target', 'dist', 'build', '.idea', '.vscode', 'obj', 'bin'}
-        file_count = 0
+        # codegraph 受支持的代码扩展名（语义索引只对代码文件有意义）
+        CODE_EXTS = {
+            '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py', '.go', '.rs', '.java', '.kt', '.kts',
+            '.cs', '.php', '.rb', '.c', '.h', '.cpp', '.hpp', '.cc', '.m', '.mm', '.swift', '.scala',
+            '.dart', '.svelte', '.vue', '.astro', '.lua', '.r', '.ex', '.exs', '.erl', '.sol', '.tf', '.nix',
+            '.vb', '.clj', '.cljs', '.fs', '.fsx', '.sh', '.bash', '.zsh', '.sql',
+        }
+        # 统计代码文件数 + 具体代码文件（忽略构建/依赖目录）
+        ignore = {'.git', 'node_modules', '__pycache__', '.venv', 'venv', 'target', 'dist', 'build', '.idea', '.vscode', 'obj', 'bin', '.codegraph'}
+        code_files = []
+        code_file_count = 0
+        total_files = 0
         try:
             for dirpath, dirnames, filenames in os.walk(work_dir):
                 dirnames[:] = [d for d in dirnames if d not in ignore]
-                file_count += len(filenames)
-                if file_count > 5000:
+                for f in filenames:
+                    total_files += 1
+                    ext = os.path.splitext(f)[1].lower()
+                    if ext in CODE_EXTS:
+                        code_file_count += 1
+                        if len(code_files) < 8:
+                            code_files.append(os.path.join(dirpath, f))
+                if total_files > 20000:
                     break
         except Exception:
             pass
         # 是否已建索引
         indexed = a._codegraph_root(work_dir) is not None if a else False
-        # 建议：文件较多且未建索引且已装 codegraph
-        recommend = installed and not indexed and file_count >= 50
+        # 建议：有代码文件（>=20 个代码文件，或工作区本就以代码为主）且未建索引且已装 codegraph
+        has_code = code_file_count > 0
+        recommend = installed and not indexed and has_code and code_file_count >= 20
+        # 按钮状态：可点=有代码文件+已装+未建；否则禁用（给出原因）
+        if not has_code:
+            state_desc = "⚠️ 该工作区没有受支持的代码文件，无法建立语义索引（codegraph 只支持代码，不支持图片/文档等）"
+            reason = "no_code"
+        elif not installed:
+            state_desc = "⛔ 未安装 codegraph，需先执行：npm install -g @colbymchenry/codegraph"
+            reason = "not_installed"
+        elif indexed:
+            state_desc = "✅ 已建立索引"
+            reason = "indexed"
+        else:
+            state_desc = f"💡 可建立索引（检测到 {code_file_count} 个代码文件）" + ("，建议建立" if code_file_count >= 20 else "，文件较少可暂缓") 
+            reason = "ready"
         return {
             "success": True,
             "workDir": work_dir,
-            "fileCount": file_count,
+            "fileCount": code_file_count,
+            "totalFiles": total_files,
             "codegraphInstalled": installed,
             "indexed": indexed,
+            "hasCode": has_code,
             "recommend": recommend,
-            "advice": (
-                "✅ 已建立索引" if indexed
-                else ("⛔ 未安装 codegraph（npm install -g @colbymchenry/codegraph）" if not installed
-                else (f"💡 建议建立索引（{file_count}+ 文件）" if recommend
-                else f"ℹ 文件较少（{file_count}），暂可不建索引"))
-            ),
+            "codeFiles": code_files[:5],
+            "state": reason,
+            "advice": state_desc,
         }
 
     def build_index(self, path=None):
