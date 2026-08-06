@@ -647,9 +647,15 @@ node --check /opt/cloud-mcp/relay/.server.check.js || { echo '语法校验失败
 rm -f /opt/cloud-mcp/relay/.server.check.js
 cp server.js server.js.bak-$(date +%Y%m%d%H%M%S)
 mv $TMP server.js
-# 用 PID 精确重启（PID 直接内嵌，避免变量传递问题），避免 pkill 文本匹配误杀启动脚本自身
-( sleep 2; kill ${pid} 2>/dev/null || true; sleep 1; cd /opt/cloud-mcp/relay && setsid nohup node server.js >> relay.log 2>&1 & ) >/tmp/restart.out 2>&1 &
-echo '已触发延迟重启（2秒后生效）'` },
+echo '已替换 server.js (校验通过)'
+# 用 systemd 重启（systemd 接管：崩溃自动拉起、开机自启）。先回显确认再延迟重启，避免杀当前进程导致 MCP 响应丢失
+if command -v systemctl >/dev/null 2>&1 && systemctl is-active yunqiao-relay.service >/dev/null 2>&1; then
+  ( sleep 1; systemctl restart yunqiao-relay.service ) >/dev/null 2>&1 &
+  echo '已通过 systemd 延迟重启（1秒后生效）'
+else
+  ( sleep 2; pkill -f 'node server.js' 2>/dev/null; sleep 1; cd /opt/cloud-mcp/relay && setsid nohup node server.js >> relay.log 2>&1 & ) >/dev/null 2>&1 &
+  echo '已触发延迟重启（2秒后生效）'
+fi` },
   };
   server.registerTool('relay_exec', {
     description: '在中转服务器上执行固定运维脚本（仅管理员可用，替代 SSH）。' +
@@ -718,7 +724,7 @@ echo '已触发延迟重启（2秒后生效）'` },
         // 参数覆盖插到脚本最前面（原脚本末尾的 main() 调用会用正确的 sys.argv）
         const argList = args.length ? args.join(', ') : '[]';
         const script = 'import sys; sys.argv = ["' + meta.file + '"] + [' + argList + ']\n' + code;
-        const output = await sendAndWait('exec_script', { language: 'python', code: script, timeout: 60000 }, device.id, 65000);
+        const output = await sendAndWait('exec_script', { language: 'python', code: script, timeout: 120000 }, device.id, 125000);
         const o = output.payload;
         if (o.exitCode !== 0) {
           return { content: [{ type: 'text', text: `工具执行失败 (exit ${o.exitCode}):\n${o.stderr || o.stdout || ''}` }], isError: true };
