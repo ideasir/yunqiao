@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync, statSync, renameSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import { dirname } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
@@ -527,7 +528,9 @@ function createMcpServer(userId, authInfo = {}) {
     return { content: [{ type: 'text', text }] };
   }, 'list_devices'));
 
-  // 用户管理（admin 权限）
+  // ===== 管理员专属工具（仅当连接携带管理员密钥时注册；普通用户完全看不到）=====
+  if (authInfo && authInfo.isAdminAuth) {
+
   server.registerTool('create_user', {
     description: '创建新用户（需要管理员密钥认证）',
     inputSchema: z.object({
@@ -628,6 +631,45 @@ function createMcpServer(userId, authInfo = {}) {
     ).join('\n');
     return { content: [{ type: 'text', text }] };
   }, 'get_audit_log'));
+
+  // 中转服务器运维：通过 MCP 执行固定运维脚本（替代 SSH 日常运维），仅 admin
+  const OPS_SCRIPTS = {
+    'status': { desc: '查看中转服务器状态（进程、内存、磁盘、uptime）', fn: () => `echo "=== 中转服务器状态 ==="; echo "时间: $(date '+%F %T')"; echo "uptime: $(uptime -p)"; echo "磁盘: $(df -h / | tail -1)"; echo "内存: $(free -h | sed -n 2p)"; echo "relay进程: $(pgrep -f 'node server.js' | wc -l) 个"; echo "连接数: $(ss -tn state established '( dport = :9876 or sport = :9876 )' | wc -l)"` },
+    'view_log': { desc: '查看 relay 最近日志（默认最后 200 行）', fn: (n) => `tail -n ${Math.max(20, Math.min(500, n || 200))} /opt/cloud-mcp/relay/relay.log 2>/dev/null || journalctl -u openclaw-relay -n ${Math.max(20, Math.min(500, n || 200))} --no-pager 2>/dev/null || echo '日志文件不存在'` },
+    'update_relay': { desc: '从 GitHub 更新并重启中转服务器（下载→语法校验→替换→延迟重启）', fn: () => `set -e
+cd /opt/cloud-mcp/relay
+TMP=/opt/cloud-mcp/relay/.server.js.new
+curl -fsSL --max-time 30 -o $TMP https://raw.githubusercontent.com/ideasir/yunqiao/main/relay/server.js || { echo '下载失败'; exit 1; }
+node --check $TMP || { echo '语法校验失败，已保留原文件'; rm -f $TMP; exit 1; }
+cp server.js server.js.bak-$(date +%Y%m%d%H%M%S)
+mv $TMP server.js
+echo '已替换 server.js (校验通过)'
+# 延迟重启：先回响应，2秒后重启（避免自锁）
+nohup bash -c 'sleep 2; pkill -f "node server.js" 2>/dev/null; sleep 1; cd /opt/cloud-mcp/relay && setsid nohup node server.js >> relay.log 2>&1 &' >/dev/null 2>&1 &
+echo '已触发延迟重启（2秒后生效）'` },
+  };
+  server.registerTool('relay_exec', {
+    description: '在中转服务器上执行固定运维脚本（仅管理员可用，替代 SSH）。' +
+      'op: status(状态) / view_log(看日志, 可选 n 行) / update_relay(更新并重启)。安全：只允许预定义脚本，不可执行任意命令',
+    inputSchema: z.object({
+      op: z.enum(['status', 'view_log', 'update_relay']).describe('运维操作'),
+      n: z.number().optional().describe('view_log 的行数，默认 200'),
+    }),
+  }, wrapTool(userId, async ({ op, n }) => {
+    const denied = requireAdmin(authInfo);
+    if (denied) return denied;
+    if (!OPS_SCRIPTS[op]) return { content: [{ type: 'text', text: 'Error: 未知运维操作' }], isError: true };
+    const script = OPS_SCRIPTS[op].fn(n);
+    try {
+      const cwdOk = existsSync('/opt/cloud-mcp');
+      const out = execSync(script, { timeout: 60000, shell: true, encoding: 'utf-8', cwd: cwdOk ? '/opt/cloud-mcp' : process.cwd() });
+      return { content: [{ type: 'text', text: out }] };
+    } catch (e) {
+      return { content: [{ type: 'text', text: `运维执行失败: ${e.message}\n${e.stdout || ''}${e.stderr || ''}` }], isError: true };
+    }
+  }, 'relay_exec'));
+
+  } // end admin-only tools
 
   // 会话管理
   const sessionTools = [
