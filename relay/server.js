@@ -673,6 +673,58 @@ echo '已触发延迟重启（2秒后生效）'` },
 
   } // end admin-only tools
 
+  // ===== 工具架（预置只读工具，所有用户可用；脚本在中转服务器，通过 exec_script 下发 Windows 执行）=====
+  const TOOL_SCRIPTS = {
+    'stats': { file: 'stats.py', desc: '统计目录：文件数、目录数、大小、按扩展名分布、最大文件、最近修改' },
+    'tree': { file: 'tree.py', desc: '目录树：层级结构（限制深度）' },
+    'grep_code': { file: 'grep_code.py', desc: '代码搜索：正则匹配，返回文件/行号/内容' },
+    'project_map': { file: 'project_map.py', desc: '项目地图：项目根、巨型文件、语言分布、测试目录、依赖清单、Git 状态' },
+  };
+  const TOOL_SCHEMAS = {
+    'stats': { path: z.string().describe('要统计的目录（绝对路径或相对会话目录）'), maxDepth: z.number().optional(), code: z.string().optional() },
+    'tree': { path: z.string().describe('要显示的目录'), maxDepth: z.number().optional(), maxEntries: z.number().optional(), code: z.string().optional() },
+    'grep_code': { pattern: z.string().describe('搜索的正则或字符串'), path: z.string().optional().describe('搜索目录（默认会话目录）'), glob: z.string().optional().describe('文件过滤如 *.rs'), ignoreCase: z.boolean().optional(), maxMatches: z.number().optional(), code: z.string().optional() },
+    'project_map': { path: z.string().describe('项目根目录'), maxDepth: z.number().optional(), code: z.string().optional() },
+  };
+  for (const [name, meta] of Object.entries(TOOL_SCRIPTS)) {
+    server.registerTool(name, {
+      description: meta.desc + '（只读，在远程电脑上执行）',
+      inputSchema: z.object(TOOL_SCHEMAS[name]),
+    }, wrapTool(userId, async (params) => {
+      const { device, error } = getAuthedDevice(sessionState, userId, undefined, params.code);
+      if (!device) return { content: [{ type: 'text', text: `Error: ${error}` }], isError: true };
+      // 读取工具脚本内容（中转服务器本地），通过 exec_script 下发 Windows 执行
+      try {
+        const scriptPath = '/opt/cloud-mcp/tools/' + meta.file;
+        if (!existsSync(scriptPath)) return { content: [{ type: 'text', text: `Error: 工具脚本不存在: ${meta.file}` }], isError: true };
+        const code = readFileSync(scriptPath, 'utf-8');
+        // 构造 python 调用参数
+        const args = [];
+        if (params.path) args.push(`'${String(params.path).replace(/'/g, "\\'")}'`);
+        else if (params.pattern) args.push(`'${String(params.pattern).replace(/'/g, "\\'")}'`);
+        if (params.pattern) {
+          if (params.path) args.push(`'${String(params.path).replace(/'/g, "\\'")}'`);
+          else args.push('.');
+        }
+        if (params.glob) args.push(`--glob '${String(params.glob).replace(/'/g, "\\'")}'`);
+        if (params.ignoreCase) args.push('--ignore-case');
+        if (params.maxDepth) args.push(`--max-depth ${parseInt(params.maxDepth)}`);
+        if (params.maxEntries) args.push(`--max-entries ${parseInt(params.maxEntries)}`);
+        if (params.maxMatches) args.push(`--max-matches ${parseInt(params.maxMatches)}`);
+        // 组装：脚本内容 + 调用行
+        const script = code + '\n\nif __name__ == "__main__":\n    import sys\n    sys.argv = ["' + meta.file + '"] + [' + args.map(a => a).join(', ') + ']\n    main()\n';
+        const output = await sendAndWait('exec_script', { language: 'python', code: script, timeout: 60000 }, device.id, 65000);
+        const o = output.payload;
+        if (o.exitCode !== 0) {
+          return { content: [{ type: 'text', text: `工具执行失败 (exit ${o.exitCode}):\n${o.stderr || o.stdout || ''}` }], isError: true };
+        }
+        return { content: [{ type: 'text', text: o.stdout }] };
+      } catch (e) {
+        return { content: [{ type: 'text', text: 'Error: ' + e.message }], isError: true };
+      }
+    }, name));
+  }
+
   // 会话管理
   const sessionTools = [
     ['create_session', '在远程电脑上创建一个新的工作会话', { workDir: z.string(), name: z.string().optional(), code: z.string().optional() }],
