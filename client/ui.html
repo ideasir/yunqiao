@@ -237,6 +237,9 @@ tailwind.config = {
         </div>
       </div>
       <div class="px-3 py-2 text-[10px] text-[#444] text-center border-t border-[#1a1a1a]">工作区在左侧边栏管理</div>
+      <div class="px-3 py-2 border-t border-[#1a1a1a]">
+        <button onclick="userBuildIndex()" class="w-full text-xs py-1.5 rounded-lg bg-[#1a1a1a] text-[#a78bfa] hover:bg-[#222] hover:text-[#c4b5fd] transition-all" title="为当前工作区建立 CodeGraph 语义索引（大项目推荐）">🧠 建立代码索引</button>
+      </div>
     </div>
   </aside>
 </div>
@@ -548,6 +551,49 @@ function finalizeCmdBlock(pending, p) {
   scrollLog();
 }
 
+// ── 长任务进度弹窗（如 CodeGraph 索引）──
+var __progressEl = null;
+function showIndexProgress(p) {
+  if (!p) return;
+  var percent = p.percent != null ? Math.max(0, Math.min(100, p.percent)) : 0;
+  var phase = p.phase || '';
+  var text = p.text || '正在处理…';
+  // 创建弹窗（首次）
+  if (!__progressEl || !document.body.contains(__progressEl)) {
+    __progressEl = document.createElement('div');
+    __progressEl.id = 'indexProgress';
+    __progressEl.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:99990;background:#141414;border:1px solid #333;border-radius:14px;padding:22px 26px;min-width:320px;box-shadow:0 8px 40px rgba(0,0,0,.6);text-align:center;';
+    __progressEl.innerHTML =
+      '<div style="font-size:14px;font-weight:600;color:#ededed;margin-bottom:4px;font-family:Inter,sans-serif;">🧠 正在建立代码索引</div>' +
+      '<div style="font-size:11px;color:#888;margin-bottom:16px;font-family:Noto Sans SC,sans-serif;">大项目索引可能需要几分钟，请稍候…</div>' +
+      '<div style="font-size:11px;color:#4ade80;margin-bottom:10px;font-family:Noto Sans SC,sans-serif;min-height:16px;" id="ipPhase">正在准备…</div>' +
+      '<div style="width:100%;height:8px;background:#222;border-radius:4px;overflow:hidden;">' +
+      '  <div id="ipBar" style="width:0%;height:100%;background:linear-gradient(90deg,#4ade80,#3b82f6);border-radius:4px;transition:width .3s ease;"></div>' +
+      '</div>' +
+      '<div style="margin-top:8px;font-size:11px;color:#666;font-family:Noto Sans SC,sans-serif;"><span id="ipPct">0</span>%</div>';
+    document.body.appendChild(__progressEl);
+  }
+  var bar = document.getElementById('ipBar');
+  var pctEl = document.getElementById('ipPct');
+  var phaseEl = document.getElementById('ipPhase');
+  if (bar) bar.style.width = percent + '%';
+  if (pctEl) pctEl.textContent = percent;
+  if (phaseEl) phaseEl.textContent = text;
+  // 完成/失败 → 短暂停留后关闭
+  if (phase === 'done' || percent >= 100) {
+    setTimeout(function() {
+      if (__progressEl && document.body.contains(__progressEl)) {
+        __progressEl.style.transition = 'opacity .3s';
+        __progressEl.style.opacity = '0';
+        setTimeout(function() {
+          if (__progressEl && __progressEl.parentNode) __progressEl.parentNode.removeChild(__progressEl);
+          __progressEl = null;
+        }, 320);
+      }
+    }, 1200);
+  }
+}
+
 // 环境档案 → 结构化 HTML（分组展示，IDE 风格）
 function renderEnvProfile(d) {  if (!d || typeof d !== 'object') return '';
   var html = '';
@@ -617,6 +663,23 @@ function copySkillInfo() {
     '技能内容地址（SKILL.md）：\n' + SKILL_RAW_URL + '\n\n' +
     '请阅读并遵循该技能的使用规范（连接云桥后先调用 get_client_messages 读取客户端消息、按优先级处理用户指令等）。';
   copyTextToClipboard(msg, '技能安装信息已复制，请粘贴发给智能体');
+}
+
+// 用户主动建立 CodeGraph 索引（点击右侧按钮）
+function userBuildIndex() {
+  var path = state.workDir || '';
+  if (!path) { addLog('err', '请先设置/选择工作区'); return; }
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.build_index) {
+    window.pywebview.api.build_index(path).then(function(r) {
+      if (r && r.success) {
+        addLog('done', '✅ 代码索引建立完成: ' + ((r.message || '').slice(0, 80)));
+      } else {
+        addLog('err', '建立索引失败: ' + ((r && r.error) || '未知错误'));
+      }
+    }).catch(function(e) { addLog('err', '建立索引失败: ' + ((e && e.message) || e || '')); });
+  } else {
+    addLog('err', '浏览器模式不支持建立索引，请使用桌面客户端');
+  }
 }
 
 function sendCommand() {
@@ -1213,6 +1276,10 @@ function handleBridge(action, data) {
     else if (kind === 'task') cmdText = '📦 ' + (c.command || '').slice(0, 60);
     else cmdText = (kind || 'action') + ' ' + JSON.stringify(c).slice(0, 60);
     window.__pendingCmd = startCmdBlock(cmdText, c);
+  }
+  else if (action === 'task_progress') {
+    // 长任务进度（如 CodeGraph 索引）→ 显示进度弹窗
+    showIndexProgress(data.progress || {});
   }
   else if (action === 'agent_status') {
     var s = document.getElementById('agent状态');

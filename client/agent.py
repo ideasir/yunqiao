@@ -171,6 +171,7 @@ class Agent:
         self.on_status = lambda status: None  # 连接状态变化
         self.on_command = lambda cmd: None    # 收到命令时
         self.on_result = lambda result: None  # 命令执行结果
+        self.on_progress = lambda p: None     # 长任务进度（如 CodeGraph 索引）
         self.on_messages_read = lambda ids: None  # 上游 Agent 已读消息回执
         self.on_activity = lambda a: None  # 上游 Agent 活跃度（连接数/任务数/调用数）
         
@@ -1007,21 +1008,47 @@ class Agent:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
+            # 逐行读取 stdout，实时上报进度（阶段/文件数/统计）
+            out_lines = []
+            err_lines = []
+            self._emit(self.on_progress, {"phase": "start", "text": "开始建立代码索引…", "percent": 5})
+            async def read_stream(stream, target, is_err=False):
+                while True:
+                    line = await stream.readline()
+                    if not line:
+                        break
+                    s = self._decode_out(line)
+                    target.append(s)
+                    ls = s.lower()
+                    if 'scanning' in ls:
+                        self._emit(self.on_progress, {"phase": "scan", "text": "正在扫描项目文件…", "percent": 15})
+                    elif 'parsing' in ls:
+                        self._emit(self.on_progress, {"phase": "parse", "text": "正在解析代码…", "percent": 40})
+                    elif 'resolving' in ls:
+                        self._emit(self.on_progress, {"phase": "resolve", "text": "正在解析符号引用…", "percent": 65})
+                    elif 'linking' in ls:
+                        self._emit(self.on_progress, {"phase": "link", "text": "正在关联动态调用…", "percent": 85})
+                    elif 'indexed' in ls:
+                        self._emit(self.on_progress, {"phase": "done", "text": s.strip(), "percent": 95})
+            reader = asyncio.create_task(read_stream(proc.stdout, out_lines))
+            err_reader = asyncio.create_task(read_stream(proc.stderr, err_lines, True))
             try:
-                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout / 1000)
+                await asyncio.wait_for(proc.wait(), timeout=timeout / 1000)
                 killed = False
             except asyncio.TimeoutError:
                 proc.kill()
-                stdout, stderr = await proc.communicate()
+                await proc.wait()
                 killed = True
-            out = self._decode_out(stdout)
-            err = self._decode_out(stderr)
+            await asyncio.gather(reader, err_reader, return_exceptions=True)
+            out = ''.join(out_lines)
+            err = ''.join(err_lines)
             dur = int((time.time() - t0) * 1000)
             if killed:
                 return {"success": False, "error": f"索引超时（>{timeout // 1000}s）", "duration": dur}
             ok = proc.returncode == 0
             # 提取统计（Indexed N files / N nodes, M edges）
             msg = out
+            self._emit(self.on_progress, {"phase": "done", "text": "索引完成", "percent": 100})
             return {"success": ok, "message": msg, "error": err if not ok else "", "duration": dur}
         except FileNotFoundError:
             return {"success": False, "error": "未找到 codegraph 命令（请先 npm install -g @colbymchenry/codegraph）", "duration": int((time.time() - t0) * 1000)}

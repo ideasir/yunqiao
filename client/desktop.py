@@ -73,6 +73,7 @@ def get_agent():
         agent.on_status = on_status
         agent.on_result = lambda r: notify_ui("command_result", {"payload": r})
         agent.on_command = lambda c: notify_ui("command_start", {"cmd": c})
+        agent.on_progress = lambda p: notify_ui("task_progress", {"progress": p})
         agent.on_messages_read = lambda ids: notify_ui("messages_read", {"ids": ids})
         agent.on_activity = lambda a: notify_ui("agent_activity", a)
     return agent
@@ -173,6 +174,46 @@ class Api:
             return {"success": False, "error": "未连接中继服务器"}
         msg_id = a.send_message(text, bool(urgent))
         return {"success": True, "msgId": msg_id}
+
+    def build_index(self, path=None):
+        """用户主动建立 CodeGraph 索引（后台执行，进度通过 notify_ui('task_progress') 上报）
+        无需等待 Agent 连接即可使用（用独立线程 + 事件循环）。"""
+        import asyncio, threading
+        # 确保 agent 实例存在（即使未连接服务器，也能用其工具方法）
+        try:
+            a = get_agent()
+        except Exception:
+            a = None
+        work_dir = path or (a.sessions.get_current().cwd if a and a.sessions.get_current() else None) or cfg.get("workDir", "")
+        if not work_dir:
+            return {"success": False, "error": "未设置工作区"}
+        if a is None:
+            return {"success": False, "error": "客户端引擎未就绪"}
+        # 确保 on_progress 转发到 UI
+        a.on_progress = lambda p: notify_ui("task_progress", {"progress": p})
+        # 用独立线程跑 asyncio（不阻塞 UI）
+        def run():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                result = loop.run_until_complete(a._run_codegraph_index(work_dir))
+            except Exception as e:
+                result = {"success": False, "error": str(e)}
+            finally:
+                loop.close()
+            notify_ui("log", {"text": f"[索引] 完成: {'成功' if result.get('success') else '失败'}"})
+            # 完成后补一份 project_status（更新索引状态显示）
+            if result.get("success"):
+                try:
+                    loop2 = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop2)
+                    loop2.run_until_complete(a._check_codegraph(work_dir))
+                    loop2.close()
+                except Exception:
+                    pass
+        threading.Thread(target=run, daemon=True).start()
+        return {"success": True, "message": "索引任务已启动"}
+
 
     def reorder_messages(self, ordered_ids):
         """拖拽排序任务队列后，同步新顺序到中继"""
