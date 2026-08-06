@@ -1449,32 +1449,32 @@ function renderActivityDots(a) {
     var n = Number(v);
     return isFinite(n) && n >= 0 ? n : d;
   }
-  // 配额上限封顶（防标题栏溢出），最小 1
-  var total = Math.max(1, Math.min(Math.round(num(a.maxConnections, 50)), 60));
+  // 灯排总数（含 1 颗接入灯 + 并发任务灯），封顶防溢出
+  var total = Math.max(2, Math.min(Math.round(num(a.maxConnections, 50)), 60));
   var conn = num(a.connections, 0);
   var running = num(a.runningTasks, 0);
   var pending = num(a.pendingCalls, 0);
-  // 并发 = Agent 活跃连接数 + 运行中任务 + 挂起调用
-  // 连接数必须有：用户靠它判断 Agent 是否接入（接入后 connections>=1 灯该亮）
-  // 僵尸连接泄漏已在中继端修复，此处 connections 是真实值，不会虚高
-  var used = Math.min(total, conn + running + pending);
-  var busy = (running + pending) > 0 && conn > 0;
+  // 第 1 颗 = 接入状态灯：Agent 已接入（connections>0）才亮，不参与并发计数
+  var connected = conn > 0;
+  // 其余 = 并发任务灯：只反映真实并发（运行中任务 + 挂起调用），连接数不铺满灯排
+  var used = Math.min(total - 1, running + pending);
+  var busy = used > 0;
   var html = '';
-  var center = (total - 1) / 2;
-  // 绿灯从中间往两边排列
-  var start = Math.floor((total - used) / 2);
-  for (var i = 0; i < total; i++) {
-    var dist = Math.abs(i - center);
-    var delay = Math.round(dist * 80) + 'ms';
-    if (i >= start && i < start + used) {
-      html += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:' + (busy ? '#4ade80' : '#6ee7b7') + ';box-shadow:0 0 4px rgba(74,222,128,.6);animation:' + (busy ? 'blinkFast' : 'pulse') + ' 0.4s ease-in-out infinite;animation-delay:' + delay + '"></span>';
+  // 接入灯（最左）
+  html += connected
+    ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#34d399;box-shadow:0 0 4px rgba(52,211,153,.7);animation:pulse 1.6s ease-in-out infinite" title="Agent 已接入"></span>'
+    : '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#333;box-shadow:inset 0 0 0 1px #4a4a4a" title="Agent 未接入"></span>';
+  // 并发任务灯（从接入灯右边开始，亮 running+pending 颗）
+  for (var i = 0; i < total - 1; i++) {
+    var delay = Math.round(i * 60) + 'ms';
+    if (i < used) {
+      html += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#4ade80;box-shadow:0 0 4px rgba(74,222,128,.6);animation:' + (busy ? 'blinkFast' : 'pulse') + ' 0.4s ease-in-out infinite;animation-delay:' + delay + '"></span>';
     } else {
-      // 暗灯：调亮 + 细描边，保证“存在但未点亮”肉眼可见（原 #2a2a2a 在黑底上完全隐形）
       html += '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#333;box-shadow:inset 0 0 0 1px #4a4a4a"></span>';
     }
   }
   el.innerHTML = html;
-  el.title = 'Agent 并发: 连接' + conn + ' 任务' + running + ' 挂起' + pending + ' / 配额' + total;
+  el.title = 'Agent ' + (connected ? '已接入' : '未接入') + ' · 并发任务: ' + used + '（运行' + running + ' 挂起' + pending + '）';
 }
 
 // 从后端获取状态（pywebview API 可能延迟注入）

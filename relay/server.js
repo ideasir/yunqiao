@@ -84,8 +84,18 @@ loadCommands();
 
 // ─── Agent 活跃度（实时推送，事件驱动） ─────────
 // 统计某用户当前：MCP 连接数 / 运行中任务 / 挂起的工具调用（含配额供灯排显示）
+// connections 只统计“活跃”连接（最近 60s 内有活动），残留/僵尸连接不计入，避免污染接入判断与并发计数
+const ACTIVE_CONN_WINDOW = parseInt(process.env.ACTIVE_CONN_WINDOW || '60000', 10);
 function getActivity(userId) {
-  const connections = Array.from(transports.values()).filter(t => t.userId === userId).length;
+  const now = Date.now();
+  // 先顺手回收该用户超时僵尸连接（防 429 与计数虚高）
+  for (const [sid, entry] of transports) {
+    if (entry.userId === userId && now - (entry.lastActive || now) > SSE_IDLE_TIMEOUT) {
+      transports.delete(sid);
+      try { entry.transport.close(); } catch {}
+    }
+  }
+  const connections = Array.from(transports.values()).filter(t => t.userId === userId && (now - (t.lastActive || now) <= ACTIVE_CONN_WINDOW)).length;
   const runningTasks = Array.from(tasks.values()).filter(t => t.userId === userId && t.status === 'running').length;
   let pendingCalls = 0;
   for (const [, entry] of pendingRequests) {
