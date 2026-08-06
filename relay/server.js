@@ -648,7 +648,7 @@ cp server.js server.js.bak-$(date +%Y%m%d%H%M%S)
 mv $TMP server.js
 echo '已替换 server.js (校验通过)'
 # 延迟重启：先回响应，2秒后重启（避免自锁）
-nohup bash -c 'sleep 2; pkill -f "node server.js" 2>/dev/null; sleep 1; cd /opt/cloud-mcp/relay && setsid nohup node server.js >> relay.log 2>&1 &' >/dev/null 2>&1 &
+nohup bash -c 'sleep 2; pkill -f "relay/server.js" 2>/dev/null; pkill -f "node server.js" 2>/dev/null; sleep 1; cd /opt/cloud-mcp/relay && setsid nohup node server.js >> relay.log 2>&1 &' >/dev/null 2>&1 &
 echo '已触发延迟重启（2秒后生效）'` },
   };
   server.registerTool('relay_exec', {
