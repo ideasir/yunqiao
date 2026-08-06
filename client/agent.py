@@ -573,7 +573,7 @@ class Agent:
             cwd = self.sessions.get_current().cwd if self.sessions.get_current() else os.getcwd()
             path = path or cwd
             import shutil
-            if shutil.which('codegraph') is None:
+            if self._find_codegraph() is None:
                 await self._send("codegraph_index_result", rid, {"success": False, "error": "未安装 CodeGraph（npm install -g @colbymchenry/codegraph）"})
                 return
             if not os.path.isdir(path):
@@ -997,9 +997,13 @@ class Agent:
         import subprocess, time
         t0 = time.time()
         try:
-            # 用 --force 允许重跑；用 -c 指定目录。codegraph init <path>
+            cg = self._find_codegraph()
+            if not cg:
+                return {"success": False, "error": "未找到 codegraph 命令（请先 npm install -g @colbymchenry/codegraph）", "duration": 0}
+            # 用 --force 允许重跑；codegraph init <path>
+            cmd = cg + ['init', path, '--force']
             proc = await asyncio.create_subprocess_exec(
-                'codegraph', 'init', path, '--force',
+                *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -1025,6 +1029,28 @@ class Agent:
             return {"success": False, "error": str(e), "duration": int((time.time() - t0) * 1000)}
 
     # ── CodeGraph 语义索引（大型项目）─────────────────
+    def _find_codegraph(self):
+        """定位 codegraph 命令。兼容 Windows（.cmd 批处理）和 Linux。
+        Windows 上 npm 全局装的是 codegraph.cmd，create_subprocess_exec 不认 .cmd，
+        需用完整路径。返回可执行的命令列表（[exe] 或 [exe, ...])，找不到返回 None。"""
+        import shutil
+        # 1) 常规 which
+        p = shutil.which('codegraph')
+        if p:
+            if sys.platform == 'win32' and p.lower().endswith('.cmd'):
+                # .cmd 需要经 shell 或 cmd /c 执行；这里转成 ['cmd', '/c', path] 形式
+                return ['cmd', '/c', p]
+            return [p]
+        # 2) Windows: 常见 npm 全局目录
+        if sys.platform == 'win32':
+            for cand in [
+                os.path.expandvars(r'%APPDATA%\npm\codegraph.cmd'),
+                os.path.expandvars(r'%ProgramFiles%\nodejs\codegraph.cmd'),
+            ]:
+                if os.path.isfile(cand):
+                    return ['cmd', '/c', cand]
+        return None
+
     def _codegraph_root(self, path):
         """向上找最近的 .codegraph 目录（判断是否已建索引）"""
         p = os.path.abspath(path)
@@ -1041,7 +1067,7 @@ class Agent:
         import shutil
         if not path:
             return
-        is_codegraph = shutil.which('codegraph') is not None
+        is_codegraph = self._find_codegraph() is not None
         # 统计文件数（忽略常见构建/依赖目录）
         ignore = {'.git', 'node_modules', '__pycache__', '.venv', 'venv', 'target', 'dist', 'build', '.idea', '.vscode', 'obj', 'bin'}
         file_count = 0
