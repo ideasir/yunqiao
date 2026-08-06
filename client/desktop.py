@@ -117,15 +117,16 @@ def notify_ui(action, data):
 class Api:
     def get_status(self):
         a = agent
-        # 主动拉取活跃度快照（UI 定时轮询完底，不依赖推送）；未连接时给保底结构
+        # 主动拉取活跃度快照（UI 定时轮询完底，不依赖推送）；未连接时强制归零，绝不返回旧缓存
+        ZERO = {"connections": 0, "runningTasks": 0, "pendingCalls": 0, "maxConnections": 50}
         activity = {}
         try:
-            if a is not None:
+            if a is not None and a.connected:
                 activity = a.get_activity()
             else:
-                activity = {"connections": 0, "runningTasks": 0, "pendingCalls": 0, "maxConnections": 50}
+                activity = dict(ZERO)
         except Exception:
-            activity = {"connections": 0, "runningTasks": 0, "pendingCalls": 0, "maxConnections": 50}
+            activity = dict(ZERO)
         return {
             "pairCode": pair_code,
             "deviceName": DEVICE_NAME,

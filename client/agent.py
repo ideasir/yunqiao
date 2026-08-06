@@ -379,6 +379,8 @@ class Agent:
             except Exception as e:
                 self.connected = False
                 self._ws = None
+                # 连接断开 → 并发活动必然归零，清空缓存快照，避免 UI 轮询拉到旧值导致灯不灭
+                self._activity = {}
                 retry += 1
                 self._emit(self.on_log, f"[重连] 第{retry}次断开: {e}")
                 self._emit(self.on_status, {"connected": False})
@@ -445,6 +447,8 @@ class Agent:
             return
         
         if msg_type == "agent_disconnected":
+            # 上游 Agent 断开 → 并发活动归零，清空缓存快照（否则 UI 轮询会拉到旧值让灯一直亮）
+            self._activity = {}
             self._emit(self.on_status, {"agent": "disconnected", "connected": True})
             return
         

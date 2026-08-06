@@ -136,13 +136,11 @@ const taskCleanup = setInterval(() => {
 }, 60000);
 
 // 定期清理僵尸 SSE 连接（客户端异常断开时 res close 可能不触发，
-// 残留会占满该用户的连接数导致永久 429——超时未活动即主动清理）
+// 残留会占满该用户的连接数导致永久 429 / 并发计数虚高——超时未活动即主动清理）
 const sseCleanup = setInterval(() => {
   const now = Date.now();
   for (const [sid, entry] of transports) {
-    // 设备在线时不过期 SSE（用户可随时通过客户端对话）
-    const hasDevice = Array.from(devices.values()).some(d => d.userId === entry.userId && d.ws && d.ws.readyState === 1);
-    if (hasDevice) continue;
+    // 统一按空闲超时清理：设备是否在线都不影响（设备在线更该清，否则僵尸连接永不回收）
     if (now - (entry.lastActive || now) > SSE_IDLE_TIMEOUT) {
       transports.delete(sid);
       try { entry.transport.close(); } catch {}

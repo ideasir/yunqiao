@@ -1437,8 +1437,8 @@ function copyDiagInfo() {
   ];
   copyTextToClipboard(lines.join('\n'), '链路诊断信息已复制');
 }
-// 标题栏活跃灯排：灯总数 = 该用户连接配额，亮 = Agent 当前活跃连接
-// 忙（有工具调用/任务运行）时快闪，空闲时慢呼吸；多灯错开延迟形成流动感
+// 标题栏活跃灯排：灯总数 = 该用户连接配额，亮 = Agent 当前真实并发活动
+// 语义：并发 = 运行中任务 + 挂起调用（不是连接数）；空闲全灭，忙时快闪
 function renderActivityDots(a) {
   var el = document.getElementById('activityDots');
   if (!el) return;
@@ -1451,13 +1451,11 @@ function renderActivityDots(a) {
   }
   // 配额上限封顶（防标题栏溢出），最小 1
   var total = Math.max(1, Math.min(Math.round(num(a.maxConnections, 50)), 60));
-  var conn = num(a.connections, 0);
   var running = num(a.runningTasks, 0);
   var pending = num(a.pendingCalls, 0);
-  // 并发灯 = 活跃连接数 + 运行中任务 + 挂起调用（连接数才是“并发”的本意，绝不能漏）
-  var used = Math.min(total, conn + running + pending);
-  // 忙 = 真有任务/调用在跑 → 快闪；纯连接空闲 → 慢呼吸
-  var busy = (running + pending) > 0;
+  // 并发 = 运行中任务 + 挂起调用；连接数不算（那是状态灯的事，不是并发灯）
+  var used = Math.min(total, running + pending);
+  var busy = used > 0;
   var html = '';
   var center = (total - 1) / 2;
   // 绿灯从中间往两边排列
@@ -1473,7 +1471,7 @@ function renderActivityDots(a) {
     }
   }
   el.innerHTML = html;
-  el.title = 'Agent 并发: 连接' + conn + ' 任务' + running + ' 挂起' + pending + ' / 配额' + total;
+  el.title = 'Agent 并发: 任务' + running + ' 挂起' + pending + ' / 配额' + total;
 }
 
 // 从后端获取状态（pywebview API 可能延迟注入）
