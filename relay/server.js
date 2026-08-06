@@ -640,7 +640,10 @@ function createMcpServer(userId, authInfo = {}) {
 cd /opt/cloud-mcp/relay
 TMP=/opt/cloud-mcp/relay/.server.js.new
 curl -fsSL --max-time 30 -o $TMP https://raw.githubusercontent.com/ideasir/yunqiao/main/relay/server.js || { echo '下载失败'; exit 1; }
-node --check $TMP || { echo '语法校验失败，已保留原文件'; rm -f $TMP; exit 1; }
+# 语法校验：用 .js 扩展名（relay 目录 package.json 是 type:module），避免 .js.new 不被识别
+cp $TMP /opt/cloud-mcp/relay/.server.check.js
+node --check /opt/cloud-mcp/relay/.server.check.js || { echo '语法校验失败，已保留原文件'; rm -f $TMP /opt/cloud-mcp/relay/.server.check.js; exit 1; }
+rm -f /opt/cloud-mcp/relay/.server.check.js
 cp server.js server.js.bak-$(date +%Y%m%d%H%M%S)
 mv $TMP server.js
 echo '已替换 server.js (校验通过)'
