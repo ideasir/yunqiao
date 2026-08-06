@@ -701,7 +701,7 @@ echo '已触发延迟重启（2秒后生效）'` },
         const code = readFileSync(scriptPath, 'utf-8');
         // 构造 python 调用参数（注意各工具的参数顺序）
         const args = [];
-        const qt = (s) => `'${String(s).replace(/'/g, "\\'")}'`;
+        const qt = (s) => `'${String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
         if (name === 'grep_code') {
           // grep_code: <pattern> <path> [--glob G] [--ignore-case] [--max-matches N]
           args.push(qt(params.pattern || ''));
