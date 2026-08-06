@@ -1451,11 +1451,14 @@ function renderActivityDots(a) {
   }
   // 配额上限封顶（防标题栏溢出），最小 1
   var total = Math.max(1, Math.min(Math.round(num(a.maxConnections, 50)), 60));
+  var conn = num(a.connections, 0);
   var running = num(a.runningTasks, 0);
   var pending = num(a.pendingCalls, 0);
-  // 并发 = 运行中任务 + 挂起调用；连接数不算（那是状态灯的事，不是并发灯）
-  var used = Math.min(total, running + pending);
-  var busy = used > 0;
+  // 并发 = Agent 活跃连接数 + 运行中任务 + 挂起调用
+  // 连接数必须有：用户靠它判断 Agent 是否接入（接入后 connections>=1 灯该亮）
+  // 僵尸连接泄漏已在中继端修复，此处 connections 是真实值，不会虚高
+  var used = Math.min(total, conn + running + pending);
+  var busy = (running + pending) > 0 && conn > 0;
   var html = '';
   var center = (total - 1) / 2;
   // 绿灯从中间往两边排列
@@ -1471,7 +1474,7 @@ function renderActivityDots(a) {
     }
   }
   el.innerHTML = html;
-  el.title = 'Agent 并发: 任务' + running + ' 挂起' + pending + ' / 配额' + total;
+  el.title = 'Agent 并发: 连接' + conn + ' 任务' + running + ' 挂起' + pending + ' / 配额' + total;
 }
 
 // 从后端获取状态（pywebview API 可能延迟注入）
