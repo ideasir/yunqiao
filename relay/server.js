@@ -708,12 +708,12 @@ echo '已触发延迟重启（2秒后生效）'` },
           args.push(params.path ? qt(params.path) : '.');
           if (params.glob) args.push(qt('--glob'), qt(params.glob));
           if (params.ignoreCase) args.push(qt('--ignore-case'));
-          if (params.maxMatches) args.push(qt('--max-matches'), String(parseInt(params.maxMatches)));
+          if (params.maxMatches) args.push(qt('--max-matches'), qt(String(parseInt(params.maxMatches))));
         } else {
           // stats/tree/project_map: <path> [--max-depth N] ...
           args.push(params.path ? qt(params.path) : '.');
-          if (params.maxDepth) args.push(qt('--max-depth'), String(parseInt(params.maxDepth)));
-          if (name === 'tree' && params.maxEntries) args.push(qt('--max-entries'), String(parseInt(params.maxEntries)));
+          if (params.maxDepth) args.push(qt('--max-depth'), qt(String(parseInt(params.maxDepth))));
+          if (name === 'tree' && params.maxEntries) args.push(qt('--max-entries'), qt(String(parseInt(params.maxEntries))));
         }
         // 参数覆盖插到脚本最前面（原脚本末尾的 main() 调用会用正确的 sys.argv）
         const argList = args.length ? args.join(', ') : '[]';
