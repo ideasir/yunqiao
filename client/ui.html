@@ -86,7 +86,7 @@ tailwind.config = {
 
   <!-- 左侧侧边栏 -->
   <div class="flex flex-col items-center gap-1.5 py-2.5 px-1.5 flex-shrink-0 select-none bg-[#0d0d0d] ">
-    <div class="w-7 h-7 flex items-center justify-center rounded-lg cursor-pointer text-base font-semibold text-[#888] transition-all hover:bg-[#1a1a1a] hover:text-[#ededed]" onclick="createSession()" title="新建会话">+</div>
+    <div class="w-7 h-7 flex items-center justify-center rounded-lg cursor-pointer text-base font-semibold text-[#888] transition-all hover:bg-[#1a1a1a] hover:text-[#ededed]" onclick="createSession()" title="新建工作区">+</div>
     <div class="w-4 h-px my-0.5 bg-[#222]"></div>
     <div class="flex flex-col gap-1 items-center flex-1 overflow-y-auto w-full px-0.5" id="sidebarList"></div>
       <!-- 上下文菜单 -->
@@ -227,7 +227,7 @@ tailwind.config = {
           </div>
         </div>
       </div>
-      <div class="px-3 py-2 text-[10px] text-[#444] text-center border-t border-[#1a1a1a]">会话在左侧边栏管理</div>
+      <div class="px-3 py-2 text-[10px] text-[#444] text-center border-t border-[#1a1a1a]">工作区在左侧边栏管理</div>
     </div>
   </aside>
 </div>
@@ -253,6 +253,14 @@ var _lastLogTime = 0;
 var _lastLogType = '';
 var autoScroll = true;
 var logFilter = 'all';
+var MAX_LOG_ITEMS = 1000;   // 日志/卡片条数上限，超出自动裁剪最早的，防止长会话卡顿
+function trimLog() {
+  var log = document.getElementById('sessionLog');
+  if (!log) return;
+  while (log.children.length > MAX_LOG_ITEMS) {
+    log.removeChild(log.firstChild);
+  }
+}
 var BADGES = {
   cmd:    ['CMD',  '#3b82f6', 'text-[#93c5fd]'],
   out:    ['OUT',  '#71717a', 'text-[#d4d4d4]'],
@@ -324,6 +332,7 @@ function addLog(type, text) {
   if (logFilter !== 'all' && entry.dataset.t !== logFilter) entry.style.display = 'none';
   log.appendChild(entry);
   scrollLog();
+  trimLog();
 }
 function addCmdBlock(cmd, meta, p) {
   var log = document.getElementById('sessionLog');
@@ -387,10 +396,105 @@ function addCmdBlock(cmd, meta, p) {
   if (logFilter !== 'all' && logFilter !== 'cmd') block.style.display = 'none';
   log.appendChild(block);
   scrollLog();
+  trimLog();
 }
+
+// ── 执行中卡片（Agent 开始一个工具时显示）──
+function startCmdBlock(cmdText, cmdObj) {
+  var log = document.getElementById('sessionLog');
+  var block = document.createElement('div');
+  block.className = 'entry cmd-block animate-slide-up';
+  block.dataset.t = 'cmd';
+  var now = new Date();
+  var time = now.toTimeString().slice(0, 8);
+  var t = cmdObj && cmdObj.type ? cmdObj.type : 'action';
+  var badge = ['ACT', '#3b82f6'];
+  if (t === 'execute' || t === 'exec') badge = ['CMD', '#3b82f6'];
+  else if (t === 'exec_script') badge = ['SCRIPT', '#e0a458'];
+  else if (t === 'read') badge = ['FILE', '#a78bfa'];
+  else if (t === 'write') badge = ['FILE', '#a78bfa'];
+  else if (t === 'custom') badge = ['CUST', '#4ade80'];
+  else if (t === 'session') badge = ['SESS', '#e0a458'];
+  else if (t === 'task') badge = ['TASK', '#fbbf24'];
+
+  var title = document.createElement('div');
+  title.className = 'flex items-center gap-2 px-1.5 py-1 rounded cursor-pointer hover:bg-[#161616] transition-colors';
+  title.innerHTML =
+    '<span class="lg-time">' + time + '</span>' +
+    '<span class="lg-badge" style="color:' + badge[1] + ';border-color:' + badge[1] + '44;">' + badge[0] + '</span>' +
+    '<span class="spin-icon" style="width:10px;height:10px;border:1.5px solid #555;border-top-color:' + badge[1] + ';border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0;display:inline-block;"></span>' +
+    '<span class="text-[#93c5fd] font-medium flex-1 min-w-0 truncate">' + esc(cmdText || '(执行中)') + '</span>' +
+    '<span class="text-[9px] text-[#fbbf24] flex-shrink-0 blink-fast">▌运行中</span>' +
+    '<span class="text-[#555] text-[9px] flex-shrink-0">▾</span>';
+
+  var body = document.createElement('div');
+  body.className = 'cmd-body pl-[62px] pb-1 space-y-0.5';
+  body.innerHTML = '<div class="text-[10px] text-[#888]">⏳ 正在执行，等待结果…</div>';
+
+  title.addEventListener('click', function() {
+    var hidden = body.style.display === 'none';
+    body.style.display = hidden ? '' : 'none';
+    var arrow = title.lastElementChild;
+    if (arrow) arrow.textContent = hidden ? '▾' : '▸';
+  });
+
+  block.appendChild(title);
+  block.appendChild(body);
+  if (logFilter !== 'all' && logFilter !== 'cmd') block.style.display = 'none';
+  log.appendChild(block);
+  scrollLog();
+  trimLog();
+  return { el: block, title: title, body: body, cmdText: cmdText, time: time, startTime: Date.now() };
+}
+
+// 把"执行中"卡片更新为"完成"态
+function finalizeCmdBlock(pending, p) {
+  if (!pending || !pending.el) return;
+  var ok = p.exitCode === 0;
+  var dur = p.duration != null ? Math.round(p.duration) + 'ms' : '';
+  var exitText = (p.exitCode !== undefined) ? (ok ? '✓ ' : '✗ ') + p.exitCode : '';
+  var kind = p.kind || '';
+  var badge = ['CMD', '#3b82f6'];
+  var prefix = '$ ';
+  var kindLabel = '';
+  if (kind === 'exec_script') { badge = ['SCRIPT', '#e0a458']; prefix = ''; }
+  else if (kind === 'get_environment') { badge = ['ENV', '#a78bfa']; prefix = ''; }
+  else if (kind === 'read_file') { badge = ['FILE', '#a78bfa']; prefix = '📖 '; }
+  else if (kind === 'write_file') { badge = ['FILE', '#a78bfa']; prefix = '✏️ '; }
+  else if (kind === 'custom') { badge = ['CUST', '#4ade80']; prefix = '⚙ '; }
+  if (p.language) kindLabel = '<span class="text-[9px] text-[#888] border border-[#333] rounded px-1 flex-shrink-0">' + esc(p.language) + '</span>';
+
+  var cmdText = p.command || pending.cmdText || '';
+  pending.title.innerHTML =
+    '<span class="lg-time">' + (pending.time || new Date().toTimeString().slice(0, 8)) + '</span>' +
+    '<span class="lg-badge" style="color:' + badge[1] + ';border-color:' + badge[1] + '44;">' + badge[0] + '</span>' +
+    kindLabel +
+    '<span class="text-[#93c5fd] font-medium flex-1 min-w-0 truncate">' + prefix + esc(cmdText) + '</span>' +
+    (dur ? '<span class="text-[9px] text-[#666] font-mono flex-shrink-0">' + dur + '</span>' : '') +
+    (exitText ? '<span class="text-[10px] font-mono flex-shrink-0 ' + (ok ? 'text-[#4ade80]' : 'text-[#ff6b6b]') + '">' + exitText + '</span>' : '') +
+    '<span class="text-[#555] text-[9px] flex-shrink-0">▾</span>';
+  pending.title.onclick = function() {
+    var hidden = pending.body.style.display === 'none';
+    pending.body.style.display = hidden ? '' : 'none';
+    var arrow = pending.title.lastElementChild;
+    if (arrow) arrow.textContent = hidden ? '▾' : '▸';
+  };
+  var lines = [];
+  if (p.cwd) lines.push('<div class="text-[10px] text-[#777]">📁 ' + esc(p.cwd) + '</div>');
+  if (kind === 'get_environment' && p.data) {
+    lines.push(renderEnvProfile(p.data));
+  } else {
+    if (p.stdout) lines.push('<pre class="text-[#d4d4d4] whitespace-pre-wrap break-all">' + esc(p.stdout) + '</pre>');
+    if (p.stderr) lines.push('<pre class="text-[#ff8a8a] whitespace-pre-wrap break-all">' + esc(p.stderr) + '</pre>');
+  }
+  if (p.killed) lines.push('<div class="text-[10px] text-[#fbbf24]">⏱ 超时被终止</div>');
+  if (lines.length === 0) lines.push('<div class="text-[10px] text-[#555]">（无输出）</div>');
+  pending.body.innerHTML = lines.join('');
+  scrollLog();
+}
+
 // 环境档案 → 结构化 HTML（分组展示，IDE 风格）
-function renderEnvProfile(d) {
-  if (!d || typeof d !== 'object') return '';
+function renderEnvProfile(d) {  if (!d || typeof d !== 'object') return '';
   var html = '';
   var sec = function(title, rows) {
     if (!rows.length) return '';
@@ -804,7 +908,7 @@ function saveSessionModal() {
     state.workDir = dir;
     if (!state.currentSessionId) state.currentSessionId = id;
     renderSidebar(); updateStatus();
-    addLog('info', '会话已创建: ' + name + ' (浏览器模式)');
+    addLog('info', '工作区已创建: ' + name + ' (浏览器模式)');
   }
   // 关闭弹窗
   var overlay = document.getElementById('sessionModal');
@@ -849,7 +953,7 @@ function browseSessionDir(e) {
   input.focus();
   input.select();
 }
-function refreshSessions() { addLog('info', '会话列表已刷新'); }
+function refreshSessions() { addLog('info', '工作区列表已刷新'); }
 var ctxSessionId = null;
 function renderSidebar() {
   var list = document.getElementById('sidebarList');
@@ -928,22 +1032,22 @@ function setDefaultSession(id) {
   }
 }
 function closeSession(id) {
-  nativeConfirm('关闭会话', '确定关闭此会话?').then(function(ok) {
+  nativeConfirm('关闭工作区', '确定关闭此工作区?').then(function(ok) {
     if (!ok) return;
     if (window.pywebview && window.pywebview.api && window.pywebview.api.close_session) {
       // 桌面端：同步删除后端会话（否则刷新后会复活）
       window.pywebview.api.close_session(id).then(function(r) {
         if (r && r.success) {
           loadSessions();
-          addLog('done', '会话已关闭: ' + id);
+          addLog('done', '工作区已关闭: ' + id);
         } else {
-          addLog('err', '关闭会话失败: ' + ((r && r.error) || ''));
+          addLog('err', '关闭工作区失败: ' + ((r && r.error) || ''));
         }
-      }).catch(function(e) { addLog('err', '关闭会话失败: ' + ((e && e.message) || e || '未知错误')); });
+      }).catch(function(e) { addLog('err', '关闭工作区失败: ' + ((e && e.message) || e || '未知错误')); });
     } else {
       state.sessions = state.sessions.filter(function(s) { return s.id !== id; });
       if (state.currentSessionId === id) { state.currentSessionId = state.sessions.length > 0 ? state.sessions[0].id : null; }
-      renderSidebar(); addLog('info', '会话已关闭: ' + id);
+      renderSidebar(); addLog('info', '工作区已关闭: ' + id);
     }
   });
 }
@@ -992,6 +1096,7 @@ function handleBridge(action, data) {
     var t = 'info';
     var txt = data.text || '';
     if (txt.indexOf('[通知]') !== -1) t = 'info';
+    else if (txt.indexOf('[重连]') !== -1 || txt.indexOf('连接失败') !== -1 || txt.indexOf('无法连接') !== -1 || txt.indexOf('连接被拒') !== -1) t = 'err';
     else if (txt.indexOf('[执行]') !== -1 || txt.indexOf('[目录]') !== -1) t = 'out';
     else if (txt.indexOf('[读取]') !== -1 || txt.indexOf('[新建]') !== -1 || txt.indexOf('[修改]') !== -1 || txt.indexOf('[写入]') !== -1) t = 'file';
     else if (txt.indexOf('✅') !== -1) t = 'done';
@@ -1030,8 +1135,29 @@ function handleBridge(action, data) {
   else if (action === 'command_result') {
     var p = data.payload;
     if (p && p.exitCode !== undefined) {
-      addCmdBlock(p.command || '(命令)', p, p);
+      // 如果前面有"进行中"卡片，更新它为完成态；否则直接新建
+      if (window.__pendingCmd && window.__pendingCmd.el) {
+        finalizeCmdBlock(window.__pendingCmd, p);
+        window.__pendingCmd = null;
+      } else {
+        addCmdBlock(p.command || '(命令)', p, p);
+      }
     }
+  }
+  else if (action === 'command_start') {
+    // Agent 开始执行某个工具 → 渲染"进行中"卡片
+    var c = data.cmd || {};
+    var cmdText = '';
+    var kind = c.type || '';
+    if (kind === 'execute' || kind === 'exec') cmdText = c.command || '';
+    else if (kind === 'exec_script') cmdText = (c.code || '').slice(0, 80) + ((c.code || '').length > 80 ? '…' : '');
+    else if (kind === 'read') cmdText = '📖 ' + (c.path || '');
+    else if (kind === 'write') cmdText = '✏️ ' + (c.path || '');
+    else if (kind === 'custom') cmdText = '⚙ ' + (c.name || '');
+    else if (kind === 'session') cmdText = 'session ' + (c.op || '');
+    else if (kind === 'task') cmdText = '📦 ' + (c.command || '').slice(0, 60);
+    else cmdText = (kind || 'action') + ' ' + JSON.stringify(c).slice(0, 60);
+    window.__pendingCmd = startCmdBlock(cmdText, c);
   }
   else if (action === 'agent_status') {
     var s = document.getElementById('agent状态');
@@ -1355,11 +1481,13 @@ function saveConfigModal() {
     <div class="px-4 py-3 space-y-3">
       <div>
         <label class="text-xs text-[#888] block mb-1">中转服务器地址</label>
-        <input type="text" id="modalRelayUrl" class="w-full bg-[#0d0d0d] border border-[#333] rounded-lg px-3 py-2 text-xs text-[#ededed] outline-none font-mono transition-colors focus:border-[#555]" placeholder="yunqiao.very.im" />
+        <input type="text" id="modalRelayUrl" class="w-full bg-[#0d0d0d] border border-[#333] rounded-lg px-3 py-2 text-xs text-[#ededed] outline-none font-mono transition-colors focus:border-[#555]" placeholder="如 yunqiao.very.im（无需加 wss:// 和 /device，自动补全）" />
+        <div class="text-[10px] text-[#666] mt-1">💡 填入你的服务器域名或 IP，例如 <span class="text-[#93c5fd]">yunqiao.very.im</span></div>
       </div>
       <div>
         <label class="text-xs text-[#888] block mb-1">Key（密钥）</label>
-        <input type="text" id="modalRelayKey" class="w-full bg-[#0d0d0d] border border-[#333] rounded-lg px-3 py-2 text-xs text-[#ededed] outline-none font-mono transition-colors focus:border-[#555]" placeholder="输入密钥" />
+        <input type="text" id="modalRelayKey" class="w-full bg-[#0d0d0d] border border-[#333] rounded-lg px-3 py-2 text-xs text-[#ededed] outline-none font-mono transition-colors focus:border-[#555]" placeholder="输入服务器分配的密钥" />
+        <div class="text-[10px] text-[#666] mt-1">🔑 向管理员获取，或部署时设置的 RELAY_KEY</div>
       </div>
       <div class="flex items-center gap-2">
         <input type="checkbox" id="modalAutoConnect" class="w-3 h-3 rounded" />
@@ -1373,7 +1501,7 @@ function saveConfigModal() {
   </div>
 </div>
 
-<!-- 新建会话弹窗 -->
+<!-- 新建工作区弹窗 -->
 <div id="sessionModal" class="fixed inset-0 flex items-center justify-center z-50 transition-all duration-300" style="background: rgba(0,0,0,0.6); opacity: 0; pointer-events: none; backdrop-filter: blur(4px);">
   <div id="sessionModalContent" class="rounded-xl bg-[#1a1a1a] border border-[#333] shadow-2xl w-80 transition-all duration-300" style="transform: scale(0.9) translateY(20px); opacity: 0;">
     <div class="px-4 py-3 border-b border-[#222]">
