@@ -297,6 +297,8 @@ node skills/yunqiao-client.mjs list
 |------|------|------|
 | `list_devices` | 列出所有已连接设备（含配对状态） | 无 |
 | `execute_command` | 远程执行 shell 命令 | deviceId, command, timeout? |
+| `exec_script` | **亲和通道**：执行多行脚本（写成临时文件再执行，彻底避开转义）。语言 python/powershell/node/bash/cmd/auto | code/script, language?, cwd?, timeout? |
+| `get_environment` | **亲和通道**：获取环境档案（可用解释器、工具、工作区） | code? |
 | `read_file` | 读取远程文件 | deviceId, path |
 | `write_file` | 写入远程文件 | deviceId, path, content |
 | `get_device_info` | 获取系统信息（OS、CPU、内存等） | deviceId |
@@ -322,6 +324,36 @@ node skills/yunqiao-client.mjs list
 - `yunqiao-client.mjs` 已支持：`YUNQIAO_URL=https://server/mcp/<ticket>` + `YUNQIAO_CODE=<配对码>`
 
 ---
+
+### 亲和通道（AI 友好）
+
+云桥提供面向 AI Agent 的**亲和通道**，让 Agent 在远程电脑上像在家一样顺手。核心原则：**算力全在沙箱侧，客户端只做原语**。
+
+**1. 脚本执行（`exec_script`）**——把代码写成临时脚本文件执行，**彻底避开字符串转义**。适合多行逻辑、管道、引号嵌套：
+
+```bash
+# 方式一：CLI 传参（单行代码）
+node skills/yunqiao-client.mjs <配对码> script '{"language":"python","script":"print(1+1)"}'
+
+# 方式二：stdin 传多行代码（推荐，无需转义）
+cat <<'EOF' | node skills/yunqiao-client.mjs <配对码> script '{"language":"bash"}'
+for f in src/*.rs; do echo "$f: $(wc -l < "$f")"; done
+EOF
+```
+
+支持语言：`python`/`powershell`/`node`/`bash`/`cmd`/`auto`（自动检测）。工作区模式下自动使用当前会话目录，并应用工作区安全限制（禁绝对路径、禁 `..` 逃逸、禁切目录）。
+
+**2. 环境自述（`get_environment`）**——会话开始时获取一份环境档案，避免反复探测：
+
+```bash
+node skills/yunqiao-client.mjs <配对码> env
+```
+
+返回：可用解释器（python/node/bash）、常用工具（git/jq/curl/grep 等）、工作区信息、系统信息。
+
+**3. 结构化输出**——所有工具返回结构化 JSON（exitCode/stdout/stderr/duration），无需解析裸文本。
+
+**设计原则**：Agent 端不做任何推理（不配模型），全部智能在沙箱侧；客户端是纯工具 + 通道。
 
 ### 桌面 → Agent 消息
 

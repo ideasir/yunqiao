@@ -495,6 +495,35 @@ class Agent:
             await self._send("device_info", rid, result)
             return
         
+        if msg_type == "exec_script":
+            cmd = {
+                "language": payload.get("language", "auto"),
+                "code": payload.get("code", ""),
+                "cwd": payload.get("cwd"),
+                "timeout": payload.get("timeout", 120000),
+            }
+            self._emit(self.on_command, {"type": "exec_script", "language": cmd["language"], "code": cmd["code"][:80]})
+            result = await self._exec_script(**cmd)
+            await self._send("script_result", rid, result)
+            self._emit(self.on_result, {**result, "command": f"[script:{cmd['language']}] {cmd['code'][:60]}", "cwd": (self.sessions.get_current().cwd if self.sessions.get_current() else os.getcwd())})
+            self._emit(self.on_log, f"[脚本:{cmd['language']}] {cmd['code'][:60]}")
+            out = result.get("stdout", "")
+            err = result.get("stderr", "")
+            if out:
+                for line in out.strip().split('\n')[:10]:
+                    self._emit(self.on_log, f"  {line[:120]}")
+            if err:
+                self._emit(self.on_log, f"  ❌ {err[:120]}")
+            if result.get("exitCode") != 0:
+                self._emit(self.on_log, f"  (退出码: {result.get('exitCode')})")
+            return
+        
+        if msg_type == "get_environment":
+            result = self._get_environment()
+            await self._send("environment_info", rid, result)
+            self._emit(self.on_log, "[环境] 已生成环境档案")
+            return
+        
         if msg_type == "download":
             path = payload.get("path", "")
             if not os.path.isabs(path):
@@ -706,6 +735,185 @@ class Agent:
             "userInfo": {"username": username},
         }
     
+    # ── 亲和通道：脚本执行（exec_script）──────────────────
+    # 把代码以文件形式传过去执行，避免整条命令字符串的转义地狱。
+    # 支持多语言，返回结构化结果。算力在沙箱，这里只是执行原语。
+    _SCRIPT_EXT = {
+        'python': '.py', 'py': '.py',
+        'powershell': '.ps1', 'ps1': '.ps1', 'pwsh': '.ps1',
+        'node': '.js', 'js': '.js',
+        'bash': '.sh', 'sh': '.sh',
+        'cmd': '.bat', 'bat': '.bat', 'batch': '.bat',
+    }
+    _SCRIPT_RUNNER = {
+        'python': ['python'], 'py': ['python'],
+        'node': ['node'], 'js': ['node'],
+        'cmd': ['cmd', '/c'], 'bat': ['cmd', '/c'], 'batch': ['cmd', '/c'],
+    }
+
+    def _resolve_interpreter(self, language):
+        """返回 (解释器命令列表, 是否走 shell)。找不到解释器抛 ValueError。"""
+        lang = (language or 'auto').lower()
+        if lang in ('auto',):
+            # 自动探测：优先 bash（Git for Windows 自带），其次 PowerShell，最后 python
+            for cand in self._detect_available_shells():
+                return cand
+            raise ValueError('未找到可用的脚本解释器（bash/pwsh/python 均不可用）')
+        if lang in ('bash', 'sh'):
+            bash = self._find_bash()
+            if bash:
+                return ([bash], False)
+            raise ValueError('未找到 bash（可安装 Git for Windows 或 WSL）')
+        if lang in ('powershell', 'ps1', 'pwsh'):
+            return ('powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File')
+        runner = self._SCRIPT_RUNNER.get(lang)
+        if not runner:
+            raise ValueError(f'不支持的脚本语言: {language}')
+        return (runner, False)
+
+    def _find_bash(self):
+        """查找 bash：优先 Git for Windows，其次系统 PATH。"""
+        candidates = []
+        for p in (os.environ.get('ProgramFiles', ''), os.environ.get('ProgramFiles(x86)', '')):
+            if p:
+                candidates.append(os.path.join(p, 'Git', 'bin', 'bash.exe'))
+        candidates.append('bash')
+        for c in candidates:
+            if c == 'bash':
+                # 试试 PATH 里有没有
+                import shutil
+                if shutil.which('bash'):
+                    return 'bash'
+                continue
+            if os.path.exists(c):
+                return c
+        return None
+
+    def _detect_available_shells(self):
+        """返回可用的脚本运行器列表（按优先级）。"""
+        runners = []
+        bash = self._find_bash()
+        if bash:
+            runners.append(([bash], False))
+        # PowerShell 总是可用
+        runners.append(('powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File'))
+        return runners
+
+    async def _exec_script(self, language, code, cwd=None, timeout=120000):
+        """把代码写成临时脚本文件执行，返回结构化结果。彻底避开字符串转义。"""
+        import tempfile
+        if not code or not code.strip():
+            return {"exitCode": 1, "stdout": "", "stderr": "空脚本", "duration": 0, "killed": False, "language": language}
+        # 工作区模式：cwd 强制为当前会话目录（脚本本身信任执行——脚本已是“可执行代码”，
+        # 不能用面向用户命令行的 _check_command 正则去卡，否则合法路径如 ls /var/log 会被误判。
+        # 安全模型 = 锁定 cwd + 审计日志；临时脚本文件在系统 temp，不留工作区内。
+        if self.permission == "workspace":
+            session = self.sessions.get_current()
+            cwd = (session.cwd if session else None) or self.default_work_dir or os.getcwd()
+        else:
+            cwd = cwd or os.getcwd()
+
+        lang = (language or 'auto').lower()
+        # 边界防护：timeout 非法/过小/过大时回退默认
+        if not timeout or timeout <= 0:
+            timeout = 120000
+        timeout = min(timeout, 1800000)
+        ext = self._SCRIPT_EXT.get(lang, '.txt')
+        try:
+            runner, is_shell = self._resolve_interpreter(lang)
+        except ValueError as e:
+            return {"exitCode": 1, "stdout": "", "stderr": str(e), "duration": 0, "killed": False, "language": language}
+
+        # 写临时脚本文件
+        fd, script_path = tempfile.mkstemp(suffix=ext, prefix='yunqiao_')
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                f.write(code)
+            # 命令行= runner + [script_path]
+            cmd = list(runner) + [script_path]
+            t0 = time.time()
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=cwd,
+            )
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout / 1000)
+                ret = {"exitCode": proc.returncode or 0,
+                       "stdout": self._decode_out(stdout),
+                       "stderr": self._decode_out(stderr),
+                       "killed": False,
+                       "duration": int((time.time() - t0) * 1000),
+                       "language": lang}
+            except asyncio.TimeoutError:
+                proc.kill()
+                stdout, stderr = await proc.communicate()
+                ret = {"exitCode": 1,
+                       "stdout": self._decode_out(stdout) if stdout else "",
+                       "stderr": (self._decode_out(stderr) if stderr else "") + "\n[超时]",
+                       "killed": True,
+                       "duration": int((time.time() - t0) * 1000),
+                       "language": lang}
+            return ret
+        except Exception as e:
+            return {"exitCode": 1, "stdout": "", "stderr": str(e), "duration": 0, "killed": False, "language": language}
+        finally:
+            try:
+                os.remove(script_path)
+            except OSError:
+                pass
+
+    def _decode_out(self, b):
+        if not b:
+            return ""
+        for enc in ['utf-8', 'gbk']:
+            try:
+                return b.decode(enc)
+            except Exception:
+                continue
+        return b.decode('utf-8', errors='replace')
+
+    # ── 亲和通道：环境自述（get_environment）───────────────
+    def _get_environment(self):
+        """返回一份环境档案：可用解释器、常用工具、工作区、系统信息。算力在沙箱，这里只做探测。"""
+        import shutil
+        info = self._get_info()
+        # 探测常用工具（GNU 工具是否可用）
+        tools = {}
+        for t in ['bash', 'python', 'node', 'npm', 'git', 'jq', 'curl', 'wget', 'tar', 'unzip', 'grep', 'sed', 'awk', 'wc', 'find', 'rg', 'fd']:
+            tools[t] = bool(shutil.which(t))
+        # Git for Windows 的 bash 不在 PATH，单独探测
+        bash = self._find_bash()
+        if not tools.get('bash') and bash:
+            tools['bash'] = True
+
+        # 当前会话
+        session = self.sessions.get_current()
+        sessions = []
+        try:
+            sessions = self.sessions.list_all() or []
+        except Exception:
+            sessions = []
+
+        return {
+            "system": {
+                "hostname": info.get("hostname"), "platform": info.get("platform"),
+                "arch": info.get("arch"), "cpus": info.get("cpus"),
+                "homedir": info.get("homedir"), "user": info.get("userInfo", {}).get("username"),
+            },
+            "shells": {"bash": tools.get('bash'), "powershell": sys.platform.startswith('win'), "cmd": sys.platform.startswith('win')},
+            "interpreters": {"python": tools.get('python'), "node": tools.get('node'), "npm": tools.get('npm')},
+            "tools": tools,
+            "git": tools.get('git'),
+            "workspace": {
+                "permission": self.permission,
+                "defaultWorkDir": self.default_work_dir,
+                "currentCwd": session.cwd if session else os.getcwd(),
+                "sessions": sessions,
+            },
+        }
+
     async def _handle_session_op(self, op, payload):
         try:
             if op == "create":

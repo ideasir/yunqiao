@@ -156,6 +156,8 @@ function summarizeArgs(toolName, params) {
   const p = params || {};
   switch (toolName) {
     case 'exec': case 'execute_command': return { command: p.command, cwd: p.cwd, timeout: p.timeout };
+    case 'exec_script': return { language: p.language, codeLen: (p.code || '').length, cwd: p.cwd, timeout: p.timeout };
+    case 'get_environment': return {};
     case 'read_file': case 'read_file_old': return { path: p.path };
     case 'write_file': case 'write_file_old': return { path: p.path, contentLen: (p.content || '').length };
     case 'download': return { path: p.path };
@@ -211,7 +213,7 @@ function sendJSON(ws, data) {
   }
 }
 
-function sendAndWait(type, payload, deviceId) {
+function sendAndWait(type, payload, deviceId, timeoutMs) {
   return new Promise((resolve, reject) => {
     const device = devices.get(deviceId);
     if (!device) {
@@ -219,11 +221,12 @@ function sendAndWait(type, payload, deviceId) {
       return;
     }
     const requestId = randomUUID();
+    const limit = timeoutMs || COMMAND_TIMEOUT;
     const timer = setTimeout(() => {
       pendingRequests.delete(requestId);
       scheduleActivityPush(device.userId);  // 调用结束
-      reject(new Error(`request timed out after ${COMMAND_TIMEOUT}ms`));
-    }, COMMAND_TIMEOUT);
+      reject(new Error(`request timed out after ${limit}ms`));
+    }, limit);
     pendingRequests.set(requestId, { deviceId, resolve, reject, timer });
     sendJSON(device.ws, { type, requestId, payload });
     scheduleActivityPush(device.userId);  // 调用开始
@@ -437,7 +440,7 @@ function withMsgHint(userId, handler) {
 // 每用户调用限流（1 秒滑动窗口）与输出大小限制
 const qpsCounters = new Map();
 // 需要广播"操作流"给客户端的工具（让用户看到 Agent 在干什么，跳过纯查询/轮询）
-const ACTION_TOOLS = new Set(['exec', 'execute_command', 'read_file', 'write_file', 'read_file_old', 'write_file_old', 'download', 'exec_task', 'notify', 'create_session', 'switch_session', 'close_session']);
+const ACTION_TOOLS = new Set(['exec', 'execute_command', 'exec_script', 'get_environment', 'read_file', 'write_file', 'read_file_old', 'write_file_old', 'download', 'exec_task', 'notify', 'create_session', 'switch_session', 'close_session']);
 function checkQps(userId) {
   const limits = getLimits(userId);
   const now = Date.now();
@@ -663,6 +666,49 @@ function createMcpServer(userId, authInfo = {}) {
     const o = output.payload;
     return { content: [{ type: 'text', text: `Exit Code: ${o.exitCode}${o.stdout ? '\nSTDOUT:' + o.stdout : ''}${o.stderr ? '\nSTDERR:' + o.stderr : ''}${o.killed ? '\n[超时]' : ''}` }] };
   }, 'execute_command'));
+
+  // 亲和通道：脚本执行（把代码当文件传，避免转义地狱）
+  server.registerTool('exec_script', {
+    description: '在远程电脑上执行一段多行脚本（把代码写成临时脚本文件再执行，彻底避开字符串转义问题）。' +
+      '支持 language: python/py、powershell/ps1、node/js、bash/sh、cmd/bat、auto（自动检测）。' +
+      '适合复杂命令、多行逻辑、管道、引号嵌套的场景。返回结构化结果（exitCode/stdout/stderr/duration）',
+    inputSchema: z.object({
+      script: z.string().describe('脚本代码（多行，无需转义）'),
+      language: z.string().optional().describe('脚本语言: python|powershell|node|bash|cmd|auto（默认 auto）'),
+      cwd: z.string().optional().describe('工作目录（工作区模式下强制使用当前会话目录）'),
+      timeout: z.number().optional().describe('超时毫秒，默认 120000'),
+      code: z.string().optional().describe('配对码（会话内首次调用需带一次）'),
+    }),
+  }, wrapTool(userId, async ({ language, script, cwd, timeout, code }) => {
+    const { device, error } = getAuthedDevice(sessionState, userId, undefined, code);
+    if (!device) return { content: [{ type: 'text', text: `Error: ${error}` }], isError: true };
+    if (!script || !script.trim()) return { content: [{ type: 'text', text: 'Error: 脚本内容为空' }], isError: true };
+    // 执行超时 = 用户指定或默认 120s，relay 等待上限=执行超时+5s 余量
+    const scriptTimeout = Math.min(Math.max(0, timeout || 120000), 1800000);
+    const output = await sendAndWait('exec_script', { language, code: script, cwd, timeout: scriptTimeout }, device.id, scriptTimeout + 5000);
+    const o = output.payload;
+    const parts = [`Exit Code: ${o.exitCode}`, `语言: ${o.language || language || 'auto'}`, `耗时: ${o.duration || 0}ms`];
+    if (o.stdout) parts.push('\nSTDOUT:\n' + o.stdout);
+    if (o.stderr) parts.push('\nSTDERR:\n' + o.stderr);
+    if (o.killed) parts.push('\n[超时]');
+    return { content: [{ type: 'text', text: parts.join('\n') }], isError: o.exitCode !== 0 };
+  }, 'exec_script'));
+
+  // 亲和通道：环境自述（环境档案）
+  server.registerTool('get_environment', {
+    description: '获取远程电脑的环境档案：可用解释器（python/node/bash/powershell）、常用工具（git/jq/curl 等）、' +
+      '工作区信息。用于让 Agent 在会话开始时快速了解环境，避免反复探测',
+    inputSchema: z.object({
+      code: z.string().optional().describe('配对码（会话内首次调用需带一次）'),
+    }),
+  }, wrapTool(userId, async ({ code }) => {
+    const { device, error } = getAuthedDevice(sessionState, userId, undefined, code);
+    if (!device) return { content: [{ type: 'text', text: `Error: ${error}` }], isError: true };
+    const output = await sendAndWait('get_environment', {}, device.id);
+    const o = output.payload;
+    const text = JSON.stringify(o, null, 2);
+    return { content: [{ type: 'text', text }] };
+  }, 'get_environment'));
 
   server.registerTool('read_file_old', {
     description: '[旧版] 读取私人电脑上的文件',
