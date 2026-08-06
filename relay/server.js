@@ -592,6 +592,23 @@ function createMcpServer(userId, authInfo = {}) {
     return { content: [{ type: 'text', text: `用户已删除: ${userId}` }] };
   }, 'delete_user'));
 
+  server.registerTool('reset_user_key', {
+    description: '重置用户密钥（密钥泄露时作废旧钥匙换新钥匙，用户需用新密钥重新连接）。需要管理员密钥认证',
+    inputSchema: z.object({
+      userId: z.string().describe('用户 ID'),
+    }),
+  }, wrapTool(userId, async ({ userId }) => {
+    const denied = requireAdmin(authInfo);
+    if (denied) return denied;
+    if (userId === 'admin') return { content: [{ type: 'text', text: 'Error: 不能重置 admin 自己的密钥（请用环境变量 RELAY_KEY 或手动改 .users.json）' }], isError: true };
+    if (!users[userId]) return { content: [{ type: 'text', text: 'Error: 用户不存在' }], isError: true };
+    const newKey = randomBytes(16).toString('hex');
+    users[userId].key = newKey;
+    saveUsers();
+    // 通知该用户的设备：密钥已换，让客户端重新认证（可选，至少广播）
+    return { content: [{ type: 'text', text: `用户 ${userId} 密钥已重置（旧密钥立即失效）\n新密钥: ${newKey}\n请转交用户，并提醒其用新密钥重新连接` }] };
+  }, 'reset_user_key'));
+
   server.registerTool('set_user_limit', {
     description: '设置用户资源配额（放开=调大，收紧=调小；不带任何限制参数则恢复默认）。需要管理员密钥认证',
     inputSchema: z.object({
