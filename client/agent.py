@@ -183,6 +183,14 @@ class Agent:
         self.pending_messages = {}  # msgId -> {text, urgent, time}，等待上游 Agent 已读回执
         self._ticket_waiter = None  # 动态 MCP 地址 ticket 请求的等待器
         self._activity = {}  # 最近一次上游 Agent 活跃度快照（连接数/任务数/调用数），供 UI 主动拉取兜底
+
+        # 索引自动同步（常驻）：工作区代码变动时自动 codegraph sync，保证查询的是最新代码
+        self._auto_sync_on = True
+        self._auto_sync_lock = threading.Lock()
+        self._auto_sync_state = {}  # workDir -> 文件快照 {relpath: mtime_ns}
+        self._auto_sync_thread = None
+        self._auto_sync_interval = int(os.environ.get('CODEGRAPH_SYNC_INTERVAL', '60'))  # 秒
+        self._auto_sync_start()
     
     def _emit(self, callback, *args):
         """线程安全地调用回调"""
@@ -1016,16 +1024,17 @@ class Agent:
         except Exception as e:
             return {"exitCode": 1, "stdout": "", "stderr": str(e), "duration": int((time.time() - t0) * 1000), "killed": False}
 
-    async def _run_codegraph_index(self, path, timeout=600000):
-        """执行 codegraph init 建索引，返回结果（含索引统计）"""
+    async def _run_codegraph_index(self, path, timeout=600000, sync_only=False):
+        """执行 codegraph 建索引。sync_only=True 时用 codegraph sync（增量），否则 init --force（全量）。
+        返回结果（含索引统计）。"""
         import subprocess, time
         t0 = time.time()
         try:
             cg = self._find_codegraph()
             if not cg:
                 return {"success": False, "error": "未找到 codegraph 命令（请先 npm install -g @colbymchenry/codegraph）", "duration": 0}
-            # 用 --force 允许重跑；codegraph init <path>
-            cmd = cg + ['init', path, '--force']
+            # sync_only：增量同步；否则 init --force 全量重建
+            cmd = cg + (['sync', path] if sync_only else ['init', path, '--force'])
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
@@ -1116,6 +1125,99 @@ class Agent:
             if parent == p:
                 return None
             p = parent
+
+    # ── 索引自动同步（常驻）：代码变动时自动 codegraph sync ──
+    _CG_IGNORE = {'.git', 'node_modules', '__pycache__', '.venv', 'venv', 'target', 'dist', 'build',
+                  '.idea', '.vscode', 'obj', 'bin', '.codegraph', '.cargo', 'worker'}
+    _CG_EXTS = {'.rs', '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py', '.go', '.java', '.kt', '.kts',
+                '.cs', '.php', '.rb', '.c', '.h', '.cpp', '.hpp', '.cc', '.swift', '.scala', '.dart',
+                '.vue', '.svelte', '.astro', '.lua', '.r', '.ex', '.exs', '.sol', '.tf', '.nix', '.sh', '.sql'}
+
+    def _cg_snapshot(self, root):
+        """采集工作区代码文件快照（相对路径 -> mtime_ns），供变更检测。超大目录限深限量。"""
+        snap = {}
+        try:
+            count = 0
+            for dirpath, dirnames, filenames in os.walk(root):
+                dirnames[:] = [d for d in dirnames if d not in self._CG_IGNORE]
+                for f in filenames:
+                    ext = os.path.splitext(f)[1].lower()
+                    if ext not in self._CG_EXTS:
+                        continue
+                    full = os.path.join(dirpath, f)
+                    try:
+                        snap[os.path.relpath(full, root)] = os.stat(full).st_mtime_ns
+                    except Exception:
+                        pass
+                    count += 1
+                    if count > 50000:
+                        break
+                if count > 50000:
+                    break
+        except Exception:
+            pass
+        return snap
+
+    def _cg_changed(self, root, snap):
+        """对比快照，返回是否发生代码变更（新增/修改/删除）。"""
+        try:
+            current = self._cg_snapshot(root)
+        except Exception:
+            return False
+        if len(current) != len(snap):
+            return True
+        for k, v in current.items():
+            if snap.get(k) != v:
+                return True
+        return False
+
+    def _auto_sync_start(self):
+        """启动常驻自动同步守护线程（daemon，随进程退出）"""
+        if self._auto_sync_thread and self._auto_sync_thread.is_alive():
+            return
+        self._auto_sync_thread = threading.Thread(target=self._auto_sync_loop, daemon=True, name="codegraph-autosync")
+        self._auto_sync_thread.start()
+
+    def _auto_sync_loop(self):
+        """守护循环：定期检查当前工作区代码变更，发现后自动 codegraph sync（增量）"""
+        while True:
+            try:
+                if self._auto_sync_on:
+                    self._auto_sync_once()
+            except Exception:
+                pass
+            time.sleep(self._auto_sync_interval)
+
+    def _auto_sync_once(self):
+        """单次自动同步检查：当前工作区（已建索引且非索引中）有变更则跑 codegraph sync。"""
+        try:
+            session = self.sessions.get_current()
+            work = session.cwd if session else None
+            if not work:
+                return
+            root = self._codegraph_root(work)
+            if not root:
+                return  # 还没建过索引，不自动建（建索引要用户明确发起）
+            if self._find_codegraph() is None:
+                return
+            with self._auto_sync_lock:
+                prev = self._auto_sync_state.get(root)
+                if prev is None:
+                    self._auto_sync_state[root] = self._cg_snapshot(root)
+                    return
+                if not self._cg_changed(root, prev):
+                    return
+            # 有变更 → 增量同步（快），用同步 subprocess 直接跑（不依赖事件循环，更健壮）
+            self._emit(self.on_log, f"[索引] 检测到代码变更，自动同步…")
+            try:
+                import subprocess
+                cg = self._find_codegraph()
+                subprocess.run(cg + ['sync', root], capture_output=True, timeout=600)
+            finally:
+                with self._auto_sync_lock:
+                    self._auto_sync_state[root] = self._cg_snapshot(root)
+        except Exception:
+            pass
 
     async def _check_codegraph(self, path):
         """检查目录：如果是代码项目，上报项目概况（文件数/是否已索引）到 UI"""
