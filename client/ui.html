@@ -444,12 +444,28 @@ function startCmdBlock(cmdText, cmdObj) {
   log.appendChild(block);
   scrollLog();
   trimLog();
-  return { el: block, title: title, body: body, cmdText: cmdText, time: time, startTime: Date.now() };
+  // 兑底：若 10 秒内未收到 result，标记为"已结束"，避免永远停在"运行中"
+  var pending = { el: block, title: title, body: body, cmdText: cmdText, time: time, startTime: Date.now(), _timeout: null };
+  pending._timeout = setTimeout(function() {
+    // 如果卡片还在且仍显示"运行中"，改成"已结束（无返回）"
+    if (pending.el && pending.el.isConnected) {
+      var runEl = pending.title.querySelector('.blink-fast');
+      if (runEl) {
+        runEl.textContent = '已结束';
+        runEl.style.color = '#888';
+        runEl.classList.remove('blink-fast');
+        pending.body.innerHTML = '<div class="text-[10px] text-[#777]">⚠ 此操作无返回结果（或已完成），未展示输出。</div>';
+      }
+    }
+  }, 10000);
+  return pending;
 }
 
 // 把"执行中"卡片更新为"完成"态
 function finalizeCmdBlock(pending, p) {
   if (!pending || !pending.el) return;
+  // 收到结果，取消兑底超时
+  if (pending._timeout) { clearTimeout(pending._timeout); pending._timeout = null; }
   var ok = p.exitCode === 0;
   var dur = p.duration != null ? Math.round(p.duration) + 'ms' : '';
   var exitText = (p.exitCode !== undefined) ? (ok ? '✓ ' : '✗ ') + p.exitCode : '';

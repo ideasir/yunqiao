@@ -584,6 +584,18 @@ class Agent:
             elif op == "write_file":
                 self._emit(self.on_result, {"kind": "write_file", "command": "write_file", "path": payload.get("path", ""), "exitCode": 0 if result.get("success") else 1, "stdout": ("已写入: " + str(result.get("path", ""))) if result.get("success") else "", "stderr": result.get("error", "") if not result.get("success") else "", "cwd": (self.sessions.get_current().cwd if self.sessions.get_current() else os.getcwd())})
                 self._emit(self.on_log, f"[写入] {payload.get('path','')}")
+            else:
+                # 其他会话操作（create/close/switch/list）：也给出完成反馈，避免卡片卡在"运行中"
+                ok = result.get("success", result.get("exitCode", 1) == 0)
+                desc = result.get("message", result.get("error", "")) or f"session {op}"
+                self._emit(self.on_result, {
+                    "kind": "session_" + op, "command": op + "_session",
+                    "exitCode": 0 if ok else 1,
+                    "stdout": desc if ok else "",
+                    "stderr": "" if ok else desc,
+                    "cwd": (self.sessions.get_current().cwd if self.sessions.get_current() else os.getcwd()),
+                })
+                self._emit(self.on_log, f"[会话] {op}: {desc}")
             return
         
         if msg_type == "task_start":
