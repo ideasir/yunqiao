@@ -839,6 +839,76 @@ fi` },
     return { content: [{ type: 'text', text: parts.join('\n') }], isError: o.exitCode !== 0 };
   }, 'run_custom'));
 
+  // ===== CodeGraph 语义代码图谱（大型项目，仅管理员——增值服务）=====
+  if (authInfo && authInfo.isAdminAuth) {
+  const CG_TOOLS = [
+    {
+      name: 'codegraph_query',
+      desc: '语义搜索代码符号（函数/类/枚举/变量），返回符号类型+精确定位+签名。基于本地 CodeGraph 索引',
+      fn: (path, q) => `cd "${String(path).replace(/\\/g, '\\\\')}" && codegraph query ${q} 2>&1`,
+    },
+    {
+      name: 'codegraph_explore',
+      desc: '语义探索：一次调用回答"某个功能怎么工作/影响面"，返回相关符号源码+调用链+爆炸半径。大型项目编辑的核心工具',
+      fn: (path, q) => `cd "${String(path).replace(/\\/g, '\\\\')}" && codegraph explore ${q} 2>&1`,
+    },
+    {
+      name: 'codegraph_node',
+      desc: '查看单个符号的源码+调用方/被调用方链路',
+      fn: (path, q) => `cd "${String(path).replace(/\\/g, '\\\\')}" && codegraph node ${q} 2>&1`,
+    },
+    {
+      name: 'codegraph_impact',
+      desc: '分析修改某个符号会影响哪些代码（爆炸半径）',
+      fn: (path, q) => `cd "${String(path).replace(/\\/g, '\\\\')}" && codegraph impact ${q} 2>&1`,
+    },
+  ];
+  for (const t of CG_TOOLS) {
+    server.registerTool(t.name, {
+      description: t.desc + '（需工作区已建 CodeGraph 索引，仅管理员可用）',
+      inputSchema: z.object({
+        path: z.string().describe('项目根目录（工作区目录）'),
+        query: z.string().describe('搜索词/符号名/探索问题'),
+        code: z.string().optional(),
+      }),
+    }, wrapTool(userId, async ({ path, query, code }) => {
+      const denied = requireAdmin(authInfo);
+      if (denied) return denied;
+      const { device, error } = getAuthedDevice(sessionState, userId, undefined, code);
+      if (!device) return { content: [{ type: 'text', text: `Error: ${error}` }], isError: true };
+      if (!query || !query.trim()) return { content: [{ type: 'text', text: 'Error: 缺少查询词' }], isError: true };
+      // 查询词安全处理：作为单个参数传给 codegraph，避免 shell 注入
+      const q = String(query).replace(/"/g, '\\"');
+      const script = t.fn(path || '.', '"' + q + '"');
+      const output = await sendAndWait('exec_script', { language: 'bash', code: script, timeout: 60000 }, device.id, 65000);
+      const o = output.payload;
+      if (o.exitCode !== 0 && o.stderr) {
+        return { content: [{ type: 'text', text: `CodeGraph 执行失败:\n${o.stderr}` }], isError: true };
+      }
+      return { content: [{ type: 'text', text: o.stdout || o.stderr || '(无输出)' }] };
+    }, t.name));
+  }
+
+  // 建立 CodeGraph 索引（大项目，可能耗时，结果含统计）
+  server.registerTool('codegraph_index', {
+    description: '为工作区建立 CodeGraph 语义索引（大项目用，首次较慢）。返回索引统计（文件数/符号/关系）。仅管理员可用',
+    inputSchema: z.object({
+      path: z.string().describe('项目根目录（工作区目录）'),
+      code: z.string().optional(),
+    }),
+  }, wrapTool(userId, async ({ path, code }) => {
+    const denied = requireAdmin(authInfo);
+    if (denied) return denied;
+    const { device, error } = getAuthedDevice(sessionState, userId, undefined, code);
+    if (!device) return { content: [{ type: 'text', text: `Error: ${error}` }], isError: true };
+    const output = await sendAndWait('codegraph_index', { path: path || '' }, device.id, 650000);
+    const o = output.payload;
+    if (!o.success) return { content: [{ type: 'text', text: `CodeGraph 索引失败: ${o.error || ''}` }], isError: true };
+    return { content: [{ type: 'text', text: o.message || '索引完成' }] };
+  }, 'codegraph_index'));
+
+  } // end CodeGraph (admin-only)
+
   // 会话管理
   const sessionTools = [
     ['create_session', '在远程电脑上创建一个新的工作会话', { workDir: z.string(), name: z.string().optional(), code: z.string().optional() }],

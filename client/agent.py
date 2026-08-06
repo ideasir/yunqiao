@@ -567,6 +567,35 @@ class Agent:
             self._emit(self.on_log, f"[自定义] {name} {" ".join(map(str, args_list))}")
             return
         
+        if msg_type == "codegraph_index":
+            # 建立 CodeGraph 语义索引（大项目）
+            path = payload.get("path", "")
+            cwd = self.sessions.get_current().cwd if self.sessions.get_current() else os.getcwd()
+            path = path or cwd
+            import shutil
+            if shutil.which('codegraph') is None:
+                await self._send("codegraph_index_result", rid, {"success": False, "error": "未安装 CodeGraph（npm install -g @colbymchenry/codegraph）"})
+                return
+            if not os.path.isdir(path):
+                await self._send("codegraph_index_result", rid, {"success": False, "error": f"目录不存在: {path}"})
+                return
+            self._emit(self.on_log, f"[索引] 正在为 {path} 建立 CodeGraph 索引…")
+            self._emit(self.on_command, {"type": "codegraph_index", "path": path})
+            result = await self._run_codegraph_index(path)
+            await self._send("codegraph_index_result", rid, result)
+            if result.get("success"):
+                self._emit(self.on_result, {
+                    "kind": "codegraph_index", "command": f"codegraph_index {path}",
+                    "exitCode": 0, "stdout": result.get("message", "索引完成"),
+                    "stderr": "", "cwd": cwd,
+                })
+            else:
+                self._emit(self.on_result, {
+                    "kind": "codegraph_index", "command": f"codegraph_index {path}",
+                    "exitCode": 1, "stdout": "", "stderr": result.get("error", "索引失败"), "cwd": cwd,
+                })
+            return
+        
         if msg_type == "session_op":
             op = payload.get("op", "")
             self._emit(self.on_command, {"type": "session", "op": op})
@@ -963,6 +992,69 @@ class Agent:
         except Exception as e:
             return {"exitCode": 1, "stdout": "", "stderr": str(e), "duration": int((time.time() - t0) * 1000), "killed": False}
 
+    async def _run_codegraph_index(self, path, timeout=600000):
+        """执行 codegraph init 建索引，返回结果（含索引统计）"""
+        import subprocess, time
+        t0 = time.time()
+        try:
+            # 用 --force 允许重跑；用 -c 指定目录。codegraph init <path>
+            proc = await asyncio.create_subprocess_exec(
+                'codegraph', 'init', path, '--force',
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout / 1000)
+                killed = False
+            except asyncio.TimeoutError:
+                proc.kill()
+                stdout, stderr = await proc.communicate()
+                killed = True
+            out = self._decode_out(stdout)
+            err = self._decode_out(stderr)
+            dur = int((time.time() - t0) * 1000)
+            if killed:
+                return {"success": False, "error": f"索引超时（>{timeout // 1000}s）", "duration": dur}
+            ok = proc.returncode == 0
+            # 提取统计（Indexed N files / N nodes, M edges）
+            msg = out
+            return {"success": ok, "message": msg, "error": err if not ok else "", "duration": dur}
+        except FileNotFoundError:
+            return {"success": False, "error": "未找到 codegraph 命令（请先 npm install -g @colbymchenry/codegraph）", "duration": int((time.time() - t0) * 1000)}
+        except Exception as e:
+            return {"success": False, "error": str(e), "duration": int((time.time() - t0) * 1000)}
+
+    # ── CodeGraph 语义索引（大型项目）─────────────────
+    def _codegraph_root(self, path):
+        """向上找最近的 .codegraph 目录（判断是否已建索引）"""
+        p = os.path.abspath(path)
+        while True:
+            if os.path.isdir(os.path.join(p, '.codegraph')):
+                return p
+            parent = os.path.dirname(p)
+            if parent == p:
+                return None
+            p = parent
+
+    async def _check_codegraph(self, path):
+        """检查目录是否已建 CodeGraph 索引，未建且代码量较大时提示（不自动建，避免打扰）"""
+        import shutil
+        if not path:
+            return
+        if shutil.which('codegraph') is None:
+            return
+        if self._codegraph_root(path):
+            return  # 已有索引
+        # 粗略统计文件数，判断是否大项目（>300 文件才提示）
+        file_count = 0
+        for dirpath, dirnames, filenames in os.walk(path):
+            dirnames[:] = [d for d in dirnames if d in ('.git', 'node_modules', 'target', 'dist', 'build')]
+            file_count += len(filenames)
+            if file_count > 300:
+                break
+        if file_count > 300:
+            self._emit(self.on_log, f"[索引] 工作区代码量较大（约 {file_count}+ 文件），可执行 codegraph_index 建立语义索引，大幅提升代码理解效率")
+
     # ── 亲和通道：环境自述（get_environment）───────────────
     def _get_environment(self):
         """返回一份环境档案：可用解释器、常用工具、工作区、系统信息。算力在沙箱，这里只做探测。"""
@@ -1012,7 +1104,11 @@ class Agent:
                     if os.path.normpath(work_dir) != os.path.normpath(self.default_work_dir):
                         return {"success": False, "error": "工作区模式下不能自定义工作目录，只能使用默认工作区"}
                     work_dir = self.default_work_dir
-                return self.sessions.create(work_dir, payload.get("name"))
+                result = self.sessions.create(work_dir, payload.get("name"))
+                # 创建会话后检查该目录是否需要 CodeGraph 索引（大项目自动提示）
+                if result.get("success"):
+                    await self._check_codegraph(work_dir or self.sessions.get_current().cwd)
+                return result
             elif op == "exec":
                 session = self.sessions.get_current()
                 if not session:
