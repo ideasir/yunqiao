@@ -338,12 +338,26 @@ function addCmdBlock(cmd, meta, p) {
   else if (p && p.duration != null) dur = p.duration;
   var durText = dur != null ? Math.round(dur) + 'ms' : '';
   var exitText = (p && p.exitCode !== undefined) ? (ok ? '✓ ' : '✗ ') + p.exitCode : '';
+
+  // 按 kind 区分卡片：脚本/命令/环境/文件
+  var kind = (p && p.kind) || (meta && meta.kind) || '';
+  var badge = ['CMD', '#3b82f6'];
+  var prefix = '$ ';
+  var kindLabel = '';
+  if (kind === 'exec_script') { badge = ['SCRIPT', '#e0a458']; prefix = ''; }
+  else if (kind === 'get_environment') { badge = ['ENV', '#a78bfa']; prefix = ''; }
+  else if (kind === 'read_file') { badge = ['FILE', '#a78bfa']; prefix = '📖 '; }
+  else if (kind === 'write_file') { badge = ['FILE', '#a78bfa']; prefix = '✏️ '; }
+  // 脚本语言标签
+  if (p && p.language) kindLabel = '<span class="text-[9px] text-[#888] border border-[#333] rounded px-1 flex-shrink-0">' + esc(p.language) + '</span>';
+
   var title = document.createElement('div');
   title.className = 'flex items-center gap-2 px-1.5 py-1 rounded cursor-pointer hover:bg-[#161616] transition-colors';
   title.innerHTML =
     '<span class="lg-time">' + time + '</span>' +
-    '<span class="lg-badge" style="color:#3b82f6;border-color:#3b82f644;">CMD</span>' +
-    '<span class="text-[#93c5fd] font-medium flex-1 min-w-0 truncate">$ ' + esc(cmd) + '</span>' +
+    '<span class="lg-badge" style="color:' + badge[1] + ';border-color:' + badge[1] + '44;">' + badge[0] + '</span>' +
+    kindLabel +
+    '<span class="text-[#93c5fd] font-medium flex-1 min-w-0 truncate">' + prefix + esc(cmd || '') + '</span>' +
     (durText ? '<span class="text-[9px] text-[#666] font-mono flex-shrink-0">' + durText + '</span>' : '') +
     (exitText ? '<span class="text-[10px] font-mono flex-shrink-0 ' + (ok ? 'text-[#4ade80]' : 'text-[#ff6b6b]') + '">' + exitText + '</span>' : '') +
     '<span class="text-[#555] text-[9px] flex-shrink-0">▾</span>';
@@ -351,8 +365,14 @@ function addCmdBlock(cmd, meta, p) {
   body.className = 'cmd-body pl-[62px] pb-1 space-y-0.5';
   var lines = [];
   if (meta && meta.cwd) lines.push('<div class="text-[10px] text-[#777]">📁 ' + esc(meta.cwd) + '</div>');
-  if (p && p.stdout) lines.push('<pre class="text-[#d4d4d4]">' + esc(p.stdout) + '</pre>');
-  if (p && p.stderr) lines.push('<pre class="text-[#ff8a8a]">' + esc(p.stderr) + '</pre>');
+
+  // 环境档案：可读的结构化展示（而非裸 JSON）
+  if (kind === 'get_environment' && p && p.data) {
+    lines.push(renderEnvProfile(p.data));
+  } else {
+    if (p && p.stdout) lines.push('<pre class="text-[#d4d4d4] whitespace-pre-wrap break-all">' + esc(p.stdout) + '</pre>');
+    if (p && p.stderr) lines.push('<pre class="text-[#ff8a8a] whitespace-pre-wrap break-all">' + esc(p.stderr) + '</pre>');
+  }
   if (p && p.killed) lines.push('<div class="text-[10px] text-[#fbbf24]">⏱ 超时被终止</div>');
   if (lines.length === 0) lines.push('<div class="text-[10px] text-[#555]">（无输出）</div>');
   body.innerHTML = lines.join('');
@@ -367,6 +387,32 @@ function addCmdBlock(cmd, meta, p) {
   if (logFilter !== 'all' && logFilter !== 'cmd') block.style.display = 'none';
   log.appendChild(block);
   scrollLog();
+}
+// 环境档案 → 结构化 HTML（分组展示，IDE 风格）
+function renderEnvProfile(d) {
+  if (!d || typeof d !== 'object') return '';
+  var html = '';
+  var sec = function(title, rows) {
+    if (!rows.length) return '';
+    var r = rows.map(function(x) { return '<div class="flex gap-2 items-baseline"><span class="text-[#888] w-28 flex-shrink-0">' + esc(x[0]) + '</span><span class="text-[#d4d4d4] break-all">' + esc(x[1]) + '</span></div>'; }).join('');
+    return '<div class="mt-1"><div class="text-[10px] text-[#a78bfa] font-medium mb-0.5">' + esc(title) + '</div>' + r + '</div>';
+  };
+  var s = (d.system || {});
+  html += sec('系统', [
+    ['主机名', s.hostname || ''], ['平台', (s.platform || '') + ' ' + (s.arch || '')],
+    ['CPU', (s.cpus || '') + ' 核'], ['用户', s.user || ''], ['主目录', s.homedir || '']
+  ]);
+  var tools = d.tools || {};
+  var toolList = Object.keys(tools).filter(function(k){ return tools[k]; });
+  html += sec('可用工具', [['', toolList.join(', ')]]);
+  var w = d.workspace || {};
+  html += sec('工作区', [
+    ['模式', w.permission || ''], ['当前目录', w.currentCwd || ''], ['默认目录', w.defaultWorkDir || '']
+  ]);
+  // 完整 JSON（可折叠展开）
+  html += '<div class="text-[10px] text-[#555] mt-1 cursor-pointer" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'none\'?\'\':\'none\'">▸ 查看完整 JSON</div>';
+  html += '<pre style="display:none" class="text-[#777] text-[10px] whitespace-pre-wrap break-all">' + esc(JSON.stringify(d, null, 2)) + '</pre>';
+  return html;
 }
 function esc(t) { var d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
 function copyLog() {

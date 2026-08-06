@@ -446,16 +446,9 @@ class Agent:
             cwd_str = cwd.cwd if cwd else os.getcwd()
             result = await self._exec_cmd(cmd, payload.get("timeout", 30000), cwd_str)
             await self._send("command_result", rid, result)
-            self._emit(self.on_result, {**result, "command": cmd, "cwd": cwd_str})
+            # 结构化结果：完整命令 + 完整输出（不散行重复）
+            self._emit(self.on_result, {**result, "kind": "execute_command", "command": cmd, "cwd": cwd_str})
             self._emit(self.on_log, f"[执行] {cmd[:80]}")
-            self._emit(self.on_log, f"[目录] {cwd_str}")
-            out = result.get("stdout", "")
-            err = result.get("stderr", "")
-            if out:
-                for line in out.strip().split('\n')[:10]:
-                    self._emit(self.on_log, f"  {line[:120]}")
-            if err:
-                self._emit(self.on_log, f"  ❌ {err[:120]}")
             return
         
         if msg_type == "read_file":
@@ -505,22 +498,33 @@ class Agent:
             self._emit(self.on_command, {"type": "exec_script", "language": cmd["language"], "code": cmd["code"][:80]})
             result = await self._exec_script(**cmd)
             await self._send("script_result", rid, result)
-            self._emit(self.on_result, {**result, "command": f"[script:{cmd['language']}] {cmd['code'][:60]}", "cwd": (self.sessions.get_current().cwd if self.sessions.get_current() else os.getcwd())})
+            # 结构化结果：完整脚本 + 完整输出（不再只发截断摘要）
+            full_result = {
+                **result,
+                "kind": "exec_script",
+                "command": cmd["code"],
+                "language": cmd["language"],
+                "cwd": (self.sessions.get_current().cwd if self.sessions.get_current() else os.getcwd()),
+            }
+            self._emit(self.on_result, full_result)
+            # 保留简短的 Agent 动作日志（不重复输出正文，正文已进卡片）
             self._emit(self.on_log, f"[脚本:{cmd['language']}] {cmd['code'][:60]}")
-            out = result.get("stdout", "")
-            err = result.get("stderr", "")
-            if out:
-                for line in out.strip().split('\n')[:10]:
-                    self._emit(self.on_log, f"  {line[:120]}")
-            if err:
-                self._emit(self.on_log, f"  ❌ {err[:120]}")
-            if result.get("exitCode") != 0:
-                self._emit(self.on_log, f"  (退出码: {result.get('exitCode')})")
             return
         
         if msg_type == "get_environment":
             result = self._get_environment()
             await self._send("environment_info", rid, result)
+            # 结构化结果：完整环境档案 JSON 发给 UI
+            self._emit(self.on_result, {
+                "kind": "get_environment",
+                "command": "get_environment",
+                "exitCode": 0,
+                "stdout": json.dumps(result, ensure_ascii=False, indent=2),
+                "stderr": "",
+                "duration": 0,
+                "data": result,
+                "cwd": (self.sessions.get_current().cwd if self.sessions.get_current() else os.getcwd()),
+            })
             self._emit(self.on_log, "[环境] 已生成环境档案")
             return
         
@@ -551,23 +555,14 @@ class Agent:
             if op == "exec" and "exitCode" in result:
                 cwd = self.sessions.get_current()
                 cwd_str = cwd.cwd if cwd else os.getcwd()
-                # 让 UI 渲染命令块（含耗时、目录、命令名）
-                self._emit(self.on_result, {**result, "command": payload.get("command", ""), "cwd": cwd_str})
+                # 结构化结果：完整命令 + 完整输出（不散行重复）
+                self._emit(self.on_result, {**result, "kind": "exec", "command": payload.get("command", ""), "cwd": cwd_str})
                 self._emit(self.on_log, f"[执行] {payload.get('command','')[:80]}")
-                self._emit(self.on_log, f"[目录] {cwd_str}")
-                # 显示结果摘要
-                out = result.get("stdout", "")
-                err = result.get("stderr", "")
-                if out:
-                    for line in out.strip().split('\n')[:10]:
-                        self._emit(self.on_log, f"  {line[:120]}")
-                if err:
-                    self._emit(self.on_log, f"  ❌ {err[:120]}")
-                if result.get("exitCode") != 0:
-                    self._emit(self.on_log, f"  (退出码: {result.get('exitCode')})")
             elif op == "read_file":
+                self._emit(self.on_result, {"kind": "read_file", "command": "read_file", "path": payload.get("path", ""), "exitCode": 0 if result.get("success") else 1, "stdout": result.get("content", "") if result.get("success") else "", "stderr": result.get("error", "") if not result.get("success") else "", "cwd": (self.sessions.get_current().cwd if self.sessions.get_current() else os.getcwd())})
                 self._emit(self.on_log, f"[读取] {payload.get('path','')}")
             elif op == "write_file":
+                self._emit(self.on_result, {"kind": "write_file", "command": "write_file", "path": payload.get("path", ""), "exitCode": 0 if result.get("success") else 1, "stdout": ("已写入: " + str(result.get("path", ""))) if result.get("success") else "", "stderr": result.get("error", "") if not result.get("success") else "", "cwd": (self.sessions.get_current().cwd if self.sessions.get_current() else os.getcwd())})
                 self._emit(self.on_log, f"[写入] {payload.get('path','')}")
             return
         

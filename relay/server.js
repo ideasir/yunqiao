@@ -156,7 +156,7 @@ function summarizeArgs(toolName, params) {
   const p = params || {};
   switch (toolName) {
     case 'exec': case 'execute_command': return { command: p.command, cwd: p.cwd, timeout: p.timeout };
-    case 'exec_script': return { language: p.language, codeLen: (p.code || '').length, cwd: p.cwd, timeout: p.timeout };
+    case 'exec_script': return { language: p.language, codeLen: (p.script || p.code || '').length, cwd: p.cwd, timeout: p.timeout };
     case 'get_environment': return {};
     case 'read_file': case 'read_file_old': return { path: p.path };
     case 'write_file': case 'write_file_old': return { path: p.path, contentLen: (p.content || '').length };
@@ -472,7 +472,12 @@ function withLimits(userId, handler, toolName) {
     // Agent 操作流广播：让客户端日志显示 Agent 实际在干什么
     if (ACTION_TOOLS.has(toolName)) {
       const brief = summarizeArgs(toolName, params);
-      const detail = (brief.command || brief.path || brief.text || '').slice(0, 60);
+      let detail = brief.command || brief.path || brief.text || '';
+      // exec_script 用语言+代码长度做摘要（避免广播整段代码，也避免无信息）
+      if (toolName === 'exec_script' && brief.language) {
+        const len = brief.codeLen != null ? brief.codeLen : (params.script || '').length;
+        detail = `[${brief.language}] ${len} 字符`;
+      }
       broadcastToDevices({ type: 'agent_action', text: `Agent ${toolName}${detail ? ': ' + detail : ''}` }, userId);
     }
     // download 的输出大小由 handler 内按 maxDownloadMB 检查，这里豁免
