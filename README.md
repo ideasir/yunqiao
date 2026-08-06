@@ -38,7 +38,7 @@
 ```bash
 cd client
 pip install -r requirements.txt
-python main.py
+python desktop.py
 ```
 
 打开设置（⚙），填入中继地址和 密钥，点击「保存并连接」。
@@ -72,7 +72,7 @@ node skills/yunqiao-client.mjs <配对码> list
                ▼
 ┌─────────────────────────────────────────────────────────┐
 │                  你的电脑 (Windows/Linux/macOS)           │
-│  python main.py                                          │
+│  python desktop.py                                          │
 │  ┌─────────────────────────────────────────────────┐     │
 │  │ 配对码: 984979                                   │     │
 │  │ [📋 复制并发送给 Agent]                          │     │
@@ -224,7 +224,7 @@ server {
 ```bash
 cd client
 pip install -r requirements.txt
-python main.py
+python desktop.py
 ```
 
 打开后会看到一个窗口：
@@ -251,7 +251,7 @@ python agent.py
 
 ```bash
 pip install pyinstaller
-pyinstaller --onefile --windowed --name "云桥MCP" main.py
+pyinstaller --onefile --windowed --name "云桥MCP" desktop.py
 ```
 
 ---
@@ -370,6 +370,72 @@ node skills/yunqiao-client.mjs <配对码> call get_client_messages '{}'
 
 ---
 
+### 工具架（预置只读工具）
+
+云桥内置一组预置只读工具，帮你快速了解远程电脑上的项目，无需反复拼命令。工具脚本存中转服务器，调用时下发到远程电脑执行，**沙箱零安装、客户端零更新、加工具只动服务器**。
+
+| 工具 | 说明 | 示例 |
+|------|------|------|
+| `stats` | 目录统计：文件数/大小/扩展名分布/最大文件/最近修改 | `stats {"path":"E:\\project"}` |
+| `tree` | 目录树（限深度，避免刷屏） | `tree {"path":"E:\\project","maxDepth":2}` |
+| `grep_code` | 代码搜索（正则，返回文件/行号/内容） | `grep_code {"pattern":"fn main","path":"E:\\project","glob":"*.rs"}` |
+| `project_map` | 项目地图：巨型文件/语言分布/测试目录/依赖/Git 状态 | `project_map {"path":"E:\\project"}` |
+
+```bash
+node skills/yunqiao-client.mjs <配对码> call stats '{"path":"E:\\AIcode\\github\\VeryAgent"}'
+```
+
+### 自定义命令（run_custom）
+
+把常用脚本固化成一条命令，以后直接调用，不用每次重复拼脚本。
+
+**架构**：命令表（名字→权限）存中转服务器，脚本本体存远程电脑 `client/custom-commands/` 目录，调用时下发执行。
+
+**1. 注册命令（仅管理员）**：
+```bash
+node skills/yunqiao-client.mjs <配对码> call add_command '{"name":"va-status","desc":"VeryAgent 项目状态"}'
+# allowedUsers 不传=仅 admin；传 ["*"]=所有用户；传 ["user-a"]=指定用户
+```
+
+**2. 放脚本**（远程电脑 `custom-commands/` 目录，文件名=命令名）：
+```
+va-status.py / va-status.ps1 / va-status.sh / va-status.bat / va-status.js
+```
+
+**3. 执行命令**：
+```bash
+node skills/yunqiao-client.mjs <配对码> call run_custom '{"name":"va-status","args":["main"]}'
+node skills/yunqiao-client.mjs <配对码> call list_commands '{}'   # 查看可用命令
+```
+
+**安全**：只能执行 `custom-commands/` 目录内的白名单脚本；非法命令名（含路径/../）被拦截；命令表权限由管理员控制。
+
+### 中转服务器运维（relay_exec，仅管理员）
+
+通过 MCP 直接运维中转服务器，替代 SSH：
+
+```bash
+node skills/yunqiao-client.mjs <配对码> call relay_exec '{"op":"status"}'          # 服务器状态
+node skills/yunqiao-client.mjs <配对码> call relay_exec '{"op":"view_log","n":50}'  # 看日志
+node skills/yunqiao-client.mjs <配对码> call relay_exec '{"op":"update_relay"}'      # 从 GitHub 自更新并重启
+```
+
+**安全**：仅管理员可用；只允许预定义的 3 个运维操作，不可执行任意命令。生产环境配合 systemd（`yunqiao-relay.service`）托管：崩溃自动重启、开机自启。
+
+### 多用户权限分层
+
+按用户角色（role）区分可见能力：
+
+| 能力 | 普通用户 | 管理员 |
+|------|---------|--------|
+| 控制自己设备（exec/script/文件/工具架/自定义命令）| ✅ | ✅ |
+| 用户管理 / 配额 / 审计 | ❌（工具列表里根本没有）| ✅ |
+| 中转服务器运维 relay_exec | ❌ | ✅ |
+
+**实现**：工具按角色**动态注册**——普通用户的 MCP 工具列表里不包含管理工具（非仅拒绝，而是压根不暴露），安全性最好。管理员密钥对应 `role: admin`，普通用户密钥对应 `role: user`。
+
+---
+
 ## 安全
 
 | 机制 | 说明 |
@@ -392,7 +458,7 @@ yunqiao-mcp/
 │   ├── server.js       ← 主服务（HTTP + WebSocket + MCP）
 │   └── package.json
 ├── client/             ← 客户机代理（Python）
-│   ├── main.py         ← 桌面客户端（tkinter）
+│   ├── desktop.py     ← 桌面客户端（pywebview + HTML 前端）
 │   ├── ui.html         ← HTML 前端（pywebview）
 │   ├── desktop_monitor.py  ← 旧版桌面面板
 │   └── agent.py        ← 轻量后台版
@@ -409,7 +475,7 @@ yunqiao-mcp/
 cd relay && npm install && node server.js
 
 # 客户机（另一个终端）
-cd client && pip install -r requirements.txt && python main.py
+cd client && pip install -r requirements.txt && python desktop.py
 
 # 测试连接（第三个终端）
 node skills/yunqiao-client.mjs list
