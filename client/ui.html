@@ -127,6 +127,7 @@ tailwind.config = {
       <button class="lg-fbtn text-[10px] px-1.5 py-0.5 rounded text-[#666] hover:text-[#ccc] transition-colors" data-f="msg" onclick="setLogFilter('msg')">消息</button>
       <div class="flex-1"></div>
       <button id="autoScrollBtn" class="text-[10px] text-[#555] hover:text-[#aaa] transition-colors bg-transparent border-0 cursor-pointer" onclick="toggleAutoScroll()" title="自动滚动到底部">⤓ 滚动</button>
+      <button class="text-[10px] text-[#a78bfa] hover:text-[#c4b5fd] transition-colors bg-transparent border-0 cursor-pointer" onclick="userBuildIndex()" title="为当前工作区建立 CodeGraph 语义索引（大项目推荐）">🧠 索引</button>
       <button class="text-[10px] text-[#555] hover:text-[#aaa] transition-colors bg-transparent border-0 cursor-pointer" onclick="clearLog()" title="清空日志">清空</button>
     </div>
 
@@ -240,9 +241,6 @@ tailwind.config = {
         </div>
       </div>
       <div class="px-3 py-2 text-[10px] text-[#444] text-center border-t border-[#1a1a1a]">工作区在左侧边栏管理</div>
-      <div class="px-3 py-2 border-t border-[#1a1a1a]">
-        <button onclick="userBuildIndex()" class="w-full text-xs py-1.5 rounded-lg bg-[#1a1a1a] text-[#a78bfa] hover:bg-[#222] hover:text-[#c4b5fd] transition-all" title="为当前工作区建立 CodeGraph 语义索引（大项目推荐）">🧠 建立代码索引</button>
-      </div>
     </div>
   </aside>
 </div>
@@ -676,20 +674,49 @@ function copySkillInfo() {
   copyTextToClipboard(msg, '技能安装信息已复制，请粘贴发给智能体');
 }
 
-// 用户主动建立 CodeGraph 索引（点击右侧按钮）
+// 用户主动建立 CodeGraph 索引（点击顶部工具条按钮）
 function userBuildIndex() {
   var path = state.workDir || '';
   if (!path) { addLog('err', '请先设置/选择工作区'); return; }
-  if (window.pywebview && window.pywebview.api && window.pywebview.api.build_index) {
-    window.pywebview.api.build_index(path).then(function(r) {
-      if (r && r.success) {
-        addLog('done', '✅ 代码索引建立完成: ' + ((r.message || '').slice(0, 80)));
+  // 先查询当前工作区索引状态，动态生成建议
+  var statusLine = '';
+  var doAsk = function() {
+    var help =
+      '🧠 建立代码索引（CodeGraph）\n\n' +
+      '【用途】为当前工作区生成语义代码图谱：\n' +
+      '  · 跳转函数/类定义、查看调用关系\n' +
+      '  · 跨文件理解代码、查询影响范围\n\n' +
+      '【何时需要】\n' +
+      '  · 项目文件较多（数百+）时，普通 grep 难理解全局\n' +
+      '  · 经常改代码、需要知道改动影响的模块\n' +
+      '  · 接手中大型项目想快速上手\n\n' +
+      (statusLine ? statusLine + '\n' : '') +
+      '【耗时】小项目秒级，大项目几分钟\n' +
+      '【当前工作区】' + path + '\n\n' +
+      '确认开始建立索引？';
+    nativeConfirm('建立代码索引', help).then(function(ok) {
+      if (!ok) { addLog('info', '已取消建立索引'); return; }
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.build_index) {
+        window.pywebview.api.build_index(path).then(function(r) {
+          if (r && r.success) {
+            addLog('done', '✅ 代码索引建立完成: ' + ((r.message || '').slice(0, 80)));
+          } else {
+            addLog('err', '建立索引失败: ' + ((r && r.error) || '未知错误'));
+          }
+        }).catch(function(e) { addLog('err', '建立索引失败: ' + ((e && e.message) || e || '')); });
       } else {
-        addLog('err', '建立索引失败: ' + ((r && r.error) || '未知错误'));
+        addLog('err', '浏览器模式不支持建立索引，请使用桌面客户端');
       }
-    }).catch(function(e) { addLog('err', '建立索引失败: ' + ((e && e.message) || e || '')); });
+    });
+  };
+  // 若后端支持则先查状态，再弹框；否则直接弹框
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.get_codegraph_status) {
+    window.pywebview.api.get_codegraph_status(path).then(function(s) {
+      if (s && s.success) { statusLine = '【当前状态】' + (s.advice || ''); }
+      doAsk();
+    }).catch(function() { doAsk(); });
   } else {
-    addLog('err', '浏览器模式不支持建立索引，请使用桌面客户端');
+    doAsk();
   }
 }
 

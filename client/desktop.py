@@ -187,6 +187,49 @@ class Api:
         msg_id = a.send_message(text, bool(urgent))
         return {"success": True, "msgId": msg_id}
 
+    def get_codegraph_status(self, path=None):
+        """查询当前工作区的索引状态，并给出'是否需要建索引'的建议。
+        供 UI 在确认框/提示中显示：文件规模、codegraph 是否安装、是否已建索引。"""
+        import os, shutil
+        try:
+            a = get_agent()
+        except Exception:
+            a = None
+        work_dir = path or (a.sessions.get_current().cwd if a and a.sessions.get_current() else None) or cfg.get("workDir", "")
+        if not work_dir or not os.path.isdir(work_dir):
+            return {"success": False, "error": "未设置工作区", "workDir": work_dir}
+        # codegraph 是否安装
+        installed = a._find_codegraph() is not None if a else False
+        # 文件数（忽略构建/依赖目录）
+        ignore = {'.git', 'node_modules', '__pycache__', '.venv', 'venv', 'target', 'dist', 'build', '.idea', '.vscode', 'obj', 'bin'}
+        file_count = 0
+        try:
+            for dirpath, dirnames, filenames in os.walk(work_dir):
+                dirnames[:] = [d for d in dirnames if d not in ignore]
+                file_count += len(filenames)
+                if file_count > 5000:
+                    break
+        except Exception:
+            pass
+        # 是否已建索引
+        indexed = a._codegraph_root(work_dir) is not None if a else False
+        # 建议：文件较多且未建索引且已装 codegraph
+        recommend = installed and not indexed and file_count >= 50
+        return {
+            "success": True,
+            "workDir": work_dir,
+            "fileCount": file_count,
+            "codegraphInstalled": installed,
+            "indexed": indexed,
+            "recommend": recommend,
+            "advice": (
+                "✅ 已建立索引" if indexed
+                else ("⛔ 未安装 codegraph（npm install -g @colbymchenry/codegraph）" if not installed
+                else (f"💡 建议建立索引（{file_count}+ 文件）" if recommend
+                else f"ℹ 文件较少（{file_count}），暂可不建索引"))
+            ),
+        }
+
     def build_index(self, path=None):
         """用户主动建立 CodeGraph 索引（后台执行，进度通过 notify_ui('task_progress') 上报）
         无需等待 Agent 连接即可使用（用独立线程 + 事件循环）。"""
