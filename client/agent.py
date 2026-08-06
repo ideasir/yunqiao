@@ -1037,23 +1037,35 @@ class Agent:
             p = parent
 
     async def _check_codegraph(self, path):
-        """检查目录是否已建 CodeGraph 索引，未建且代码量较大时提示（不自动建，避免打扰）"""
+        """检查目录：如果是代码项目，上报项目概况（文件数/是否已索引）到 UI"""
         import shutil
         if not path:
             return
-        if shutil.which('codegraph') is None:
-            return
-        if self._codegraph_root(path):
-            return  # 已有索引
-        # 粗略统计文件数，判断是否大项目（>300 文件才提示）
+        is_codegraph = shutil.which('codegraph') is not None
+        # 统计文件数（忽略常见构建/依赖目录）
+        ignore = {'.git', 'node_modules', '__pycache__', '.venv', 'venv', 'target', 'dist', 'build', '.idea', '.vscode', 'obj', 'bin'}
         file_count = 0
         for dirpath, dirnames, filenames in os.walk(path):
-            dirnames[:] = [d for d in dirnames if d in ('.git', 'node_modules', 'target', 'dist', 'build')]
+            dirnames[:] = [d for d in dirnames if d not in ignore]
             file_count += len(filenames)
-            if file_count > 300:
+            if file_count > 5000:
                 break
-        if file_count > 300:
-            self._emit(self.on_log, f"[索引] 工作区代码量较大（约 {file_count}+ 文件），可执行 codegraph_index 建立语义索引，大幅提升代码理解效率")
+        indexed = self._codegraph_root(path) is not None
+        # 上报项目概况（含索引状态）——UI 显示成信息卡片
+        self._emit(self.on_result, {
+            "kind": "project_status",
+            "command": "项目概况",
+            "exitCode": 0,
+            "stdout": (
+                f"📂 工作区: {path}\n"
+                f"📄 文件数: {file_count}+\n"
+                f"🧠 CodeGraph 索引: {'✅ 已建立' if indexed else '❌ 未建立'}\n"
+                + ("💡 可执行 codegraph_index 建立语义索引（大项目推荐）" if (not indexed and is_codegraph and file_count > 300) else "")
+            ),
+            "stderr": "",
+            "cwd": path,
+        })
+        self._emit(self.on_log, f"[项目] {path}（{file_count}+ 文件，索引{'已建' if indexed else '未建'}）")
 
     # ── 亲和通道：环境自述（get_environment）───────────────
     def _get_environment(self):
@@ -1129,7 +1141,13 @@ class Agent:
             elif op == "list":
                 return self.sessions.list_all()
             elif op == "switch":
-                return self.sessions.switch(payload.get("sessionId", ""))
+                result = self.sessions.switch(payload.get("sessionId", ""))
+                # 切换工作区后上报项目概况
+                if result.get("success"):
+                    cur = self.sessions.get_current()
+                    if cur:
+                        await self._check_codegraph(cur.cwd)
+                return result
             else:
                 return {"success": False, "error": f"未知操作: {op}"}
         except Exception as e:

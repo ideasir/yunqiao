@@ -907,6 +907,25 @@ fi` },
     return { content: [{ type: 'text', text: o.message || '索引完成' }] };
   }, 'codegraph_index'));
 
+  // 查询 CodeGraph 索引状态（工作区是否已建索引 + 概况）
+  server.registerTool('codegraph_status', {
+    description: '查看当前工作区的 CodeGraph 索引状态（是否已建立/文件数）。仅管理员可用',
+    inputSchema: z.object({
+      path: z.string().describe('项目根目录（工作区目录）'),
+      code: z.string().optional(),
+    }),
+  }, wrapTool(userId, async ({ path, code }) => {
+    const denied = requireAdmin(authInfo);
+    if (denied) return denied;
+    const { device, error } = getAuthedDevice(sessionState, userId, undefined, code);
+    if (!device) return { content: [{ type: 'text', text: `Error: ${error}` }], isError: true };
+    const p = path || '.';
+    const script = `cd "${String(p).replace(/\\/g, '\\\\')}" && (codegraph status 2>&1 || echo '未建立索引')`;
+    const output = await sendAndWait('exec_script', { language: 'bash', code: script, timeout: 30000 }, device.id, 35000);
+    const o = output.payload;
+    return { content: [{ type: 'text', text: o.stdout || o.stderr || '(无输出)' }] };
+  }, 'codegraph_status'));
+
   } // end CodeGraph (admin-only)
 
   // 会话管理

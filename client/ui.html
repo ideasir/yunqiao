@@ -357,6 +357,9 @@ function addCmdBlock(cmd, meta, p) {
   else if (kind === 'get_environment') { badge = ['ENV', '#a78bfa']; prefix = ''; }
   else if (kind === 'read_file') { badge = ['FILE', '#a78bfa']; prefix = '📖 '; }
   else if (kind === 'write_file') { badge = ['FILE', '#a78bfa']; prefix = '✏️ '; }
+  else if (kind === 'custom') { badge = ['CUST', '#4ade80']; prefix = '⚙ '; }
+  else if (kind === 'project_status') { badge = ['📦', '#4ade80']; prefix = ''; }
+  else if (kind === 'codegraph_index') { badge = ['🧠', '#a78bfa']; prefix = ''; }
   // 脚本语言标签
   if (p && p.language) kindLabel = '<span class="text-[9px] text-[#888] border border-[#333] rounded px-1 flex-shrink-0">' + esc(p.language) + '</span>';
 
@@ -478,6 +481,8 @@ function finalizeCmdBlock(pending, p) {
   else if (kind === 'read_file') { badge = ['FILE', '#a78bfa']; prefix = '📖 '; }
   else if (kind === 'write_file') { badge = ['FILE', '#a78bfa']; prefix = '✏️ '; }
   else if (kind === 'custom') { badge = ['CUST', '#4ade80']; prefix = '⚙ '; }
+  else if (kind === 'project_status') { badge = ['📦', '#4ade80']; prefix = ''; }
+  else if (kind === 'codegraph_index') { badge = ['🧠', '#a78bfa']; prefix = ''; }
   if (p.language) kindLabel = '<span class="text-[9px] text-[#888] border border-[#333] rounded px-1 flex-shrink-0">' + esc(p.language) + '</span>';
 
   var cmdText = p.command || pending.cmdText || '';
