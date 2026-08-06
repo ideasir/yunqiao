@@ -499,6 +499,14 @@ function startCmdBlock(cmdText, cmdObj) {
         runEl.classList.remove('blink-fast');
         pending.body.innerHTML = '<div class="text-[10px] text-[#777]">⚠ 此操作无返回结果（或已完成），未展示输出。</div>';
       }
+      // 停止转圈图标（修复：超时后 spin-icon 仍在无限旋转）
+      var spinEl = pending.title.querySelector('.spin-icon');
+      if (spinEl) {
+        spinEl.style.animation = 'none';
+        spinEl.style.borderColor = '#555';
+        spinEl.style.borderTopColor = '#555';
+        spinEl.style.opacity = '0.35';
+      }
     }
   }, 10000);
   return pending;
