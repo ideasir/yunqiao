@@ -646,15 +646,8 @@ node --check /opt/cloud-mcp/relay/.server.check.js || { echo '语法校验失败
 rm -f /opt/cloud-mcp/relay/.server.check.js
 cp server.js server.js.bak-$(date +%Y%m%d%H%M%S)
 mv $TMP server.js
-# 用 PID 精确重启，避免 pkill 文本匹配误杀启动脚本自身
-cat > /opt/cloud-mcp/relay/.restart.sh << 'EOFSH'
-#!/bin/bash
-sleep 2
-kill ${OLD_PID} 2>/dev/null
-sleep 1
-cd /opt/cloud-mcp/relay && setsid nohup node server.js >> relay.log 2>&1 &
-EOFSH
-OLD_PID=${pid} bash /opt/cloud-mcp/relay/.restart.sh >/tmp/restart.out 2>&1 &
+# 用 PID 精确重启（PID 直接内嵌，避免变量传递问题），避免 pkill 文本匹配误杀启动脚本自身
+( sleep 2; kill ${pid} 2>/dev/null || true; sleep 1; cd /opt/cloud-mcp/relay && setsid nohup node server.js >> relay.log 2>&1 & ) >/tmp/restart.out 2>&1 &
 echo '已触发延迟重启（2秒后生效）'` },
   };
   server.registerTool('relay_exec', {
