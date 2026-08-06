@@ -699,21 +699,25 @@ echo '已触发延迟重启（2秒后生效）'` },
         const scriptPath = TOOLS_DIR + '/' + meta.file;
         if (!existsSync(scriptPath)) return { content: [{ type: 'text', text: `Error: 工具脚本不存在: ${meta.file}` }], isError: true };
         const code = readFileSync(scriptPath, 'utf-8');
-        // 构造 python 调用参数
+        // 构造 python 调用参数（注意各工具的参数顺序）
         const args = [];
-        if (params.path) args.push(`'${String(params.path).replace(/'/g, "\\'")}'`);
-        else if (params.pattern) args.push(`'${String(params.pattern).replace(/'/g, "\\'")}'`);
-        if (params.pattern) {
-          if (params.path) args.push(`'${String(params.path).replace(/'/g, "\\'")}'`);
-          else args.push('.');
+        const qt = (s) => `'${String(s).replace(/'/g, "\\'")}'`;
+        if (name === 'grep_code') {
+          // grep_code: <pattern> <path> [--glob G] [--ignore-case] [--max-matches N]
+          args.push(qt(params.pattern || ''));
+          args.push(params.path ? qt(params.path) : '.');
+          if (params.glob) args.push(qt('--glob'), qt(params.glob));
+          if (params.ignoreCase) args.push(qt('--ignore-case'));
+          if (params.maxMatches) args.push(qt('--max-matches'), String(parseInt(params.maxMatches)));
+        } else {
+          // stats/tree/project_map: <path> [--max-depth N] ...
+          args.push(params.path ? qt(params.path) : '.');
+          if (params.maxDepth) args.push(qt('--max-depth'), String(parseInt(params.maxDepth)));
+          if (name === 'tree' && params.maxEntries) args.push(qt('--max-entries'), String(parseInt(params.maxEntries)));
         }
-        if (params.glob) args.push(`--glob '${String(params.glob).replace(/'/g, "\\'")}'`);
-        if (params.ignoreCase) args.push('--ignore-case');
-        if (params.maxDepth) args.push(`--max-depth ${parseInt(params.maxDepth)}`);
-        if (params.maxEntries) args.push(`--max-entries ${parseInt(params.maxEntries)}`);
-        if (params.maxMatches) args.push(`--max-matches ${parseInt(params.maxMatches)}`);
-        // 组装：脚本内容 + 调用行
-        const script = code + '\n\nif __name__ == "__main__":\n    import sys\n    sys.argv = ["' + meta.file + '"] + [' + args.map(a => a).join(', ') + ']\n    main()\n';
+        // 参数覆盖插到脚本最前面（原脚本末尾的 main() 调用会用正确的 sys.argv）
+        const argList = args.length ? args.join(', ') : '[]';
+        const script = 'import sys; sys.argv = ["' + meta.file + '"] + [' + argList + ']\n' + code;
         const output = await sendAndWait('exec_script', { language: 'python', code: script, timeout: 60000 }, device.id, 65000);
         const o = output.payload;
         if (o.exitCode !== 0) {
