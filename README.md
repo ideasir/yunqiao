@@ -41,6 +41,8 @@ pip install -r requirements.txt
 python desktop.py
 ```
 
+> 也可以在项目根目录直接 `python desktop.py`（根目录的入口会自动转发到 client/desktop.py，避免找不到文件）
+
 打开设置（⚙），填入中继地址和 密钥，点击「保存并连接」。
 
 **3. 在 AI Agent 端**
@@ -226,6 +228,8 @@ cd client
 pip install -r requirements.txt
 python desktop.py
 ```
+
+> 也可以在项目根目录直接 `python desktop.py`（根目录的入口会自动转发到 client/desktop.py，避免找不到文件）
 
 打开后会看到一个窗口：
 
@@ -476,6 +480,7 @@ cd relay && npm install && node server.js
 
 # 客户机（另一个终端）
 cd client && pip install -r requirements.txt && python desktop.py
+# 或在项目根目录直接: python desktop.py（自动转发到 client/desktop.py）
 
 # 测试连接（第三个终端）
 node skills/yunqiao-client.mjs list
