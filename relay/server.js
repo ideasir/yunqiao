@@ -10,6 +10,7 @@ import { z } from 'zod/v4';
 
 const PORT = parseInt(process.env.PORT || '9876');
 const USERS_FILE = process.env.USERS_FILE || '/opt/cloud-mcp/.users.json';
+const COMMANDS_FILE = process.env.COMMANDS_FILE || '/opt/cloud-mcp/commands.json';
 const COMMAND_TIMEOUT = parseInt(process.env.COMMAND_TIMEOUT || '60000');
 const MCP_PATH = '/mcp';
 const MCP_MESSAGE_PATH = '/mcp/message';
@@ -47,6 +48,18 @@ function saveUsers() {
   mkdirSync(dirname(USERS_FILE), { recursive: true });
   writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf-8');
 }
+// 自定义命令表：{ name: { script: 脚本文件名, desc, createdBy, createdAt, allowedUsers: ['admin']|null } }
+let commands = {};
+function loadCommands() {
+  if (existsSync(COMMANDS_FILE)) {
+    try { commands = JSON.parse(readFileSync(COMMANDS_FILE, 'utf-8')); } catch { commands = {}; }
+  }
+  if (!commands || typeof commands !== 'object') commands = {};
+}
+function saveCommands() {
+  mkdirSync(dirname(COMMANDS_FILE), { recursive: true });
+  writeFileSync(COMMANDS_FILE, JSON.stringify(commands, null, 2), 'utf-8');
+}
 function findByKey(key) {
   for (const [uid, u] of Object.entries(users)) {
     if (u.key === key) return { userId: uid, ...u };
@@ -67,6 +80,7 @@ function newMcpTicket(userId) {
   return ticket;
 }
 loadUsers();
+loadCommands();
 
 // ─── Agent 活跃度（实时推送，事件驱动） ─────────
 // 统计某用户当前：MCP 连接数 / 运行中任务 / 挂起的工具调用（含配额供灯排显示）
@@ -633,6 +647,37 @@ function createMcpServer(userId, authInfo = {}) {
     return { content: [{ type: 'text', text }] };
   }, 'get_audit_log'));
 
+  // 自定义命令管理（admin）
+  server.registerTool('add_command', {
+    description: '注册自定义命令（脚本需预先放到客户端 custom-commands/ 目录）。需要管理员密钥认证',
+    inputSchema: z.object({
+      name: z.string().describe('命令名（对应客户端 custom-commands/ 下的脚本文件名，如 deploy）'),
+      desc: z.string().optional().describe('命令说明'),
+      allowedUsers: z.array(z.string()).optional().describe('可执行的用户列表（不传=仅 admin；含 * 表示所有用户）'),
+    }),
+  }, wrapTool(userId, async ({ name, desc, allowedUsers }) => {
+    const denied = requireAdmin(authInfo);
+    if (denied) return denied;
+    if (!name || !/^[\w-]+$/.test(name)) return { content: [{ type: 'text', text: 'Error: 命令名只能含字母数字下划线连字符' }], isError: true };
+    commands[name] = { script: name, desc: desc || '', createdBy: userId, allowedUsers: allowedUsers || null, createdAt: new Date().toISOString() };
+    saveCommands();
+    return { content: [{ type: 'text', text: `命令已注册: ${name}\n脚本需放到客户端 custom-commands/${name}.py|.ps1|.sh|.bat|.js\n授权用户: ${allowedUsers ? allowedUsers.join(',') : '仅 admin'}` }] };
+  }, 'add_command'));
+
+  server.registerTool('remove_command', {
+    description: '删除自定义命令。需要管理员密钥认证',
+    inputSchema: z.object({
+      name: z.string().describe('命令名'),
+    }),
+  }, wrapTool(userId, async ({ name }) => {
+    const denied = requireAdmin(authInfo);
+    if (denied) return denied;
+    if (!commands[name]) return { content: [{ type: 'text', text: 'Error: 命令不存在' }], isError: true };
+    delete commands[name];
+    saveCommands();
+    return { content: [{ type: 'text', text: `命令已删除: ${name}` }] };
+  }, 'remove_command'));
+
   // 中转服务器运维：通过 MCP 执行固定运维脚本（替代 SSH 日常运维），仅 admin
   const OPS_SCRIPTS = {
     'status': { desc: '查看中转服务器状态（进程、内存、磁盘、uptime）', fn: () => `echo "=== 中转服务器状态 ==="; echo "时间: $(date '+%F %T')"; echo "uptime: $(uptime -p)"; echo "磁盘: $(df -h / | tail -1)"; echo "内存: $(free -h | sed -n 2p)"; echo "relay进程: $(pgrep -f 'node server.js' | wc -l) 个"; echo "连接数: $(ss -tn state established '( dport = :9876 or sport = :9876 )' | wc -l)"` },
@@ -735,6 +780,47 @@ fi` },
       }
     }, name));
   }
+
+  // ===== 自定义命令（脚本存客户端 custom-commands/，中转服务器只存命令表+权限+审计）=====
+  // 查看命令：所有用户可查看已授权给自己的命令
+  server.registerTool('list_commands', {
+    description: '列出可用的自定义命令（按当前用户权限过滤）',
+    inputSchema: z.object({}),
+  }, wrapTool(userId, async () => {
+    const visible = Object.entries(commands)
+      .filter(([n, c]) => !c.allowedUsers || c.allowedUsers.includes(userId) || (c.allowedUsers || []).includes('*'))
+      .map(([n, c]) => `- ${n}: ${c.desc || ''}${c.allowedUsers && c.allowedUsers.includes(userId) ? ' [你可用]' : ''}`);
+    return { content: [{ type: 'text', text: visible.length ? visible.join('\n') : '暂无自定义命令' }] };
+  }, 'list_commands'));
+
+  // 执行命令：查命令表 → 通知客户端跑本地脚本
+  server.registerTool('run_custom', {
+    description: '执行自定义命令（脚本在远程电脑 custom-commands/ 目录，命令表在中转服务器）',
+    inputSchema: z.object({
+      name: z.string().describe('命令名'),
+      args: z.array(z.string()).optional().describe('传给脚本的参数列表'),
+      timeout: z.number().optional().describe('超时毫秒，默认 120000'),
+      code: z.string().optional(),
+    }),
+  }, wrapTool(userId, async ({ name, args, timeout, code }) => {
+    const { device, error } = getAuthedDevice(sessionState, userId, undefined, code);
+    if (!device) return { content: [{ type: 'text', text: `Error: ${error}` }], isError: true };
+    const cmd = commands[name];
+    if (!cmd) return { content: [{ type: 'text', text: `Error: 自定义命令不存在: ${name}` }], isError: true };
+    // 权限：allowedUsers 为空=仅创建者(admin)；含 userId 或 '*' 则可执行
+    const allowed = cmd.allowedUsers || ['admin'];
+    if (!allowed.includes(userId) && !allowed.includes('*')) {
+      return { content: [{ type: 'text', text: 'Error: 无权限执行该命令' }], isError: true };
+    }
+    const cmdTimeout = Math.min(Math.max(0, timeout || 120000), 1800000);
+    const output = await sendAndWait('run_custom', { name, args: args || [], timeout: cmdTimeout }, device.id, cmdTimeout + 5000);
+    const o = output.payload;
+    const parts = [`Exit Code: ${o.exitCode}`, `耗时: ${o.duration || 0}ms`];
+    if (o.stdout) parts.push('\nSTDOUT:\n' + o.stdout);
+    if (o.stderr) parts.push('\nSTDERR:\n' + o.stderr);
+    if (o.killed) parts.push('\n[超时]');
+    return { content: [{ type: 'text', text: parts.join('\n') }], isError: o.exitCode !== 0 };
+  }, 'run_custom'));
 
   // 会话管理
   const sessionTools = [

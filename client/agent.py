@@ -547,6 +547,26 @@ class Agent:
                 await self._send("download_result", rid, {"success": False, "error": str(e)})
             return
         
+        if msg_type == "run_custom":
+            # 自定义命令：执行客户端本地 custom-commands/ 目录的脚本
+            name = payload.get("name", "")
+            args_list = payload.get("args", [])
+            timeout = payload.get("timeout", 120000)
+            self._emit(self.on_command, {"type": "custom", "name": name})
+            result = await self._run_custom(name, args_list, timeout)
+            await self._send("custom_result", rid, result)
+            self._emit(self.on_result, {
+                "kind": "custom",
+                "command": f"[custom:{name}] {' '.join(map(str, args_list))}",
+                "exitCode": result.get("exitCode", 1),
+                "stdout": result.get("stdout", ""),
+                "stderr": result.get("stderr", ""),
+                "duration": result.get("duration", 0),
+                "cwd": (self.sessions.get_current().cwd if self.sessions.get_current() else os.getcwd()),
+            })
+            self._emit(self.on_log, f"[自定义] {name} {" ".join(map(str, args_list))}")
+            return
+        
         if msg_type == "session_op":
             op = payload.get("op", "")
             self._emit(self.on_command, {"type": "session", "op": op})
@@ -868,6 +888,68 @@ class Agent:
             except Exception:
                 continue
         return b.decode('utf-8', errors='replace')
+
+    # ── 自定义命令（run_custom）────────────────────────
+    def _custom_commands_dir(self):
+        """自定义命令脚本目录（客户端本地，随 agent.py 一起分发）"""
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'custom-commands')
+
+    async def _run_custom(self, name, args_list=None, timeout=120000):
+        """执行客户端本地 custom-commands/ 目录里的预定义脚本。
+        安全模型：脚本白名单（目录固定、文件名由中转服务器命令表校验），
+        不能执行任意脚本，只能执行预置的那几个。"""
+        import subprocess, time
+        args_list = args_list or []
+        name = (name or '').strip()
+        if not name or '/' in name or '\\' in name or '..' in name:
+            return {"exitCode": 1, "stdout": "", "stderr": "非法命令名", "duration": 0, "killed": False}
+        cmds_dir = self._custom_commands_dir()
+        # 查找脚本文件（支持 .py/.ps1/.sh/.bat/.js/.cmd）
+        script_path = None
+        for ext in ['.py', '.ps1', '.sh', '.bat', '.js', '.cmd', '.txt']:
+            cand = os.path.join(cmds_dir, name + ext)
+            if os.path.isfile(cand):
+                script_path = cand
+                break
+        if not script_path:
+            return {"exitCode": 1, "stdout": "", "stderr": f"自定义命令不存在: {name}（已检查 {cmds_dir}）", "duration": 0, "killed": False}
+        ext = os.path.splitext(script_path)[1].lower()
+        lang_map = {'.py': 'python', '.ps1': 'powershell', '.sh': 'bash', '.bat': 'cmd', '.js': 'node', '.cmd': 'cmd'}
+        try:
+            runner, _ = self._resolve_interpreter(lang_map.get(ext, 'auto'))
+        except ValueError as e:
+            return {"exitCode": 1, "stdout": "", "stderr": str(e), "duration": 0, "killed": False}
+        # 参数转字符串并传给脚本
+        str_args = [str(a) for a in args_list]
+        if not timeout or timeout <= 0:
+            timeout = 120000
+        timeout = min(timeout, 1800000)
+        cmd = list(runner) + [script_path] + str_args
+        cwd = self.sessions.get_current().cwd if self.sessions.get_current() else os.getcwd()
+        t0 = time.time()
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=cwd,
+            )
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout / 1000)
+                killed = False
+            except asyncio.TimeoutError:
+                proc.kill()
+                stdout, stderr = await proc.communicate()
+                killed = True
+            return {
+                "exitCode": proc.returncode or 0,
+                "stdout": self._decode_out(stdout),
+                "stderr": self._decode_out(stderr),
+                "killed": killed,
+                "duration": int((time.time() - t0) * 1000),
+            }
+        except Exception as e:
+            return {"exitCode": 1, "stdout": "", "stderr": str(e), "duration": int((time.time() - t0) * 1000), "killed": False}
 
     # ── 亲和通道：环境自述（get_environment）───────────────
     def _get_environment(self):
