@@ -1180,7 +1180,33 @@ class Agent:
                 "defaultWorkDir": self.default_work_dir,
                 "currentCwd": session.cwd if session else os.getcwd(),
                 "sessions": sessions,
+                "hint": self._workspace_hint(),  # 工作区模式详细限制（超级模式为 None）
             },
+        }
+
+    def _workspace_hint(self):
+        """工作区模式限制自述：Agent 一进来就该知道边界和禁用命令，避免用错命令碰壁。"""
+        if self.permission != "workspace":
+            return None
+        session = self.sessions.get_current()
+        workspace = os.path.normpath(session.workDir) if session else os.path.normpath(self.default_work_dir)
+        return {
+            "mode": "workspace",
+            "currentCwd": session.cwd if session else os.getcwd(),
+            "workspaceRoot": workspace,
+            "allowedPathPrefix": workspace + os.sep,  # 读写文件只能在这个目录内
+            "pathRules": [
+                "读写文件用相对路径（相对当前工作目录），不要带盘符绝对路径",
+                f"允许范围: {workspace} 及其子目录",
+                "如需访问工作区外文件，请联系用户切换到超级模式",
+            ],
+            "commandRules": [
+                "禁止使用绝对路径（如 C:\\... 或 /home/...）",
+                "禁止使用 .. 逃逸出工作区",
+                "禁止 cd/chdir/Set-Location/pushd/popd 切换目录",
+                "建议用相对路径操作本目录内文件，如 python -c / powershell 处理相对路径",
+            ],
+            "tip": "所有命令和文件操作都基于当前工作目录，用相对路径最安全",
         }
 
     async def _handle_session_op(self, op, payload):
