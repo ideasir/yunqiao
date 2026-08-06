@@ -141,6 +141,7 @@ const sseCleanup = setInterval(() => {
 
 // ─── 审计日志 ───────────────────────────────────
 const AUDIT_LOG = process.env.AUDIT_LOG || '/opt/cloud-mcp/audit.log';
+const TOOLS_DIR = process.env.TOOLS_DIR || '/opt/cloud-mcp/tools';
 const AUDIT_MAX_BYTES = parseInt(process.env.AUDIT_MAX_BYTES || '20971520', 10); // 默认 20MB 后轮转
 
 function appendAudit(entry) {
@@ -695,7 +696,7 @@ echo '已触发延迟重启（2秒后生效）'` },
       if (!device) return { content: [{ type: 'text', text: `Error: ${error}` }], isError: true };
       // 读取工具脚本内容（中转服务器本地），通过 exec_script 下发 Windows 执行
       try {
-        const scriptPath = '/opt/cloud-mcp/tools/' + meta.file;
+        const scriptPath = TOOLS_DIR + '/' + meta.file;
         if (!existsSync(scriptPath)) return { content: [{ type: 'text', text: `Error: 工具脚本不存在: ${meta.file}` }], isError: true };
         const code = readFileSync(scriptPath, 'utf-8');
         // 构造 python 调用参数
