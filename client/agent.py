@@ -207,7 +207,34 @@ class Agent:
                 await ws.send(json.dumps(obj))
             except Exception:
                 pass
-    
+
+    def _clash_set_direct(self, enable):
+        import urllib.request
+        import json as _json
+        api = self.clash_api or "http://127.0.0.1:9090"
+        rule = "DOMAIN-SUFFIX,yunqiao.very.im,DIRECT"
+        try:
+            req = urllib.request.Request(api + "/version", method="GET")
+            urllib.request.urlopen(req, timeout=2)
+        except Exception:
+            self._emit(self.on_log, "[clash] Clash API unreachable")
+            return
+        try:
+            if enable:
+                data = _json.dumps({"payload": "", "rule_type": "DOMAIN-SUFFIX", "proxy": "DIRECT"}).encode()
+                req = urllib.request.Request(api + "/rules", data=data, method="PUT", headers={"Content-Type": "application/json"})
+                urllib.request.urlopen(req, timeout=3)
+                self._emit(self.on_log, "[clash] DIRECT rule added")
+            else:
+                try:
+                    req = urllib.request.Request(api + "/rules/DOMAIN-SUFFIX,yunqiao.very.im,DIRECT", method="DELETE")
+                    urllib.request.urlopen(req, timeout=3)
+                except:
+                    pass
+                self._emit(self.on_log, "[clash] DIRECT rule removed")
+        except Exception as e:
+            self._emit(self.on_log, "[clash] rule failed: " + str(e))
+
     def start(self):
         """启动 Agent（后台线程）"""
         if self._running:
