@@ -154,7 +154,7 @@ class Api:
                 "autoConnect": cfg.get("autoConnect", False)}
 
     def toggle_connect(self):
-        global RELAY_URL, RELAY_KEY
+        global RELAY_URL, RELAY_KEY, agent
         # 如果已连接或正在连接 → 断开
         if agent:
             if agent.connected or agent._running:
