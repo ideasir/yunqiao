@@ -154,15 +154,17 @@ class Api:
                 "autoConnect": cfg.get("autoConnect", False)}
 
     def toggle_connect(self):
-        # 先停止旧连接（如果有），确保 agent 被完全重置
-        if agent:
-            stop_agent()
-        if agent and agent.connected:
-            # 如果 stop_agent 没停掉（极罕见情况），直接调 stop
-            try: agent.stop()
-            except: pass
-        # 重新读取配置，确保 RELAY_URL 和 RELAY_KEY 是最新的
         global RELAY_URL, RELAY_KEY
+        # 如果已连接或正在连接 → 断开
+        if agent:
+            if agent.connected or agent._running:
+                stop_agent()
+                notify_ui("relay_status", {"status": "disconnected"})
+                notify_ui("log", {"text": "已断开连接"})
+                return {"connected": False}
+            # agent 残留但未运行 → 清掉
+            agent = None
+        # 重新读取配置
         cfg = load_config()
         RELAY_URL = cfg.get("relayUrl", RELAY_URL)
         RELAY_KEY = cfg.get("key", RELAY_KEY)
