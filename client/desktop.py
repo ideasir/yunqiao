@@ -39,7 +39,6 @@ def save_config(relay_url, key, name, auto_connect=False, direct_mode=False):
         "relayUrl": relay_url, "key": key, "deviceName": name,
         "autoConnect": auto_connect, "directMode": direct_mode
     }, indent=2), "utf-8")
-    }, indent=2), "utf-8")
 
 cfg = load_config()
 RELAY_URL = cfg.get("relayUrl", "")
