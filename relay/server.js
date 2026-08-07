@@ -127,7 +127,7 @@ const TASK_TIMEOUT = parseInt(process.env.TASK_TIMEOUT || '1800000', 10);       
 const TASK_RESULT_TTL = parseInt(process.env.TASK_RESULT_TTL || '900000', 10);  // 结果保留，默认 15 分钟
 const TASK_NOTIFY_TTL = parseInt(process.env.TASK_NOTIFY_TTL || '300000', 10);  // 任务完成通知有效期（默认 5 分钟），过期不再推送旧通知
 const TASK_MAX_CONCURRENT = parseInt(process.env.TASK_MAX_CONCURRENT || '50', 10); // 每设备并发上限（默认放宽到 50）
-const SSE_IDLE_TIMEOUT = parseInt(process.env.SSE_IDLE_TIMEOUT || '600000', 10);  // SSE 空闲超时（默认 10 分钟），防僵尸连接占满连接数
+const SSE_IDLE_TIMEOUT = parseInt(process.env.SSE_IDLE_TIMEOUT || '180000', 10);  // SSE 空闲超时（默认 3 分钟），防僵尸连接占满连接数
 const tasks = new Map();  // taskId -> { userId, deviceId, command, status, ... }
 
 // 配对码验证缓存：首次验证通过后缓存，SSE 重连免验
@@ -208,7 +208,7 @@ function readAuditTail(n) {
 // AUTH_REQUIRED=1：/mcp 必须带用户密钥/令牌认证，?user= 参数失效
 const AUTH_REQUIRED = (process.env.AUTH_REQUIRED || '0') === '1';
 const DEFAULT_LIMITS = {
-  maxConnections: parseInt(process.env.MAX_CONNECTIONS || '50', 10),
+  maxConnections: parseInt(process.env.MAX_CONNECTIONS || '99999', 10),  // 并发限制取消，改为极大值
   qps: parseInt(process.env.DEFAULT_QPS || '50', 10),
   maxOutputMB: parseInt(process.env.MAX_OUTPUT_MB || '5', 10),
   maxDownloadMB: parseInt(process.env.MAX_DOWNLOAD_MB || '5', 10),
@@ -1659,7 +1659,6 @@ wss.on('connection', (ws, req, user) => {
       device.offlineSince = Date.now();
       device.ws = null;
       console.error(`[device] disconnected: ${device.name} (${deviceId})`);
-      authCache.delete(device.userId);
       // 记录断开时间，用于判断短断/长断
       const u = users[device.userId];
       if (u) u._lastDisconnectAt = Date.now();
@@ -1682,6 +1681,19 @@ wss.on('connection', (ws, req, user) => {
 httpServer.listen(PORT, () => {
   console.error(`[server] listening on http://0.0.0.0:${PORT}`);
   console.error(`[server] Users: ${Object.keys(users).length} (admin: ${users['admin']?.key?.slice(0,8)}...)`);
+  // 定期清理僵尸 SSE 连接，每 30 秒扫描一次
+  setInterval(() => {
+    const now = Date.now();
+    let cleaned = 0;
+    for (const [sid, entry] of transports) {
+      if (now - (entry.lastActive || now) > SSE_IDLE_TIMEOUT) {
+        transports.delete(sid);
+        try { entry.transport.close(); } catch {}
+        cleaned++;
+      }
+    }
+    if (cleaned > 0) console.error(`[sse] 定时清理: 移除 ${cleaned} 个僵尸连接，剩余 ${transports.size} 个`);
+  }, 30000);
 });
 
 process.on('SIGINT', () => {
