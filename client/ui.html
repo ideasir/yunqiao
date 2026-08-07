@@ -1587,7 +1587,7 @@ function renderActivityDots(a) {
     window.__yqBusyLevel = Math.max(window.__yqBusyLevel || 0, used);
   }
   // 有日志滚动时也视为有活动，按日志量估算并发数（最多亮到 total 的一半）
-  var recentLog = (window.__yqLastLogAt || 0) > (window.__yqBusyAt || 0) - 3000;
+  var recentLog = window.__yqLastLogAt !== undefined && window.__yqLastLogAt > (window.__yqBusyAt || 0) - 3000;
   var logEstimate = 0;
   if (recentLog && window.__yqLogCount !== undefined) {
     var logActivity = window.__yqLogCount - (window.__yqLogCountAtStart || 0);
