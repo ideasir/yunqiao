@@ -1574,16 +1574,25 @@ function renderActivityDots(a) {
     window.__yqBusyLevel = Math.max(window.__yqBusyLevel || 0, used);
   }
   // 有日志滚动时也视为有活动，按日志量估算并发数（最多亮到 total 的一半）
-  var recentLog = window.__yqLastLogAt !== undefined && window.__yqLastLogAt > (window.__yqBusyAt || 0) - 3000;
+  // 但排除纯信息日志（INF 级别），只算命令执行和工具调用
+  var recentLog = window.__yqLastLogAt !== undefined && window.__yqLastLogAt > (window.__yqBusyAt || 0) - 5000;
   var logEstimate = 0;
   if (recentLog && window.__yqLogCount !== undefined) {
     var logActivity = window.__yqLogCount - (window.__yqLogCountAtStart || 0);
-    logEstimate = Math.min(Math.ceil(logActivity / 3), Math.floor(total / 2));
+    // 只有日志量较大时才亮灯（3秒内超过5条日志才算有活动）
+    if (logActivity > 5) {
+      logEstimate = Math.min(Math.ceil(logActivity / 5), Math.floor(total / 2));
+    }
     window.__yqLogCountAtStart = window.__yqLogCount;
   }
-  if (now < (window.__yqBusyAt || 0) + 3000 || (recentLog && used === 0)) {
+  if (now < (window.__yqBusyAt || 0) + 3000 || (recentLog && used === 0 && logEstimate > 0)) {
     used = Math.max(used, logEstimate, window.__yqBusyLevel || 1);
   } else {
+    window.__yqBusyLevel = 0;
+  }
+  // 如果没有任何真实活动（无运行任务、无挂起调用、日志量少），全部熄灭
+  if (running === 0 && pending === 0 && logEstimate === 0 && (window.__yqBusyAt || 0) < now - 5000) {
+    used = 0;
     window.__yqBusyLevel = 0;
   }
   used = Math.min(total, used);
