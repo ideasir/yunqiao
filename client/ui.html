@@ -1348,6 +1348,30 @@ function handleBridge(action, data) {
       addLog('done', '✅ Agent 已处理 ' + marked + ' 条消息(任务已划掉)');
     }
   }
+  else if (action === 'agent_keepalive') {
+    // Agent 心跳保活：收到此消息说明 Agent 还在线，保持灯亮
+    var s = document.getElementById('agent状态');
+    if (s && s.textContent !== '已配对') {
+      s.textContent = '已配对'; s.style.color = '#4ade80';
+    }
+    var agentDot = document.getElementById('agentDot');
+    if (agentDot) agentDot.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80]';
+    health.agent = 'on';
+    // 更新上次心跳时间
+    window.__yqAgentHeartbeat = Date.now();
+    // 如果之前有定时器要灭灯，取消它
+    if (window.__yqAgentHeartbeatTimer) {
+      clearTimeout(window.__yqAgentHeartbeatTimer);
+    }
+    // 30 秒内没收到心跳就灭灯
+    window.__yqAgentHeartbeatTimer = setTimeout(function() {
+      var ad = document.getElementById('agentDot');
+      if (ad) ad.className = 'w-1.5 h-1.5 rounded-full bg-[#666]';
+      var as = document.getElementById('agent状态');
+      if (as) { as.textContent = '待接入'; as.style.color = '#bbb'; }
+      health.agent = 'off';
+    }, 30000);
+  }
   else if (action === 'agent_activity') {
     renderActivityDots(data);
   }
