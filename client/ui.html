@@ -1726,6 +1726,7 @@ function configRelay() {
   document.getElementById('modalRelayUrl').value = document.getElementById('relayUrl').textContent;
   document.getElementById('modalRelayKey').value = state.relayKey || '';
   document.getElementById('modalAutoConnect').checked = state.autoConnect || false;
+  document.getElementById('modalDirectMode').checked = state.directMode || false;
   // 异步读取后端配置(覆盖初始值)
   if (window.pywebview && window.pywebview.api) {
     window.pywebview.api.get_settings().then(function(cfg) {
@@ -1734,6 +1735,10 @@ function configRelay() {
       if (cfg && typeof cfg.autoConnect !== 'undefined') {
         state.autoConnect = cfg.autoConnect;
         document.getElementById('modalAutoConnect').checked = cfg.autoConnect;
+      }
+      if (cfg && typeof cfg.directMode !== 'undefined') {
+        state.directMode = cfg.directMode;
+        document.getElementById('modalDirectMode').checked = cfg.directMode;
       }
     }).catch(function() {});
   }
@@ -1774,10 +1779,11 @@ function saveConfigModal() {
   if (url) document.getElementById('relayUrl').textContent = url;
   if (key) state.relayKey = key;
   state.autoConnect = document.getElementById('modalAutoConnect').checked;
+  state.directMode = document.getElementById('modalDirectMode').checked;
   state.autoReconnect = document.getElementById('modalAutoReconnect').checked;
   try {
     if (window.pywebview && window.pywebview.api) {
-      window.pywebview.api.save_settings(key, url, state.autoConnect);
+      window.pywebview.api.save_settings(key, url, state.autoConnect, state.directMode);
     }
   } catch(e) {}
   addLog('info', '中转服务器配置已更新');
@@ -1815,6 +1821,10 @@ function saveConfigModal() {
       <div class="flex items-center gap-2">
         <input type="checkbox" id="modalAutoConnect" class="w-3 h-3 rounded" />
         <label for="modalAutoConnect" class="text-xs text-[#888]">启动时自动连接</label>
+      </div>
+      <div class="flex items-center gap-2">
+        <input type="checkbox" id="modalDirectMode" class="w-3 h-3 rounded" />
+        <label for="modalDirectMode" class="text-xs text-[#888]">Clash 直连模式 (加 DIRECT 规则绕过代理)</label>
       </div>
       <div class="flex items-center gap-2">
         <input type="checkbox" id="modalAutoReconnect" class="w-3 h-3 rounded" />

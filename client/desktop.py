@@ -33,11 +33,12 @@ def load_config():
             pass
     return {}
 
-def save_config(relay_url, key, name, auto_connect=False):
+def save_config(relay_url, key, name, auto_connect=False, direct_mode=False):
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     CONFIG_FILE.write_text(json.dumps({
         "relayUrl": relay_url, "key": key, "deviceName": name,
-        "autoConnect": auto_connect
+        "autoConnect": auto_connect, "directMode": direct_mode
+    }, indent=2), "utf-8")
     }, indent=2), "utf-8")
 
 cfg = load_config()
@@ -138,11 +139,13 @@ class Api:
             "activity": activity,
         }
 
-    def save_settings(self, key, relay_url, auto_connect=False):
+    def save_settings(self, key, relay_url, auto_connect=False, direct_mode=False):
         global RELAY_URL, RELAY_KEY, agent
         RELAY_URL = relay_url
         RELAY_KEY = key
-        save_config(relay_url, key, DEVICE_NAME, auto_connect)
+        if agent:
+            agent.direct_mode = direct_mode
+        save_config(relay_url, key, DEVICE_NAME, auto_connect, direct_mode)
         if agent:
             agent.stop()
             # 必须置 None，否则下次 get_agent() 返回旧实例，仍用旧的 relay_url/key 重连
@@ -151,7 +154,8 @@ class Api:
 
     def get_settings(self):
         return {"key": RELAY_KEY, "relayUrl": RELAY_URL, "deviceName": DEVICE_NAME,
-                "autoConnect": cfg.get("autoConnect", False)}
+                "autoConnect": cfg.get("autoConnect", False),
+                "directMode": cfg.get("directMode", False)}
 
     def toggle_connect(self):
         global RELAY_URL, RELAY_KEY, agent
