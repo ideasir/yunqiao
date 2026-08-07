@@ -223,6 +223,29 @@ const ALLOWED_COMMANDS = (process.env.ALLOWED_COMMANDS || '').split(',').filter(
 const ALLOWED_FILE_PREFIX = process.env.ALLOWED_FILE_PREFIX || '';
 
 const devices = new Map();
+
+// 持久设备 ID → 设备映射（断线重连时复用设备，不生成新 deviceId）
+const persistentDevices = new Map();
+
+// 查找持久设备
+function findByPersistentId(persistentId) {
+  return persistentDevices.get(persistentId) || null;
+}
+
+// 离线设备超时清理（默认 60 秒后删除）
+const OFFLINE_TIMEOUT = parseInt(process.env.OFFLINE_TIMEOUT || "60000", 10);
+const offlineCleanup = setInterval(() => {
+  const now = Date.now();
+  for (const [id, device] of devices) {
+    if (device.offline && device.offlineSince && now - device.offlineSince > OFFLINE_TIMEOUT) {
+      const pDevice = findByPersistentId(device.persistentId);
+      if (pDevice === device) persistentDevices.delete(device.persistentId);
+      devices.delete(id);
+      if (device.userId) scheduleActivityPush(device.userId);
+      console.error("[device] offline timeout, removed: " + device.name + " (" + id + ")");
+    }
+  }
+}, 15000);
 const pendingRequests = new Map();
 const transports = new Map();
 const agentMessages = [];
@@ -262,6 +285,12 @@ function rejectDeviceRequests(deviceId, reason) {
     if (entry.deviceId === deviceId) {
       clearTimeout(entry.timer);
       pendingRequests.delete(reqId);
+      // 设备离线：不拒绝请求，保留等待重连后续传
+      const device = devices.get(deviceId);
+      if (device && device.offline) {
+        entry.awaitingReconnect = true;
+        continue;
+      }
       entry.reject(new Error(reason));
     }
   }
@@ -1323,8 +1352,6 @@ const httpServer = createServer(async (req, res) => {
         clearInterval(heartbeatTimer);
         if (transports.has(sid)) {
           transports.delete(sid);
-          broadcastToDevices({ type: 'agent_disconnected' }, userId);
-          scheduleActivityPush(userId);
         }
       };
       res.on('close', cleanupTransport);
@@ -1369,6 +1396,17 @@ const wss = new WebSocketServer({ noServer: true });
 // 心跳：发 ping 计延迟；若 pong 超时（默认 3 个周期 = 45s）判定假死连接，主动断开
 // 心跳：仅用于计算延迟，不主动断开连接
 // 客户端不主动断开则连接永不断（TCP 层面由 OS keepalive 保证）
+const agentKeepalive = setInterval(() => {
+  const now = Date.now();
+  const seen = new Set();
+  for (const [sid, entry] of transports) {
+    if (entry.userId && !seen.has(entry.userId)) {
+      seen.add(entry.userId);
+      broadcastToDevices({ type: 'agent_keepalive', ts: now }, entry.userId);
+    }
+  }
+}, 5000);
+
 const heartbeat = setInterval(() => {
   const now = Date.now();
   for (const [id, device] of devices) {
@@ -1378,7 +1416,7 @@ const heartbeat = setInterval(() => {
   }
 }, 15000);
 
-// 禁用 HTTP 超时，防止 SSE/WebSocket 长连接被 Node.js 默认 5s 超时掐断
+// 禁用 HTTP 超时
 httpServer.keepAliveTimeout = 0;
 httpServer.headersTimeout = 0;
 httpServer.requestTimeout = 0;
@@ -1395,10 +1433,6 @@ httpServer.on('upgrade', (req, socket, head) => {
       return;
     }
     wss.handleUpgrade(req, socket, head, (ws) => {
-      // 在 WebSocket 握手完成后设置 TCP keepalive + socket 超时
-      // 双保险：upgrade 阶段的 socket 和 ws 内部的 _socket 都设一遍
-      try { socket.setTimeout(0); socket.setKeepAlive(true, 3000); } catch {}
-      try { ws._socket.setTimeout(0); ws._socket.setKeepAlive(true, 3000); } catch {}
       wss.emit('connection', ws, req, user);
     });
     return;
@@ -1425,30 +1459,57 @@ wss.on('connection', (ws, req, user) => {
     }
     const { type, requestId } = msg;
     if (type === 'register') {
-      const { deviceName, os, arch, hostname, authCode } = msg;
+      const { deviceName, os, arch, hostname, authCode, persistentId } = msg;
       const name = deviceName || 'unknown';
-      devices.set(deviceId, {
-        id: deviceId, name, os: os || 'unknown', arch: arch || 'unknown',
+      const pId = persistentId || deviceId;
+      const existing = findByPersistentId(pId);
+      if (existing && existing.userId === user.userId) {
+        existing.ws = ws;
+        existing.offline = false;
+        existing.offlineSince = null;
+        existing.connectedAt = new Date().toISOString();
+        existing.authCode = authCode || existing.authCode;
+        existing.authFails = 0;
+        existing.authLockUntil = null;
+        for (const [reqId, entry] of pendingRequests) {
+          if (entry.deviceId === existing.id && entry.awaitingReconnect) {
+            entry.awaitingReconnect = false;
+            sendJSON(ws, { type: entry.type, requestId: reqId, payload: entry.payload });
+          }
+        }
+        const u = users[user.userId];
+        if (u && u._lastDisconnectAt) {
+          const gap = Math.round((Date.now() - u._lastDisconnectAt) / 1000);
+          console.error('[device] reconnected: ' + name + ' (gap=' + gap + 's)');
+          delete u._lastDisconnectAt;
+        }
+        console.error('[device] reconnected: ' + name + ' (' + existing.id + ')');
+        sendJSON(ws, { type: 'register_result', requestId, success: true, deviceId: existing.id });
+        scheduleActivityPush(user.userId);
+        return;
+      }
+      const finalId = pId;
+      devices.set(finalId, {
+        id: finalId, name, os: os || 'unknown', arch: arch || 'unknown',
         hostname: hostname || 'unknown', ws,
         authCode: authCode || null, userId: user.userId,
         connectedAt: new Date().toISOString(), latency: 0,
         authFails: 0, authLockUntil: null,
+        persistentId: pId, offline: false, offlineSince: null,
       });
-      // 短断重连（<10分钟）：保留旧 ticket，MCP 地址不变
+      persistentDevices.set(pId, devices.get(finalId));
       const u = users[user.userId];
       const shortReconnect = u && u._lastDisconnectAt && (Date.now() - u._lastDisconnectAt < 600000);
       if (shortReconnect) {
         console.error(`[device] short reconnect（${Math.round((Date.now() - u._lastDisconnectAt) / 1000)}s），MCP 地址不变`);
       } else if (u && u._lastDisconnectAt) {
-        // 长断：作废旧 ticket
         u.mcpTicket = null;
         saveUsers();
         console.error(`[device] long disconnect（${Math.round((Date.now() - u._lastDisconnectAt) / 1000)}s），旧 ticket 作废`);
       }
-      delete u._lastDisconnectAt;
-      console.error(`[device] registered: ${name} (${deviceId}) user:${user.userId} code:${authCode || 'none'}`);
-      sendJSON(ws, { type: 'register_result', requestId, success: true, deviceId });
-      // 重连后立即推送当前活跃状态（呼吸灯同步）
+      if (u) delete u._lastDisconnectAt;
+      console.error(`[device] registered: ${name} (${finalId}) user:${user.userId} code:${authCode || 'none'}`);
+      sendJSON(ws, { type: 'register_result', requestId, success: true, deviceId: finalId });
       scheduleActivityPush(user.userId);
       return;
     }
@@ -1594,6 +1655,9 @@ wss.on('connection', (ws, req, user) => {
   ws.on('close', () => {
     const device = devices.get(deviceId);
     if (device) {
+      device.offline = true;
+      device.offlineSince = Date.now();
+      device.ws = null;
       console.error(`[device] disconnected: ${device.name} (${deviceId})`);
       authCache.delete(device.userId);
       // 记录断开时间，用于判断短断/长断
@@ -1610,7 +1674,6 @@ wss.on('connection', (ws, req, user) => {
         console.error(`[task] ${tid} failed (device disconnected)`);
       }
     }
-    devices.delete(deviceId);
     rejectDeviceRequests(deviceId, `device '${deviceId}' disconnected`);
   });
   ws.on('error', (err) => { console.error(`[device] ws error: ${deviceId}`, err.message); });
