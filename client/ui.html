@@ -1394,14 +1394,7 @@ function handleBridge(action, data) {
     var s = document.getElementById('agent状态');
     if (data.status === 'connected') {
       s.textContent = '已配对'; s.style.color = '#4ade80';
-      // 同步中转按钮状态(Agent 连上时中转必连)
-      var btn = document.getElementById('connectBtn');
-      if (btn) { btn.textContent = '断开'; btn.style.background = '#7f1d1d'; btn.style.color = '#fca5a5'; }
-      var rs = document.getElementById('relayStatus');
-      if (rs) { rs.textContent = '已连接'; rs.style.color = '#4ade80'; }
-      var rd = document.getElementById('relayDot');
-      if (rd) { rd.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse'; }
-      // 更新 Agent 设备信息
+      // 更新 Agent 设备信息（不碰中转服务器 UI）
       var ad = document.getElementById('agentDevice');
       if (ad && data.agentHostname) { ad.textContent = data.agentHostname; }
       var ap = document.getElementById('agentPlatform');
@@ -1431,13 +1424,7 @@ function handleBridge(action, data) {
       updateHealth();
     } else {
       s.textContent = '待接入'; s.style.color = '#bbb';
-      // Agent 断开时同步中转按钮
-      var btn = document.getElementById('connectBtn');
-      if (btn) { btn.textContent = '连接'; btn.style.background = '#222'; btn.style.color = '#ededed'; }
-      var rs = document.getElementById('relayStatus');
-      if (rs) { rs.textContent = '未连接'; rs.style.color = '#bbb'; }
-      var rd = document.getElementById('relayDot');
-      if (rd) { rd.className = 'w-1.5 h-1.5 rounded-full bg-[#666]'; }
+      // 只更新 Agent 区域，不碰中转服务器 UI
       var agentDot = document.getElementById('agentDot');
       if (agentDot) agentDot.className = 'w-1.5 h-1.5 rounded-full bg-[#666]';
       var relayAgentDot = document.getElementById('relayAgentDot');
