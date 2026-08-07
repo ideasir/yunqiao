@@ -154,21 +154,24 @@ class Api:
                 "autoConnect": cfg.get("autoConnect", False)}
 
     def toggle_connect(self):
+        # 先停止旧连接（如果有），确保 agent 被完全重置
+        if agent:
+            stop_agent()
         if agent and agent.connected:
-            agent.stop()
-            notify_ui("relay_status", {"status": "disconnected"})
-            notify_ui("log", {"text": "已断开连接"})
+            # 如果 stop_agent 没停掉（极罕见情况），直接调 stop
+            try: agent.stop()
+            except: pass
+        # 重新读取配置，确保 RELAY_URL 和 RELAY_KEY 是最新的
+        global RELAY_URL, RELAY_KEY
+        cfg = load_config()
+        RELAY_URL = cfg.get("relayUrl", RELAY_URL)
+        RELAY_KEY = cfg.get("key", RELAY_KEY)
+        if not RELAY_URL or not RELAY_KEY:
+            notify_ui("log", {"text": "请先设置中继地址和密钥"})
             return {"connected": False}
-        elif agent and agent._running:
-            notify_ui("log", {"text": "正在连接中..."})
-            return {"connected": False}
-        else:
-            if not RELAY_URL or not RELAY_KEY:
-                notify_ui("log", {"text": "请先设置中继地址和密钥"})
-                return {"connected": False}
-            start_agent()
-            notify_ui("log", {"text": "正在连接..."})
-            return {"connected": True}
+        start_agent()
+        notify_ui("log", {"text": "正在连接..."})
+        return {"connected": True}
 
     def refresh_pair_code(self):
         global pair_code
