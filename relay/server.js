@@ -1378,6 +1378,12 @@ const heartbeat = setInterval(() => {
   }
 }, 15000);
 
+// 禁用 HTTP 超时，防止 SSE/WebSocket 长连接被 Node.js 默认 5s 超时掐断
+httpServer.keepAliveTimeout = 0;
+httpServer.headersTimeout = 0;
+httpServer.requestTimeout = 0;
+httpServer.timeout = 0;
+
 httpServer.on('upgrade', (req, socket, head) => {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
   if (url.pathname === '/device') {
