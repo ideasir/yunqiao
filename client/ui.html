@@ -42,18 +42,18 @@ tailwind.config = {
   .hidden { display: none; }
   button:active { transform: scale(.95); }
 
-  /* 任务队列抽屉：收起时一个小条，展开时向上延伸 */
+  /* 任务队列抽屉:收起时一个小条,展开时向上延伸 */
   #taskPanel { width: 148px; max-height: 34px; overflow: hidden; transition: all .25s ease; }
   #taskPanel.expanded { width: 280px; max-height: 320px; }
 
-  /* 日志系统（IDE 风格） */
+  /* 日志系统(IDE 风格) */
   .lg-time { color: #666; font-family: 'JetBrains Mono', Consolas, monospace; flex-shrink: 0; min-width: 56px; }
   .lg-badge { font-size: 9px; font-family: 'JetBrains Mono', Consolas, monospace; padding: 0 4px; border-radius: 3px; border: 1px solid; flex-shrink: 0; line-height: 13px; margin-top: 1px; }
   .lg-fbtn.active { background: #222; color: #ededed; }
   .cmd-body pre { margin: 0; font-family: inherit; white-space: pre-wrap; word-break: break-all; }
   .entry { user-select: text; -webkit-user-select: text; }
 
-  /* 自定义复选框（替代浏览器默认样式，贴合深色主题） */
+  /* 自定义复选框(替代浏览器默认样式,贴合深色主题) */
   input[type="checkbox"] { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border: 1px solid #555; border-radius: 3px; background: #1a1a1a; cursor: pointer; position: relative; vertical-align: middle; }
   input[type="checkbox"]:hover { border-color: #888; }
   input[type="checkbox"]:checked { background: #4ade80; border-color: #4ade80; }
@@ -63,13 +63,13 @@ tailwind.config = {
 </head>
 <body class="h-screen flex flex-col overflow-hidden bg-[#0a0a0a]" style="background:#0a0a0a">
 
-<!-- 启动画面：纯内联 CSS，不依赖 CDN，避免白屏；页面就绪后由 JS 淡出 -->
+<!-- 启动画面:纯内联 CSS,不依赖 CDN,避免白屏;页面就绪后由 JS 淡出 -->
 <div id="splashScreen" style="position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#0a0a0a;transition:opacity .35s ease;">
   <div style="width:44px;height:44px;border-radius:12px;background:#ededed;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#0a0a0a;font-family:Inter,sans-serif;">云</div>
   <div style="width:120px;height:3px;background:#222;border-radius:2px;overflow:hidden;">
     <div id="splashBar" style="width:0%;height:100%;background:#4ade80;border-radius:2px;transition:width .3s ease;"></div>
   </div>
-  <div style="font-size:11px;color:#666;font-family:'Noto Sans SC',sans-serif;">云桥正在启动…</div>
+  <div style="font-size:11px;color:#666;font-family:'Noto Sans SC',sans-serif;">云桥正在启动...</div>
 </div>
 
 <!-- ─── 标题栏 ─── -->
@@ -77,10 +77,10 @@ tailwind.config = {
   <div class="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold text-black bg-[#ededed] flex-shrink-0 ">~</div>
   <span class="text-sm font-medium text-[#ededed]">云桥 MCP</span>
   <span class="text-xs text-[#666] font-mono">v2.0</span>
-  <button onclick="copySkillInfo()" class="text-[10px] text-[#888] hover:text-[#ededed] border border-[#222] hover:border-[#333] rounded px-2 py-1 transition-colors cursor-pointer bg-transparent" title="复制云桥技能安装信息，粘贴发给智能体">📦 给智能体安装 skills</button>
+  <button onclick="copySkillInfo()" class="text-[10px] text-[#888] hover:text-[#ededed] border border-[#222] hover:border-[#333] rounded px-2 py-1 transition-colors cursor-pointer bg-transparent" title="复制云桥技能安装信息,粘贴发给智能体">📦 给智能体安装 skills</button>
   <div class="flex-1"></div>
   <div id="activityDots" title="Agent 活跃连接数" style="position:fixed;top:18px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:2px;pointer-events:none;z-index:999"></div>
-  <button onclick="copyRepoUrl()" class="w-7 h-7 flex items-center justify-center rounded hover:bg-[#1a1a1a] transition-colors cursor-pointer" title="作者：李不是狼 （点击复制仓库地址）">
+  <button onclick="copyRepoUrl()" class="w-7 h-7 flex items-center justify-center rounded hover:bg-[#1a1a1a] transition-colors cursor-pointer" title="作者:李不是狼 (点击复制仓库地址)">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="#888" aria-label="GitHub"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.55 0-.27-.01-1.17-.02-2.12-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.76 2.69 1.25 3.35.96.1-.75.4-1.25.72-1.54-2.55-.29-5.23-1.28-5.23-5.68 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.15 1.18a10.9 10.9 0 0 1 5.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.59.23 2.76.11 3.05.73.81 1.18 1.83 1.18 3.09 0 4.41-2.69 5.38-5.25 5.67.41.35.77 1.05.77 2.12 0 1.53-.01 2.76-.01 3.14 0 .3.2.66.8.55A11.51 11.51 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>
   </button>
   <button onclick="window.open('https://chat.deepseek.com','_blank')" class="w-5 h-5 flex items-center justify-center rounded cursor-pointer transition-opacity hover:opacity-80" title="本项目由 DeepSeek 驱动开发">
@@ -104,12 +104,12 @@ tailwind.config = {
       <!-- 上下文菜单 -->
     <div id="ctxMenu" class="fixed z-50 rounded-lg bg-[#1a1a1a] border border-[#333] shadow-xl py-1" style="display:none; min-width:160px;">
       <div class="px-3 py-1.5 text-xs text-[#aaa] hover:bg-[#222] hover:text-[#ededed] cursor-pointer transition-colors" onclick="ctxSetDefault()">设为默认工作区</div>
-      <div id="ctxIndexItem" class="px-3 py-1.5 text-xs text-[#a78bfa] hover:bg-[#222] hover:text-[#c4b5fd] cursor-pointer transition-colors" onclick="ctxBuildIndex()" title="为当前工作区建立代码知识图谱（需含代码文件）">🧠 建立索引</div>
+      <div id="ctxIndexItem" class="px-3 py-1.5 text-xs text-[#a78bfa] hover:bg-[#222] hover:text-[#aaa] cursor-pointer transition-colors" onclick="ctxBuildIndex()" title="为当前工作区建立代码知识图谱(需含代码文件)">🧠 建立索引</div>
       <div class="px-3 py-1.5 text-xs text-[#aaa] hover:bg-[#222] hover:text-[#ff6b6b] cursor-pointer transition-colors border-t border-[#222]" onclick="ctxDelete()">删除工作区</div>
     </div>
   </div>
 
-  <!-- 左侧：对话/日志 -->
+  <!-- 左侧:对话/日志 -->
   <div class="flex-1 relative flex flex-col min-w-0 bg-[#0a0a0a]">
 
     <!-- 路径栏 -->
@@ -128,7 +128,7 @@ tailwind.config = {
       <button class="lg-fbtn text-[10px] px-1.5 py-0.5 rounded text-[#666] hover:text-[#ccc] transition-colors" data-f="msg" onclick="setLogFilter('msg')">消息</button>
       <div class="flex-1"></div>
       <button id="autoScrollBtn" class="text-[10px] text-[#555] hover:text-[#aaa] transition-colors bg-transparent border-0 cursor-pointer" onclick="toggleAutoScroll()" title="自动滚动到底部">⤓ 滚动</button>
-      <button class="text-[10px] text-[#a78bfa] hover:text-[#c4b5fd] transition-colors bg-transparent border-0 cursor-pointer" onclick="userBuildIndex()" title="为当前工作区建立 CodeGraph 语义索引（大项目推荐）">🧠 索引</button>
+      <button class="text-[10px] text-[#a78bfa] hover:text-[#aaa] transition-colors bg-transparent border-0 cursor-pointer" onclick="userBuildIndex()" title="为当前工作区建立 CodeGraph 语义索引(大项目推荐)">🧠 索引</button>
       <button class="text-[10px] text-[#555] hover:text-[#aaa] transition-colors bg-transparent border-0 cursor-pointer" onclick="clearLog()" title="清空日志">清空</button>
     </div>
 
@@ -140,10 +140,10 @@ tailwind.config = {
     <!-- 输入区 -->
     <div class="flex items-stretch flex-shrink-0 bg-[#0a0a0a] border-t border-[#1a1a1a]">
       <span class="flex items-center pl-5 pr-1 text-[#888] text-sm font-bold select-none">❯</span>
-      <input type="text" id="cmdInput" class="flex-1 bg-transparent border-none text-[#ededed] px-3 py-3 font-mono text-xs outline-none placeholder-[#666]" placeholder="给 Agent 发消息，回车发送（! 前缀 = 紧急）" spellcheck="false" onkeydown="if(event.key==='Enter')sendCommand()" />
+      <input type="text" id="cmdInput" class="flex-1 bg-transparent border-none text-[#ededed] px-3 py-3 font-mono text-xs outline-none placeholder-[#666]" placeholder="给 Agent 发消息,回车发送(! 前缀 = 紧急)" spellcheck="false" onkeydown="if(event.key==='Enter')sendCommand()" />
     </div>
 
-    <!-- 任务队列抽屉（日志区域右上角，无任务收缩/有任务自动展开） -->
+    <!-- 任务队列抽屉(日志区域右上角,无任务收缩/有任务自动展开) -->
     <div id="taskPanel" class="absolute rounded-xl bg-[#141414] border border-[#222222] shadow-2xl z-40 select-none" style="top:74px; right:12px;">
       <div class="flex items-center gap-2 px-3 py-2 border-b border-[#1f1f1f] cursor-pointer" onclick="toggleTaskPanel()" title="点击展开/收起">
         <div class="w-1.5 h-1.5 rounded-full flex-shrink-0" id="taskPanelDot" style="background:#333;"></div>
@@ -155,14 +155,14 @@ tailwind.config = {
         <div id="taskEmpty" class="px-3 py-3 text-[11px] text-[#555] text-center">暂无等待任务</div>
         <div id="taskList" class="overflow-y-auto" style="max-height:190px; display:none;"></div>
         <div class="px-3 py-1.5 text-[9px] text-[#444] border-t border-[#1a1a1a] flex items-center justify-between">
-          <span>拖动排序，Agent 按顺序读取</span>
+          <span>拖动排序,Agent 按顺序读取</span>
           <button onclick="clearDoneTasks()" class="text-[#555] hover:text-[#ff6b6b] transition-colors bg-transparent border-0 cursor-pointer" title="清空已完成任务">清空已完成</button>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- 右侧：拓扑图 -->
+  <!-- 右侧:拓扑图 -->
   <aside class="w-64 flex flex-col gap-0 p-0 overflow-y-auto flex-shrink-0 select-none bg-[#0d0d0d] " style="padding: 12px;">
 
     <!-- Agent 节点 -->
@@ -179,7 +179,7 @@ tailwind.config = {
         <div class="flex justify-between"><span class="text-[#888]">平台</span><span class="text-[#ddd]" id="agentPlatform">-</span></div>
       </div>
       <div class="flex gap-1.5 px-3 py-2 border-t border-[#1f1f1f]">
-        <button class="flex-1 text-xs py-1 rounded-lg bg-[#222] text-[#ededed] hover:bg-[#2a2a2a] transition-all font-medium" onclick="copyPairCode()" title="复制配对码（发给智能体）">复制配对码</button>
+        <button class="flex-1 text-xs py-1 rounded-lg bg-[#222] text-[#ededed] hover:bg-[#2a2a2a] transition-all font-medium" onclick="copyPairCode()" title="复制配对码(发给智能体)">复制配对码</button>
         <button class="text-xs py-1 px-2 rounded-lg bg-[#1a1a1a] text-[#777] hover:text-[#fca5a5] transition-all" onclick="disconnectAgent()" title="断开当前 Agent 连接">断开</button>
         <button class="text-xs py-1 px-2 rounded-lg bg-[#1a1a1a] text-[#777] hover:text-[#ededed] transition-all" onclick="refreshPairCode()" title="刷新配对码">刷新</button>
       </div>
@@ -220,7 +220,7 @@ tailwind.config = {
     <div class="rounded-xl bg-[#141414] border border-[#222222]">
       <div class="flex items-center gap-2 px-3 py-2.5 border-b border-[#1f1f1f]">
         <div class="w-1.5 h-1.5 rounded-full bg-[#666]" id="clientDot"></div>
-        <span class="text-xs font-medium text-[#aaa]">客户端（本地电脑）</span>
+        <span class="text-xs font-medium text-[#aaa]">客户端(本地电脑)</span>
         <span class="ml-auto text-[10px] text-[#555] font-mono" id="clientProto">WSS</span>
       </div>
       <div class="px-3 py-2 space-y-1.5 text-xs">
@@ -255,13 +255,13 @@ tailwind.config = {
 
 console.log("JS loaded OK");
 
-// ─── 启动画面：进度条动画 + 页面就绪后淡出 ───
+// ─── 启动画面:进度条动画 + 页面就绪后淡出 ───
 (function() {
   var splash = document.getElementById('splashScreen');
   if (!splash) return;
   var bar = document.getElementById('splashBar');
   var pct = 0;
-  // 进度条模拟加载（页面实际渲染完成后淡出）
+  // 进度条模拟加载(页面实际渲染完成后淡出)
   var iv = setInterval(function() {
     pct = Math.min(pct + 8 + Math.random() * 12, 92);
     if (bar) bar.style.width = pct + '%';
@@ -274,16 +274,16 @@ console.log("JS loaded OK");
       setTimeout(function() { splash.style.display = 'none'; }, 380);
     }, 150);
   }
-  // 页面完全加载后淡出（最多等 4 秒兑底）
+  // 页面完全加载后淡出(最多等 4 秒兑底)
   if (document.readyState === 'complete') { setTimeout(hide, 300); }
   else window.addEventListener('load', function() { setTimeout(hide, 300); });
-  setTimeout(hide, 4000); // 兑底：4 秒后必隐
+  setTimeout(hide, 4000); // 兑底:4 秒后必隐
 })();
 
 
 
-const state = { connected: false, pairCode: '------', ws: null, sessions: [], currentSessionId: null, deviceId: null, deviceName: '', cwd: '', logs: {}, platform: '', hostname: '', workDir: '', relayKey: '', permission: 'workspace', pendingMessages: [], agentHostname: '', agentPlatform: '' };
-// 链路健康状态：relay=off/connecting/on, agent=off/on
+const state = { connected: false, pairCode: '------', ws: null, sessions: [], currentSessionId: null, deviceId: null, deviceName: '', cwd: '', logs: {}, platform: '', hostname: '', workDir: '', relayKey: '', permission: 'workspace', pendingMessages: [], agentHostname: '', agentPlatform: '', autoReconnect: false, reconnectTimer: null };
+// 链路健康状态:relay=off/connecting/on, agent=off/on
 var health = { relay: 'off', agent: 'off', relayLatency: 0, agentLatency: 0 };
 var isDesktopApp = typeof window.pywebview !== 'undefined';
 
@@ -292,7 +292,7 @@ var _lastLogTime = 0;
 var _lastLogType = '';
 var autoScroll = true;
 var logFilter = 'all';
-var MAX_LOG_ITEMS = 1000;   // 日志/卡片条数上限，超出自动裁剪最早的，防止长会话卡顿
+var MAX_LOG_ITEMS = 1000;   // 日志/卡片条数上限,超出自动裁剪最早的,防止长会话卡顿
 function trimLog() {
   var log = document.getElementById('sessionLog');
   if (!log) return;
@@ -349,7 +349,7 @@ function setLogFilter(f) {
 }
 function addLog(type, text) {
   var _now = Date.now();
-  // 去重：3 秒内同类型同文本跳过（但连接/断开事件除外）
+  // 去重:3 秒内同类型同文本跳过(但连接/断开事件除外)
   if (text === _lastLogText && type === _lastLogType && _now - _lastLogTime < 3000
       && !text.includes('中转服务器')) return;
   _lastLogText = text;
@@ -387,7 +387,7 @@ function addCmdBlock(cmd, meta, p) {
   var durText = dur != null ? Math.round(dur) + 'ms' : '';
   var exitText = (p && p.exitCode !== undefined) ? (ok ? '✓ ' : '✗ ') + p.exitCode : '';
 
-  // 按 kind 区分卡片：脚本/命令/环境/文件
+  // 按 kind 区分卡片:脚本/命令/环境/文件
   var kind = (p && p.kind) || (meta && meta.kind) || '';
   var badge = ['CMD', '#3b82f6'];
   var prefix = '$ ';
@@ -417,7 +417,7 @@ function addCmdBlock(cmd, meta, p) {
   var lines = [];
   if (meta && meta.cwd) lines.push('<div class="text-[10px] text-[#777]">📁 ' + esc(meta.cwd) + '</div>');
 
-  // 环境档案：可读的结构化展示（而非裸 JSON）
+  // 环境档案:可读的结构化展示(而非裸 JSON)
   if (kind === 'get_environment' && p && p.data) {
     lines.push(renderEnvProfile(p.data));
   } else {
@@ -425,7 +425,7 @@ function addCmdBlock(cmd, meta, p) {
     if (p && p.stderr) lines.push('<pre class="text-[#ff8a8a] whitespace-pre-wrap break-all">' + esc(p.stderr) + '</pre>');
   }
   if (p && p.killed) lines.push('<div class="text-[10px] text-[#fbbf24]">⏱ 超时被终止</div>');
-  if (lines.length === 0) lines.push('<div class="text-[10px] text-[#555]">（无输出）</div>');
+  if (lines.length === 0) lines.push('<div class="text-[10px] text-[#555]">(无输出)</div>');
   body.innerHTML = lines.join('');
   title.addEventListener('click', function() {
     var hidden = body.style.display === 'none';
@@ -441,7 +441,7 @@ function addCmdBlock(cmd, meta, p) {
   trimLog();
 }
 
-// ── 执行中卡片（Agent 开始一个工具时显示）──
+// ── 执行中卡片(Agent 开始一个工具时显示)──
 function startCmdBlock(cmdText, cmdObj) {
   var log = document.getElementById('sessionLog');
   var block = document.createElement('div');
@@ -471,7 +471,7 @@ function startCmdBlock(cmdText, cmdObj) {
 
   var body = document.createElement('div');
   body.className = 'cmd-body pl-[62px] pb-1 space-y-0.5';
-  body.innerHTML = '<div class="text-[10px] text-[#888]">⏳ 正在执行，等待结果…</div>';
+  body.innerHTML = '<div class="text-[10px] text-[#888]">⏳ 正在执行,等待结果...</div>';
 
   title.addEventListener('click', function() {
     var hidden = body.style.display === 'none';
@@ -486,19 +486,19 @@ function startCmdBlock(cmdText, cmdObj) {
   log.appendChild(block);
   scrollLog();
   trimLog();
-  // 兑底：若 10 秒内未收到 result，标记为"已结束"，避免永远停在"运行中"
+  // 兑底:若 10 秒内未收到 result,标记为"已结束",避免永远停在"运行中"
   var pending = { el: block, title: title, body: body, cmdText: cmdText, time: time, startTime: Date.now(), _timeout: null };
   pending._timeout = setTimeout(function() {
-    // 如果卡片还在且仍显示"运行中"，改成"已结束（无返回）"
+    // 如果卡片还在且仍显示"运行中",改成"已结束(无返回)"
     if (pending.el && pending.el.isConnected) {
       var runEl = pending.title.querySelector('.blink-fast');
       if (runEl) {
         runEl.textContent = '已结束';
         runEl.style.color = '#888';
         runEl.classList.remove('blink-fast');
-        pending.body.innerHTML = '<div class="text-[10px] text-[#777]">⚠ 此操作无返回结果（或已完成），未展示输出。</div>';
+        pending.body.innerHTML = '<div class="text-[10px] text-[#777]">⚠ 此操作无返回结果(或已完成),未展示输出。</div>';
       }
-      // 停止转圈图标（修复：超时后 spin-icon 仍在无限旋转）
+      // 停止转圈图标(修复:超时后 spin-icon 仍在无限旋转)
       var spinEl = pending.title.querySelector('.spin-icon');
       if (spinEl) {
         spinEl.style.animation = 'none';
@@ -514,7 +514,7 @@ function startCmdBlock(cmdText, cmdObj) {
 // 把"执行中"卡片更新为"完成"态
 function finalizeCmdBlock(pending, p) {
   if (!pending || !pending.el) return;
-  // 收到结果，取消兑底超时
+  // 收到结果,取消兑底超时
   if (pending._timeout) { clearTimeout(pending._timeout); pending._timeout = null; }
   var ok = p.exitCode === 0;
   var dur = p.duration != null ? Math.round(p.duration) + 'ms' : '';
@@ -556,28 +556,28 @@ function finalizeCmdBlock(pending, p) {
     if (p.stderr) lines.push('<pre class="text-[#ff8a8a] whitespace-pre-wrap break-all">' + esc(p.stderr) + '</pre>');
   }
   if (p.killed) lines.push('<div class="text-[10px] text-[#fbbf24]">⏱ 超时被终止</div>');
-  if (lines.length === 0) lines.push('<div class="text-[10px] text-[#555]">（无输出）</div>');
+  if (lines.length === 0) lines.push('<div class="text-[10px] text-[#555]">(无输出)</div>');
   pending.body.innerHTML = lines.join('');
   scrollLog();
 }
 
-// ── 长任务进度弹窗（如 CodeGraph 索引）──
+// ── 长任务进度弹窗(如 CodeGraph 索引)──
 var __progressEl = null;
 function showIndexProgress(p) {
   if (!p) return;
   var percent = p.percent != null ? Math.max(0, Math.min(100, p.percent)) : 0;
   var phase = p.phase || '';
-  var text = p.text || '正在处理…';
+  var text = p.text || '正在处理...';
   var detail = p.detail || '';
-  // 创建弹窗（首次）
+  // 创建弹窗(首次)
   if (!__progressEl || !document.body.contains(__progressEl)) {
     __progressEl = document.createElement('div');
     __progressEl.id = 'indexProgress';
-    __progressEl.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:99990;background:#141414;border:1px solid #333;border-radius:14px;padding:22px 26px;min-width:380px;max-width:560px;box-shadow:0 8px 40px rgba(0,0,0,.6);text-align:center;';
+    __progressEl.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:99990;background:#1a1a1a;border:1px solid #444;border-radius:14px;padding:22px 26px;min-width:380px;max-width:560px;box-shadow:0 8px 40px rgba(0,0,0,.6);text-align:center;';
     __progressEl.innerHTML =
       '<div style="font-size:14px;font-weight:600;color:#ededed;margin-bottom:4px;font-family:Inter,sans-serif;">🧠 正在建立代码索引</div>' +
-      '<div style="font-size:11px;color:#888;margin-bottom:14px;font-family:Noto Sans SC,sans-serif;">大项目索引可能需要几分钟，请稍候…</div>' +
-      '<div style="font-size:12px;color:#4ade80;margin-bottom:8px;font-family:Noto Sans SC,sans-serif;min-height:16px;font-weight:600;" id="ipPhase">正在准备…</div>' +
+      '<div style="font-size:11px;color:#888;margin-bottom:14px;font-family:Noto Sans SC,sans-serif;">大项目索引可能需要几分钟,请稍候...</div>' +
+      '<div style="font-size:12px;color:#4ade80;margin-bottom:8px;font-family:Noto Sans SC,sans-serif;min-height:16px;font-weight:600;" id="ipPhase">正在准备...</div>' +
       '<div style="width:100%;height:8px;background:#222;border-radius:4px;overflow:hidden;">' +
       '  <div id="ipBar" style="width:0%;height:100%;background:linear-gradient(90deg,#4ade80,#3b82f6);border-radius:4px;transition:width .3s ease;"></div>' +
       '</div>' +
@@ -592,7 +592,7 @@ function showIndexProgress(p) {
   if (bar) bar.style.width = percent + '%';
   if (pctEl) pctEl.textContent = percent;
   if (phaseEl) phaseEl.textContent = text;
-  // 文件级明细：显示“正在处理哪个文件/哪块代码”
+  // 文件级明细:显示"正在处理哪个文件/哪块代码"
   if (detailEl && detail) {
     detailEl.textContent = detail;
   }
@@ -611,7 +611,7 @@ function showIndexProgress(p) {
   }
 }
 
-// 环境档案 → 结构化 HTML（分组展示，IDE 风格）
+// 环境档案 → 结构化 HTML(分组展示,IDE 风格)
 function renderEnvProfile(d) {  if (!d || typeof d !== 'object') return '';
   var html = '';
   var sec = function(title, rows) {
@@ -631,7 +631,7 @@ function renderEnvProfile(d) {  if (!d || typeof d !== 'object') return '';
   html += sec('工作区', [
     ['模式', w.permission || ''], ['当前目录', w.currentCwd || ''], ['默认目录', w.defaultWorkDir || '']
   ]);
-  // 完整 JSON（可折叠展开）
+  // 完整 JSON(可折叠展开)
   html += '<div class="text-[10px] text-[#555] mt-1 cursor-pointer" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'none\'?\'\':\'none\'">▸ 查看完整 JSON</div>';
   html += '<pre style="display:none" class="text-[#777] text-[10px] whitespace-pre-wrap break-all">' + esc(JSON.stringify(d, null, 2)) + '</pre>';
   return html;
@@ -669,39 +669,39 @@ function copyTextToClipboard(text, okLog) {
     ta.select();
     document.execCommand('copy');
     document.body.removeChild(ta);
-    addLog('done', okLog + '（fallback）');
+    addLog('done', okLog + '(fallback)');
   });
 }
 function copyRepoUrl() {
   copyTextToClipboard(REPO_URL, '仓库地址已复制: ' + REPO_URL);
 }
 function copySkillInfo() {
-  var msg = '请为我安装"云桥"技能（yunqiao-usage）：\n\n' +
-    '技能内容地址（SKILL.md）：\n' + SKILL_RAW_URL + '\n\n' +
-    '请阅读并遵循该技能的使用规范（连接云桥后先调用 get_client_messages 读取客户端消息、按优先级处理用户指令等）。';
-  copyTextToClipboard(msg, '技能安装信息已复制，请粘贴发给智能体');
+  var msg = '请为我安装"云桥"技能(yunqiao-usage):\n\n' +
+    '技能内容地址(SKILL.md):\n' + SKILL_RAW_URL + '\n\n' +
+    '请阅读并遵循该技能的使用规范(连接云桥后先调用 get_client_messages 读取客户端消息、按优先级处理用户指令等)。';
+  copyTextToClipboard(msg, '技能安装信息已复制,请粘贴发给智能体');
 }
 
-// 用户主动建立 CodeGraph 索引（点击顶部工具条按钮）
+// 用户主动建立 CodeGraph 索引(点击顶部工具条按钮)
 function userBuildIndex() {
   var path = state.workDir || '';
   if (!path) { addLog('err', '请先设置/选择工作区'); return; }
-  // 先查询当前工作区索引状态，动态生成建议
+  // 先查询当前工作区索引状态,动态生成建议
   var statusLine = '';
   var doAsk = function() {
     var help =
-      '🧠 建立代码索引（CodeGraph）\n\n' +
-      '【用途】为当前工作区生成语义代码图谱：\n' +
+      '🧠 建立代码索引(CodeGraph)\n\n' +
+      '【用途】为当前工作区生成语义代码图谱:\n' +
       '  · 跳转函数/类定义、查看调用关系\n' +
       '  · 跨文件理解代码、查询影响范围\n\n' +
       '【何时需要】\n' +
-      '  · 项目文件较多（数百+）时，普通 grep 难理解全局\n' +
+      '  · 项目文件较多(数百+)时,普通 grep 难理解全局\n' +
       '  · 经常改代码、需要知道改动影响的模块\n' +
       '  · 接手中大型项目想快速上手\n\n' +
       (statusLine ? statusLine + '\n' : '') +
-      '【耗时】小项目秒级，大项目几分钟\n' +
+      '【耗时】小项目秒级,大项目几分钟\n' +
       '【当前工作区】' + path + '\n\n' +
-      '确认开始建立索引？';
+      '确认开始建立索引?';
     nativeConfirm('建立代码索引', help).then(function(ok) {
       if (!ok) { addLog('info', '已取消建立索引'); return; }
       if (window.pywebview && window.pywebview.api && window.pywebview.api.build_index) {
@@ -713,11 +713,11 @@ function userBuildIndex() {
           }
         }).catch(function(e) { addLog('err', '建立索引失败: ' + ((e && e.message) || e || '')); });
       } else {
-        addLog('err', '浏览器模式不支持建立索引，请使用桌面客户端');
+        addLog('err', '浏览器模式不支持建立索引,请使用桌面客户端');
       }
     });
   };
-  // 若后端支持则先查状态，再弹框；否则直接弹框
+  // 若后端支持则先查状态,再弹框;否则直接弹框
   if (window.pywebview && window.pywebview.api && window.pywebview.api.get_codegraph_status) {
     window.pywebview.api.get_codegraph_status(path).then(function(s) {
       if (s && s.success) { statusLine = '【当前状态】' + (s.advice || ''); }
@@ -733,12 +733,12 @@ function sendCommand() {
   var raw = input.value.trim();
   if (!raw) return;
   input.value = '';
-  // 以 ! 开头 = 紧急消息（去掉前缀发送）
+  // 以 ! 开头 = 紧急消息(去掉前缀发送)
   var urgent = raw.charAt(0) === '!';
   var text = urgent ? raw.slice(1).trim() : raw;
   if (!text) return;
   if (window.pywebview && window.pywebview.api && window.pywebview.api.send_message) {
-    // 桌面模式：消息进中继队列，Agent 读取后收到回执
+    // 桌面模式:消息进中继队列,Agent 读取后收到回执
     window.pywebview.api.send_message(text, urgent).then(function(r) {
       if (r && r.success && r.msgId) {
         state.pendingMessages.push({ id: r.msgId, text: text, urgent: urgent, done: false });
@@ -750,7 +750,7 @@ function sendCommand() {
       }
     }).catch(function() { addLog('err', '消息发送失败'); });
   } else if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-    // 浏览器直连模式：直接发给中继（无回执跟踪）
+    // 浏览器直连模式:直接发给中继(无回执跟踪)
     state.ws.send(JSON.stringify({ type: 'agent_message', requestId: 'msg_' + Date.now(), text: text, urgent: urgent }));
     addLog(urgent ? 'warn' : 'msg', (urgent ? '⚠️ [紧急] → Agent: ' : '→ Agent: ') + text);
   } else {
@@ -771,7 +771,7 @@ function updateAgentBadge() {
 
 // ─── 任务队列面板 ────────────────────────────────
 var panelOpen = false;      // 抽屉是否展开
-var panelManual = false;    // 用户是否手动控制过（手动后不自动打扰）
+var panelManual = false;    // 用户是否手动控制过(手动后不自动打扰)
 var dragMsgIdx = -1;
 function fmtTime(t) {
   var d = new Date(t);
@@ -809,7 +809,7 @@ function renderTaskPanel() {
   state.pendingMessages.forEach(function(m, idx) {
     var row = document.createElement('div');
     if (m.done) {
-      // 已完成：划掉 + 灰色 + ✓，保留删除
+      // 已完成:划掉 + 灰色 + ✓,保留删除
       row.className = 'flex items-start gap-2 px-3 py-1.5 border-b border-[#1a1a1a] opacity-45 text-xs';
       row.innerHTML =
         '<span class="text-[9px] text-[#555] font-mono pt-0.5 flex-shrink-0">' + fmtTime(m.doneTime || m.time) + '</span>' +
@@ -858,12 +858,12 @@ function renderTaskPanel() {
     row.dataset.idx = idx;
     list.appendChild(row);
   });
-  // 抽屉自动行为：无待读任务收起，有则展开（用户手动控制过则不打扰）
+  // 抽屉自动行为:无待读任务收起,有则展开(用户手动控制过则不打扰)
   if (n === 0) panelOpen = false;
   else if (!panelManual) panelOpen = true;
   applyPanelState();
 }
-// 原生确认框：桌面端走 pywebview（tkinter 原生），浏览器端降级 confirm
+// 原生确认框:桌面端走 pywebview(tkinter 原生),浏览器端降级 confirm
 function nativeConfirm(title, message) {
   if (window.pywebview && window.pywebview.api && window.pywebview.api.confirm_dialog) {
     return window.pywebview.api.confirm_dialog(title, message);
@@ -873,7 +873,7 @@ function nativeConfirm(title, message) {
 function deleteTask(idx) {
   var m = state.pendingMessages[idx];
   if (!m) return;
-  nativeConfirm('删除任务', '删除这条任务？').then(function(ok) {
+  nativeConfirm('删除任务', '删除这条任务?').then(function(ok) {
     if (!ok) return;
     state.pendingMessages.splice(idx, 1);
     renderTaskPanel();
@@ -936,7 +936,7 @@ function reorderTask(from, to) {
   arr.splice(to, 0, item);
   renderTaskPanel();
   syncTaskOrder();
-  addLog('info', '任务已重排，Agent 将按新顺序读取');
+  addLog('info', '任务已重排,Agent 将按新顺序读取');
 }
 function syncTaskOrder() {
   var ids = state.pendingMessages.map(function(m) { return m.id; });
@@ -954,7 +954,7 @@ function getMcpBase() {
   return base.replace(/\/device$/, '').replace(/\/$/, '');
 }
 function fetchMcpTicket(forceRefresh) {
-  // 缓存 MCP ticket，避免每次复制都作废旧地址
+  // 缓存 MCP ticket,避免每次复制都作废旧地址
   if (!forceRefresh && state.mcpTicket && state.mcpUrl) {
     return Promise.resolve(state.mcpUrl);
   }
@@ -974,15 +974,15 @@ function refreshMcpTicket() {
   state.mcpTicket = '';
   state.mcpUrl = '';
   fetchMcpTicket(true).then(function(url) {
-    addLog('info', 'MCP 地址已刷新（旧地址已作废）');
+    addLog('info', 'MCP 地址已刷新(旧地址已作废)');
   }).catch(function(e) {
     addLog('err', '刷新 MCP 地址失败: ' + e.message);
   });
 }
 function copyPairCode() {
-  // 复制动态 MCP 地址 + 配对码（缓存 ticket，不重复生成）
+  // 复制动态 MCP 地址 + 配对码(缓存 ticket,不重复生成)
   fetchMcpTicket(false).then(function(url) {
-    copyTextToClipboard('云桥地址: ' + url + '\n配对码: ' + state.pairCode, '已复制：动态 MCP 地址 + 配对码');
+    copyTextToClipboard('云桥地址: ' + url + '\n配对码: ' + state.pairCode, '已复制:动态 MCP 地址 + 配对码');
   }).catch(function(e) { addLog('err', '获取 MCP 地址失败: ' + e.message); });
 }
 function copyMcpUrl() {
@@ -992,7 +992,7 @@ function copyMcpUrl() {
   }).catch(function(e) { addLog('err', '获取 MCP 地址失败: ' + e.message); });
 }
 function disconnectAgent() {
-  // 断开当前 Agent 连接（清理 SSE 传输）
+  // 断开当前 Agent 连接(清理 SSE 传输)
   if (window.pywebview && window.pywebview.api && window.pywebview.api.disconnect_agent) {
     window.pywebview.api.disconnect_agent().then(function(r) {
       if (r && r.success) {
@@ -1011,13 +1011,13 @@ function refreshPairCode() {
       state.pairCode = result.pairCode;
       var el = document.getElementById('pairCode'); if (el) el.textContent = state.pairCode;
       addLog('done', '配对码已推送至中转服务器');
-      addLog('info', '请复制并发送给智能体：云桥地址 ' + (document.getElementById('relayUrl')?.textContent || '') + ' 配对码 ' + state.pairCode);
+      addLog('info', '请复制并发送给智能体:云桥地址 ' + (document.getElementById('relayUrl')?.textContent || '') + ' 配对码 ' + state.pairCode);
     });
   } else {
     state.pairCode = String(100000 + Math.floor(Math.random() * 900000));
     var el = document.getElementById('pairCode'); if (el) el.textContent = state.pairCode;
     addLog('done', '配对码已推送至中转服务器');
-    addLog('info', '请复制并发送给智能体：云桥地址 ' + (document.getElementById('relayUrl')?.textContent || '') + ' 配对码 ' + state.pairCode);
+    addLog('info', '请复制并发送给智能体:云桥地址 ' + (document.getElementById('relayUrl')?.textContent || '') + ' 配对码 ' + state.pairCode);
   }
 }
 
@@ -1055,7 +1055,7 @@ function createSession() {
 function saveSessionModal() {
   var name = document.getElementById('modalSessionName').value.trim() || '工作区';
   var dir = document.getElementById('modalSessionDir').value.trim() || state.homeDir || 'C:\\Users\\Administrator';
-  // 桌面端：调后端 API 创建会话（影响 Agent 实际工作目录）
+  // 桌面端:调后端 API 创建会话(影响 Agent 实际工作目录)
   if (window.pywebview && window.pywebview.api && window.pywebview.api.create_session) {
     window.pywebview.api.create_session(dir, name).then(function(r) {
       if (r && r.success) {
@@ -1066,7 +1066,7 @@ function saveSessionModal() {
       }
     }).catch(function(e) { addLog('err', '创建工作区失败: ' + ((e && e.message) || e || '未知错误')); });
   } else {
-    // 浏览器直连：纯前端模式
+    // 浏览器直连:纯前端模式
     var id = 's_' + Date.now().toString(36);
     state.sessions.push({ id: id, name: name, workDir: dir, cwd: dir, isDefault: state.sessions.length === 0 });
     state.workDir = dir;
@@ -1088,7 +1088,7 @@ function browseSessionDir(e) {
   var input = document.getElementById('modalSessionDir');
   var btn = e ? e.target : null;
   if (btn) { btn.textContent = '...'; btn.style.opacity = '0.5'; }
-  // 桌面端：用原生"选择文件夹"对话框（tkinter），返回完整路径
+  // 桌面端:用原生"选择文件夹"对话框(tkinter),返回完整路径
   if (window.pywebview && window.pywebview.api && window.pywebview.api.browse_folder) {
     window.pywebview.api.browse_folder().then(function(path) {
       if (path) input.value = path;
@@ -1100,7 +1100,7 @@ function browseSessionDir(e) {
     });
     return;
   }
-  // 浏览器直连模式：showDirectoryPicker（只能拿到目录名）或手动输入
+  // 浏览器直连模式:showDirectoryPicker(只能拿到目录名)或手动输入
   if (window.showDirectoryPicker) {
     window.showDirectoryPicker().then(function(handle) {
       document.getElementById('modalSessionDir').value = handle.name;
@@ -1112,7 +1112,7 @@ function browseSessionDir(e) {
     });
     return;
   }
-  // 降级：手动输入
+  // 降级:手动输入
   if (btn) { btn.textContent = '浏览'; btn.style.opacity = '1'; }
   input.focus();
   input.select();
@@ -1153,12 +1153,12 @@ function renderSidebar() {
       e.stopPropagation();
       ctxSessionId = s.id;
       var menu = document.getElementById('ctxMenu');
-      // 动态判断该工作区能否建立索引：查 codegraph 状态，决定菜单项灰/可点
+      // 动态判断该工作区能否建立索引:查 codegraph 状态,决定菜单项灰/可点
       var idxItem = document.getElementById('ctxIndexItem');
       if (idxItem) {
         idxItem.style.opacity = '0.4';
         idxItem.style.pointerEvents = 'none';
-        idxItem.textContent = '🧠 建立索引…';
+        idxItem.textContent = '🧠 建立索引...';
       }
       if (window.pywebview && window.pywebview.api && window.pywebview.api.get_codegraph_status) {
         window.pywebview.api.get_codegraph_status(s.workDir || '').then(function(st) {
@@ -1168,14 +1168,14 @@ function renderSidebar() {
               idxItem.style.opacity = '1';
               idxItem.style.pointerEvents = 'auto';
               idxItem.textContent = '🧠 建立索引';
-              idxItem.title = (st.advice || '') + '（' + (st.fileCount || 0) + ' 个代码文件）';
+              idxItem.title = (st.advice || '') + '(' + (st.fileCount || 0) + ' 个代码文件)';
             } else if (st && st.success && state === 'indexed') {
               idxItem.style.opacity = '0.6';
               idxItem.style.pointerEvents = 'none';
               idxItem.textContent = '✅ 已建立索引';
               idxItem.title = st.advice || '';
             } else {
-              // no_code / not_installed → 灰置不可点，悬停显示原因
+              // no_code / not_installed → 灰置不可点,悬停显示原因
               idxItem.style.opacity = '0.4';
               idxItem.style.pointerEvents = 'none';
               idxItem.textContent = '🧠 暂不能建立索引';
@@ -1218,7 +1218,7 @@ function ctxDelete() {
   menu.style.display = 'none';
   if (ctxSessionId) closeSession(ctxSessionId);
 }
-// 右键菜单：建立索引（复用顶部工具条的逻辑，带用途说明）
+// 右键菜单:建立索引(复用顶部工具条的逻辑,带用途说明)
 function ctxBuildIndex() {
   var menu = document.getElementById('ctxMenu');
   menu.style.display = 'none';
@@ -1226,7 +1226,7 @@ function ctxBuildIndex() {
   var s = state.sessions.find(function(x) { return x.id === ctxSessionId; });
   var path = (s && s.workDir) || '';
   if (!path) { addLog('err', '工作区路径未知'); return; }
-  // 先切到该工作区，再走统一的建索引流程
+  // 先切到该工作区,再走统一的建索引流程
   var goBuild = function() {
     state.workDir = path;
     userBuildIndex();
@@ -1262,7 +1262,7 @@ function closeSession(id) {
   nativeConfirm('关闭工作区', '确定关闭此工作区?').then(function(ok) {
     if (!ok) return;
     if (window.pywebview && window.pywebview.api && window.pywebview.api.close_session) {
-      // 桌面端：同步删除后端会话（否则刷新后会复活）
+      // 桌面端:同步删除后端会话(否则刷新后会复活)
       window.pywebview.api.close_session(id).then(function(r) {
         if (r && r.success) {
           loadSessions();
@@ -1291,7 +1291,7 @@ function setPermission(type) {
     superEl.style.cssText = 'background: #222; border: 1px solid #333;';
     superEl.querySelector('div:first-child').className = 'w-1.5 h-1.5 rounded-full bg-[#ededed]';
     superEl.querySelector('div:last-child').className = 'text-[11px] font-medium text-[#ededed]';
-    
+
     workspaceEl.style.cssText = 'background: #1a1a1a; border: 1px solid #222;';
     workspaceEl.querySelector('div:first-child').className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
     workspaceEl.querySelector('div:last-child').className = 'text-[11px] font-medium text-[#666]';
@@ -1300,7 +1300,7 @@ function setPermission(type) {
     workspaceEl.style.cssText = 'background: #222; border: 1px solid #333;';
     workspaceEl.querySelector('div:first-child').className = 'w-1.5 h-1.5 rounded-full bg-[#ededed]';
     workspaceEl.querySelector('div:last-child').className = 'text-[11px] font-medium text-[#ededed]';
-    
+
     superEl.style.cssText = 'background: #1a1a1a; border: 1px solid #222;';
     superEl.querySelector('div:first-child').className = 'w-1.5 h-1.5 rounded-full bg-[#444]';
     superEl.querySelector('div:last-child').className = 'text-[11px] font-medium text-[#666]';
@@ -1345,7 +1345,7 @@ function handleBridge(action, data) {
     if (marked > 0) {
       updateAgentBadge();
       renderTaskPanel();
-      addLog('done', '✅ Agent 已处理 ' + marked + ' 条消息（任务已划掉）');
+      addLog('done', '✅ Agent 已处理 ' + marked + ' 条消息(任务已划掉)');
     }
   }
   else if (action === 'agent_activity') {
@@ -1362,7 +1362,7 @@ function handleBridge(action, data) {
   else if (action === 'command_result') {
     var p = data.payload;
     if (p && p.exitCode !== undefined) {
-      // 如果前面有"进行中"卡片，更新它为完成态；否则直接新建
+      // 如果前面有"进行中"卡片,更新它为完成态;否则直接新建
       if (window.__pendingCmd && window.__pendingCmd.el) {
         finalizeCmdBlock(window.__pendingCmd, p);
         window.__pendingCmd = null;
@@ -1377,7 +1377,7 @@ function handleBridge(action, data) {
     var cmdText = '';
     var kind = c.type || '';
     if (kind === 'execute' || kind === 'exec') cmdText = c.command || '';
-    else if (kind === 'exec_script') cmdText = (c.code || '').slice(0, 80) + ((c.code || '').length > 80 ? '…' : '');
+    else if (kind === 'exec_script') cmdText = (c.code || '').slice(0, 80) + ((c.code || '').length > 80 ? '...' : '');
     else if (kind === 'read') cmdText = '📖 ' + (c.path || '');
     else if (kind === 'write') cmdText = '✏️ ' + (c.path || '');
     else if (kind === 'custom') cmdText = '⚙ ' + (c.name || '');
@@ -1387,14 +1387,14 @@ function handleBridge(action, data) {
     window.__pendingCmd = startCmdBlock(cmdText, c);
   }
   else if (action === 'task_progress') {
-    // 长任务进度（如 CodeGraph 索引）→ 显示进度弹窗
+    // 长任务进度(如 CodeGraph 索引)→ 显示进度弹窗
     showIndexProgress(data.progress || {});
   }
   else if (action === 'agent_status') {
     var s = document.getElementById('agent状态');
     if (data.status === 'connected') {
       s.textContent = '已配对'; s.style.color = '#4ade80';
-      // 同步中转按钮状态（Agent 连上时中转必连）
+      // 同步中转按钮状态(Agent 连上时中转必连)
       var btn = document.getElementById('connectBtn');
       if (btn) { btn.textContent = '断开'; btn.style.background = '#7f1d1d'; btn.style.color = '#fca5a5'; }
       var rs = document.getElementById('relayStatus');
@@ -1474,8 +1474,8 @@ function handleBridge(action, data) {
       var cd = document.getElementById('clientDot');
       if (cd) cd.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
       addLog('done', '中转服务器已连接');
-      addLog('info', '配对码已推送: ' + state.pairCode + '，请复制发送给 Agent');
-      // 连接时清除缓存的 MCP ticket（配对码可能变了，下次复制重新生成）
+      addLog('info', '配对码已推送: ' + state.pairCode + ',请复制发送给 Agent');
+      // 连接时清除缓存的 MCP ticket(配对码可能变了,下次复制重新生成)
       state.mcpTicket = '';
       state.mcpUrl = '';
       // 点亮 WSS 协议标签
@@ -1485,21 +1485,41 @@ function handleBridge(action, data) {
       if (cp) { cp.style.color = '#4ade80'; cp.style.textShadow = '0 0 8px rgba(74,222,128,0.3)'; }
       health.relay = 'on';
       health.relayLatency = data.latency || 0;
-      // 重置呼吸灯为全灰（等待服务器推送真实状态）
+      // 重置呼吸灯为全灰(等待服务器推送真实状态)
       renderActivityDots({ connections: 0, maxConnections: 10 });
       updateHealth();
     } else {
       dot.className = 'w-1.5 h-1.5 rounded-full bg-[#666]';
       status.textContent = '未连接';
       status.style.color = '#bbb';
+      // 修复断开后"连接"按钮无响应的问题：重置按钮状态和底层连接状态
       btn.textContent = '连接';
       btn.style.background = '#222';
       btn.style.color = '#ededed';
+      btn.disabled = false;
+      health.relay = 'off';
+      // 清除 WSS 协议标签高亮
+      var rw = document.getElementById('relayProtoWSS');
+      if (rw) { rw.style.color = ''; rw.style.textShadow = ''; }
+      var cp = document.getElementById('clientProto');
+      if (cp) { cp.style.color = ''; cp.style.textShadow = ''; }
       var cd = document.getElementById('clientDot');
       if (cd) cd.className = 'w-1.5 h-1.5 rounded-full bg-[#666]';
       var rad = document.getElementById('relayAgentDot');
       if (rad) { rad.classList.add('hidden'); }
-      addLog('info', '中转服务器已断开');
+      // 播放断开音效
+      try { playDisconnectSound(); } catch(e) {}
+      addLog('err', '⚠️ 中转服务器已断开');
+      // 显示断开弹窗："断开，正在重连"
+      showDisconnectPopup();
+      // 自动重连
+      if (state.autoReconnect) {
+        if (state.reconnectTimer) clearTimeout(state.reconnectTimer);
+        state.reconnectTimer = setTimeout(function() {
+          addLog('info', '[重连] 正在自动重连...');
+          toggleConnect();
+        }, 3000);
+      }
       // 清除延迟显示
       var rl = document.getElementById('relayLatency');
       if (rl) { rl.textContent = '-- ms'; rl.style.color = '#555'; }
@@ -1519,7 +1539,7 @@ function handleBridge(action, data) {
   }
 }
 function updateHealth() {
-  // 链路状态灯已替换为 DeepSeek logo，无需更新
+  // 链路状态灯已替换为 DeepSeek logo,无需更新
 }
 function windowMinimize() {
   if (window.pywebview && window.pywebview.api && window.pywebview.api.window_minimize) window.pywebview.api.window_minimize();
@@ -1527,9 +1547,9 @@ function windowMinimize() {
 function windowClose() {
   if (window.pywebview && window.pywebview.api && window.pywebview.api.window_close) window.pywebview.api.window_close();
 }
-// 标题栏拖拽由 pywebview 原生处理（.pywebview-drag-region class + easy_drag=False），
-// 仅限标题栏可拖，日志区等正文区域不受影响，可正常拖动选字。
-// 不再手动调 start_drag()——它会与原生 onBodyMouseDown 冲突，且曾导致全局鼠标被接管。
+// 标题栏拖拽由 pywebview 原生处理(.pywebview-drag-region class + easy_drag=False),
+// 仅限标题栏可拖,日志区等正文区域不受影响,可正常拖动选字。
+// 不再手动调 start_drag()--它会与原生 onBodyMouseDown 冲突,且曾导致全局鼠标被接管。
 function copyDiagInfo() {
   var relayAddr = document.getElementById('relayUrl') ? document.getElementById('relayUrl').textContent : '-';
   var relayState = health.relay === 'on' ? '已连接' : (health.relay === 'connecting' ? '连接中' : '未连接');
@@ -1543,31 +1563,39 @@ function copyDiagInfo() {
   ];
   copyTextToClipboard(lines.join('\n'), '链路诊断信息已复制');
 }
-// 标题栏活跃灯排：灯总数 = 该用户连接配额，亮 = Agent 当前真实并发活动
-// 语义：并发 = 运行中任务 + 挂起调用（不是连接数）；空闲全灭，忙时快闪
+// 标题栏活跃灯排:灯总数 = 该用户连接配额,亮 = Agent 当前真实并发活动
+// 语义:并发 = 运行中任务 + 挂起调用(不是连接数);空闲全灭,忙时快闪
 function renderActivityDots(a) {
   var el = document.getElementById('activityDots');
   if (!el) return;
   a = a || {};
-  // 数值防御：字段缺失/NaN/负数/非数字一律回退到安全值，绝不因脏数据把灯搞灭
+  // 数值防御:字段缺失/NaN/负数/非数字一律回退到安全值,绝不因脏数据把灯搞灭
   function num(v, d) {
     if (v === undefined || v === null) return d;
     var n = Number(v);
     return isFinite(n) && n >= 0 ? n : d;
   }
-  // 灯排总数（纯并发任务灯），封顶防溢出，最小 1
+  // 灯排总数(纯并发任务灯),封顶防溢出,最小 1
   var total = Math.max(1, Math.min(Math.round(num(a.maxConnections, 50)), 60));
   var running = num(a.runningTasks, 0);
   var pending = num(a.pendingCalls, 0);
   var used = Math.min(total, running + pending);
-  // 亮灯保持窗口：并发结束后 1 秒内仍保持点亮（并发太快一闪而过看不清，延迟熄灭便于观察）
+  // 亮灯保持窗口：并发结束后 3 秒内仍保持点亮
   var now = Date.now();
   if (used > 0) {
     window.__yqBusyAt = now;
     window.__yqBusyLevel = Math.max(window.__yqBusyLevel || 0, used);
   }
-  if (now < (window.__yqBusyAt || 0) + 1000) {
-    used = Math.max(used, window.__yqBusyLevel || 1);
+  // 有日志滚动时也视为有活动，按日志量估算并发数（最多亮到 total 的一半）
+  var recentLog = (window.__yqLastLogAt || 0) > (window.__yqBusyAt || 0) - 3000;
+  var logEstimate = 0;
+  if (recentLog && window.__yqLogCount !== undefined) {
+    var logActivity = window.__yqLogCount - (window.__yqLogCountAtStart || 0);
+    logEstimate = Math.min(Math.ceil(logActivity / 3), Math.floor(total / 2));
+    window.__yqLogCountAtStart = window.__yqLogCount;
+  }
+  if (now < (window.__yqBusyAt || 0) + 3000 || (recentLog && used === 0)) {
+    used = Math.max(used, logEstimate, window.__yqBusyLevel || 1);
   } else {
     window.__yqBusyLevel = 0;
   }
@@ -1583,16 +1611,16 @@ function renderActivityDots(a) {
     if (i >= start && i < start + used) {
       html += '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#4ade80;box-shadow:0 0 6px 1px rgba(74,222,128,.85);animation:' + (busy ? 'blinkFast' : 'pulse') + ' 1s ease-in-out infinite;animation-delay:' + delay + '"></span>';
     } else {
-      // 暗灯：调亮 + 细描边，保证“存在但未点亮”肉眼可见
-      html += '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#333;box-shadow:inset 0 0 0 1px #4a4a4a"></span>';
+      // 暗灯：调亮 + 细描边，保证"存在但未点亮"肉眼可见
+      html += '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#2a2a2a;box-shadow:inset 0 0 0 1px #3a3a3a"></span>';
     }
   }
   el.innerHTML = html;
-  el.title = '并发任务: ' + used + '（运行' + running + ' 挂起' + pending + '）';
+  el.title = '并发任务: ' + used + '(运行' + running + ' 挂起' + pending + ')';
 }
 
-// 从后端获取状态（pywebview API 可能延迟注入）
-// 注意：必须在全局作用域声明（saveSessionModal/setDefaultSession/closeSession 都会调用 loadSessions）
+// 从后端获取状态(pywebview API 可能延迟注入)
+// 注意:必须在全局作用域声明(saveSessionModal/setDefaultSession/closeSession 都会调用 loadSessions)
 function loadStatus() {
   if (window.pywebview && window.pywebview.api) {
     window.pywebview.api.get_status().then(function(s) {
@@ -1601,7 +1629,7 @@ function loadStatus() {
       state.platform = s.platform || '';
       state.hostname = s.hostname || '';
       state.homeDir = s.homeDir || '';
-      // 用后端返回的活跃度快照刷新并发灯（主动拉取完底，不依赖推送）
+      // 用后端返回的活跃度快照刷新并发灯(主动拉取完底,不依赖推送)
       if (s && s.activity) renderActivityDots(s.activity);
       updateStatus();
     });
@@ -1609,7 +1637,7 @@ function loadStatus() {
     setTimeout(loadStatus, 500);
   }
 }
-// 从后端加载会话和工作区（pywebview API 可能延迟注入）
+// 从后端加载会话和工作区(pywebview API 可能延迟注入)
 function loadSessions() {
   if (window.pywebview && window.pywebview.api) {
     window.pywebview.api.get_sessions().then(function(data) {
@@ -1632,31 +1660,89 @@ function loadSessions() {
   renderTaskPanel();
   renderActivityDots({});
   addLog('info', '欢迎使用云桥 MCP v2.0');
-  addLog('info', '工作区是持久的：文件存放在默认工作区，重开客户端不会丢失');
+  addLog('info', '工作区是持久的:文件存放在默认工作区,重开客户端不会丢失');
   updateHealth();
   setPermission('workspace');
   setTimeout(loadStatus, 300);
   setTimeout(loadSessions, 300);
-  // 并发灯完底轮询：每 8s 主动拉一次状态刷新活跃灯（推送丢失/卡死也能自愈）
+  // 并发灯完底轮询：每 3s 主动拉一次状态刷新活跃灯（推送丢失/卡死也能自愈）
   setInterval(function() {
     if (window.pywebview && window.pywebview.api && window.pywebview.api.get_status) {
       window.pywebview.api.get_status().then(function(s) {
         if (s && s.activity) renderActivityDots(s.activity);
       });
     }
-  }, 8000);
+  }, 3000);
+  // 日志滚动时标记活跃时间和计数，用于并发灯判断
+  window.__yqLogCount = 0;
+  window.__yqLogCountAtStart = 0;
+  var origAddLog = addLog;
+  addLog = function(t, txt) {
+    window.__yqLastLogAt = Date.now();
+    window.__yqLogCount = (window.__yqLogCount || 0) + 1;
+    origAddLog(t, txt);
+  };
 })();
 
 
 
+// 断开音效（使用 Web Audio API 生成蜂鸣声，无需外部文件）
+function playDisconnectSound() {
+  try {
+    var ctx = new (window.AudioContext || window.webkitAudioContext)();
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'square';
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.3);
+    // 第二个短音
+    var osc2 = ctx.createOscillator();
+    var gain2 = ctx.createGain();
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.type = 'square';
+    osc2.frequency.value = 660;
+    gain2.gain.setValueAtTime(0.3, ctx.currentTime + 0.4);
+    gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.7);
+    osc2.start(ctx.currentTime + 0.4);
+    osc2.stop(ctx.currentTime + 0.7);
+  } catch(e) { /* 静默降级 */ }
+}
+// 断开弹窗
+var disconnectPopupTimer = null;
+function showDisconnectPopup() {
+  var el = document.getElementById('disconnectPopup');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'disconnectPopup';
+    el.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:99999;background:#1a1a1a;border:1px solid #ff6b6b;border-radius:14px;padding:24px 32px;box-shadow:0 8px 40px rgba(0,0,0,.8);text-align:center;animation:modalIn 0.3s ease;';
+    el.innerHTML = '<div style="font-size:28px;margin-bottom:8px;">🔌</div>' +
+      '<div style="font-size:15px;font-weight:600;color:#ff6b6b;margin-bottom:4px;">断开，正在重连</div>' +
+      '<div style="font-size:11px;color:#888;margin-bottom:14px;">' + (state.autoReconnect ? '正在自动重连...' : '请检查网络或手动重连') + '</div>' +
+      '<button onclick="closeDisconnectPopup()" style="font-size:11px;padding:6px 16px;border-radius:8px;background:#333;color:#ededed;border:0;cursor:pointer;">知道了</button>';
+    document.body.appendChild(el);
+  }
+  if (disconnectPopupTimer) clearTimeout(disconnectPopupTimer);
+  disconnectPopupTimer = setTimeout(closeDisconnectPopup, 8000);
+}
+function closeDisconnectPopup() {
+  var el = document.getElementById('disconnectPopup');
+  if (el) { el.style.opacity = '0'; el.style.transform = 'translate(-50%,-50%) scale(0.9)'; el.style.transition = 'all 0.2s ease'; setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 200); }
+  if (disconnectPopupTimer) { clearTimeout(disconnectPopupTimer); disconnectPopupTimer = null; }
+}
 function toggleConnect() {
   health.relay = 'connecting';
   updateHealth();
   if (window.pywebview && window.pywebview.api && window.pywebview.api.toggle_connect) {
     window.pywebview.api.toggle_connect();
   } else {
-    // 浏览器直连模式：无后端可连
-    addLog('err', '浏览器直连模式暂不支持连接中转服务器，请使用桌面客户端');
+    // 浏览器直连模式:无后端可连
+    addLog('err', '浏览器直连模式暂不支持连接中转服务器,请使用桌面客户端');
     health.relay = 'off';
     updateHealth();
   }
@@ -1665,7 +1751,7 @@ function configRelay() {
   document.getElementById('modalRelayUrl').value = document.getElementById('relayUrl').textContent;
   document.getElementById('modalRelayKey').value = state.relayKey || '';
   document.getElementById('modalAutoConnect').checked = state.autoConnect || false;
-  // 异步读取后端配置（覆盖初始值）
+  // 异步读取后端配置(覆盖初始值)
   if (window.pywebview && window.pywebview.api) {
     window.pywebview.api.get_settings().then(function(cfg) {
       if (cfg && cfg.key) { state.relayKey = cfg.key; document.getElementById('modalRelayKey').value = cfg.key; }
@@ -1713,6 +1799,7 @@ function saveConfigModal() {
   if (url) document.getElementById('relayUrl').textContent = url;
   if (key) state.relayKey = key;
   state.autoConnect = document.getElementById('modalAutoConnect').checked;
+  state.autoReconnect = document.getElementById('modalAutoReconnect').checked;
   try {
     if (window.pywebview && window.pywebview.api) {
       window.pywebview.api.save_settings(key, url, state.autoConnect);
@@ -1742,17 +1829,21 @@ function saveConfigModal() {
     <div class="px-4 py-3 space-y-3">
       <div>
         <label class="text-xs text-[#888] block mb-1">中转服务器地址</label>
-        <input type="text" id="modalRelayUrl" class="w-full bg-[#0d0d0d] border border-[#333] rounded-lg px-3 py-2 text-xs text-[#ededed] outline-none font-mono transition-colors focus:border-[#555]" placeholder="如 yunqiao.very.im（无需加 wss:// 和 /device，自动补全）" />
-        <div class="text-[10px] text-[#666] mt-1">💡 填入你的服务器域名或 IP，例如 <span class="text-[#93c5fd]">yunqiao.very.im</span></div>
+        <input type="text" id="modalRelayUrl" class="w-full bg-[#0d0d0d] border border-[#333] rounded-lg px-3 py-2 text-xs text-[#ededed] outline-none font-mono transition-colors focus:border-[#555]" placeholder="如 yunqiao.very.im(无需加 wss:// 和 /device,自动补全)" />
+        <div class="text-[10px] text-[#666] mt-1">💡 填入你的服务器域名或 IP,例如 <span class="text-[#93c5fd]">yunqiao.very.im</span></div>
       </div>
       <div>
-        <label class="text-xs text-[#888] block mb-1">Key（密钥）</label>
+        <label class="text-xs text-[#888] block mb-1">Key(密钥)</label>
         <input type="text" id="modalRelayKey" class="w-full bg-[#0d0d0d] border border-[#333] rounded-lg px-3 py-2 text-xs text-[#ededed] outline-none font-mono transition-colors focus:border-[#555]" placeholder="输入服务器分配的密钥" />
-        <div class="text-[10px] text-[#666] mt-1">🔑 向管理员获取，或部署时设置的 RELAY_KEY</div>
+        <div class="text-[10px] text-[#666] mt-1">🔑 向管理员获取,或部署时设置的 RELAY_KEY</div>
       </div>
       <div class="flex items-center gap-2">
         <input type="checkbox" id="modalAutoConnect" class="w-3 h-3 rounded" />
         <label for="modalAutoConnect" class="text-xs text-[#888]">启动时自动连接</label>
+      </div>
+      <div class="flex items-center gap-2">
+        <input type="checkbox" id="modalAutoReconnect" class="w-3 h-3 rounded" />
+        <label for="modalAutoReconnect" class="text-xs text-[#888]">断开后自动重连</label>
       </div>
     </div>
     <div class="flex gap-2 px-4 py-3 border-t border-[#222]">
