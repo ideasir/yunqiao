@@ -1308,9 +1308,19 @@ const httpServer = createServer(async (req, res) => {
       const transport = new SSEServerTransport(MCP_MESSAGE_PATH, res);
       const sid = transport.sessionId;
       transports.set(sid, { server: mcpServer, transport, userId, lastActive: Date.now() });
+
+      // 防止上游代理/负载均衡因无数据而掐断 SSE 长连接：
+      // 1. 禁用 socket 超时
+      // 2. 启用 TCP keepalive
+      // 3. 每 15 秒发送 SSE 心跳注释（标准 SSE 协议，客户端忽略）
+      try { req.socket.setTimeout(0); req.socket.setKeepAlive(true, 5000); } catch {}
+      const heartbeatTimer = setInterval(() => {
+        try { res.write(': heartbeat\n\n'); } catch { clearInterval(heartbeatTimer); }
+      }, 15000);
       
       // 双保险：res close 和 req close 都触发清理
       const cleanupTransport = () => {
+        clearInterval(heartbeatTimer);
         if (transports.has(sid)) {
           transports.delete(sid);
           broadcastToDevices({ type: 'agent_disconnected' }, userId);
