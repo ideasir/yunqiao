@@ -1388,9 +1388,11 @@ httpServer.on('upgrade', (req, socket, head) => {
       socket.destroy();
       return;
     }
-    // 在握手阶段设置 TCP keepalive，防止上游代理因空闲断开
-    try { socket.setTimeout(0); socket.setKeepAlive(true, 5000); } catch {}
     wss.handleUpgrade(req, socket, head, (ws) => {
+      // 在 WebSocket 握手完成后设置 TCP keepalive + socket 超时
+      // 双保险：upgrade 阶段的 socket 和 ws 内部的 _socket 都设一遍
+      try { socket.setTimeout(0); socket.setKeepAlive(true, 3000); } catch {}
+      try { ws._socket.setTimeout(0); ws._socket.setKeepAlive(true, 3000); } catch {}
       wss.emit('connection', ws, req, user);
     });
     return;
