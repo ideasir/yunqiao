@@ -224,13 +224,15 @@ class Agent:
             pass
 
     async def _send_ws(self, obj):
-        """向中继发送 JSON（ws 已关闭时静默失败，不抛异常——否则任务完成回传会未捕获崩溃）"""
+        """向中继发送 JSON（ws 已关闭时静默失败，不抛异常）。返回是否成功发送。"""
         ws = self._ws
         if ws:
             try:
                 await ws.send(json.dumps(obj))
+                return True
             except Exception:
                 pass
+        return False
 
     def _clash_set_direct(self, enable):
         import urllib.request
@@ -358,16 +360,21 @@ class Agent:
             return None
         try:
             fut = asyncio.run_coroutine_threadsafe(self._request_ticket(), self._loop)
-            return fut.result(timeout=4)
+            return fut.result(timeout=5)
         except Exception:
             return None
 
     async def _request_ticket(self):
+        # WSS 不可用时直接失败，不要让调用方干等超时
+        if not self._ws:
+            return None
         waiter = self._loop.create_future()
         self._ticket_waiter = waiter
-        await self._send_ws({"type": "get_mcp_ticket", "requestId": "ticket"})
+        sent = await self._send_ws({"type": "get_mcp_ticket", "requestId": "ticket"})
+        if not sent:
+            return None
         try:
-            return await asyncio.wait_for(waiter, timeout=3)
+            return await asyncio.wait_for(waiter, timeout=4)
         except asyncio.TimeoutError:
             return None
 

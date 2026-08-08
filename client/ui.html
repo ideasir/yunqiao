@@ -959,14 +959,30 @@ function fetchMcpTicket(forceRefresh) {
     return Promise.resolve(state.mcpUrl);
   }
   if (window.pywebview && window.pywebview.api && window.pywebview.api.get_mcp_ticket) {
-    return window.pywebview.api.get_mcp_ticket().then(function(r) {
-      if (r && r.success && r.ticket) {
-        state.mcpTicket = r.ticket;
-        state.mcpUrl = getMcpBase() + '/mcp/' + r.ticket;
-        return state.mcpUrl;
-      }
-      throw new Error((r && r.error) || '获取 MCP 地址失败');
-    });
+    var attempt = function(retried) {
+      return window.pywebview.api.get_mcp_ticket().then(function(r) {
+        if (r && r.success && r.ticket) {
+          state.mcpTicket = r.ticket;
+          state.mcpUrl = getMcpBase() + '/mcp/' + r.ticket;
+          return state.mcpUrl;
+        }
+        // 首次失败可能正逢 WSS 重连间隙：重试一次
+        if (!retried) {
+          return new Promise(function(resolve) {
+            setTimeout(function() { resolve(attempt(true)); }, 600);
+          });
+        }
+        throw new Error((r && r.error) || '获取 MCP 地址失败');
+      }).catch(function(e) {
+        if (!retried) {
+          return new Promise(function(resolve) {
+            setTimeout(function() { resolve(attempt(true)); }, 600);
+          });
+        }
+        throw e;
+      });
+    };
+    return attempt(false);
   }
   return Promise.reject(new Error('API 不可用'));
 }
