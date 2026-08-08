@@ -14,6 +14,9 @@ const COMMANDS_FILE = process.env.COMMANDS_FILE || '/opt/cloud-mcp/commands.json
 const COMMAND_TIMEOUT = parseInt(process.env.COMMAND_TIMEOUT || '60000');
 const MCP_PATH = '/mcp';
 const MCP_MESSAGE_PATH = '/mcp/message';
+// EasyTier 组网 hub 网络（所有用户共用一个主网络）
+const MESH_NETWORK_NAME = 'yunqiao-hub';
+const MESH_NETWORK_SECRET = '220beedd6c9f94ec07eed7e7';
 
 // ═══════════════════════════════════════════════
 // 多用户管理
@@ -1615,6 +1618,7 @@ wss.on('connection', (ws, req, user) => {
       deviceId = finalId;
       sendJSON(ws, { type: 'register_result', requestId, success: true, deviceId: finalId });
       // 下发组网配置(EasyTier)：客户端收到后自动装配组网隧道（无感）
+      // 网络名/密钥统一用服务器 hub 的（所有用户共用一个主网络，靠用户 secret 区分身份）
       const mu = users[user.userId];
       if (mu && mu.mesh) {
         sendJSON(ws, {
@@ -1622,8 +1626,8 @@ wss.on('connection', (ws, req, user) => {
           requestId: randomUUID(),
           payload: {
             secret: mu.mesh.secret,
-            networkName: mu.mesh.networkName,
-            networkSecret: mu.mesh.networkSecret,
+            networkName: MESH_NETWORK_NAME,       // hub 主网络名
+            networkSecret: MESH_NETWORK_SECRET,   // hub 主网络密钥
             ipv4: mu.mesh.ipv4 || '',
             serverIp: '45.152.65.49',
             serverMeshIp: '10.144.144.1',
