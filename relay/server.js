@@ -1594,6 +1594,24 @@ wss.on('connection', (ws, req, user) => {
         console.error('[device] reconnected: ' + name + ' (' + existing.id + ')');
         deviceId = existing.id;
         sendJSON(ws, { type: 'register_result', requestId, success: true, deviceId: existing.id });
+        // 重连也补发组网配置(EasyTier)：客户端可能刚启动没拿到，补发保证能装配
+        const mu2 = users[user.userId];
+        if (mu2 && mu2.mesh) {
+          sendJSON(ws, {
+            type: 'mesh_config',
+            requestId: randomUUID(),
+            payload: {
+              secret: mu2.mesh.secret,
+              networkName: MESH_NETWORK_NAME,
+              networkSecret: MESH_NETWORK_SECRET,
+              ipv4: mu2.mesh.ipv4 || '',
+              serverIp: '45.152.65.49',
+              serverMeshIp: '10.144.144.1',
+              port: 11010,
+            },
+          });
+          console.error('[mesh] 重连补发组网配置到设备 ' + name);
+        }
         // 设备恢复在线 → 告知所有在线的 Agent（SSE 连接是保留的，需显式恢复状态）
         broadcastToDevices({ type: 'agent_connected', latency: existing.latency, platform: 'sandbox', hostname: 'OpenClaw Agent', relayPlatform: 'Ubuntu Linux' }, user.userId);
         scheduleActivityPush(user.userId);
