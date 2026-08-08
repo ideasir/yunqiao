@@ -283,6 +283,15 @@ console.log("JS loaded OK");
 
 
 const state = { connected: false, pairCode: '------', ws: null, sessions: [], currentSessionId: null, deviceId: null, deviceName: '', cwd: '', logs: {}, platform: '', hostname: '', workDir: '', relayKey: '', permission: 'workspace', pendingMessages: [], agentHostname: '', agentPlatform: '', autoReconnect: false, reconnectTimer: null };
+
+// 协议标签中文映射: EasyTier 组网 / WSS 公网(WSS)
+function protoLabel(p) {
+  if (!p) return '公网';
+  var s = String(p).toLowerCase();
+  if (s.indexOf('easytier') >= 0 || s.indexOf('eztr') >= 0 || s.indexOf('mesh') >= 0) return '组网';
+  if (s.indexOf('wss') >= 0 || s.indexOf('ws') >= 0) return '公网';
+  return p;
+}
 // 链路健康状态:relay=off/connecting/on, agent=off/on
 var health = { relay: 'off', agent: 'off', relayLatency: 0, agentLatency: 0 };
 var isDesktopApp = typeof window.pywebview !== 'undefined';
@@ -1503,17 +1512,17 @@ function handleBridge(action, data) {
       // 客户端协议标签: 动态显示实际通道(EasyTier 组网 / WSS 公网)
       var cp = document.getElementById('clientProto');
       if (cp && data.proto) {
-        cp.textContent = data.proto;
+        cp.textContent = protoLabel(data.proto);
         cp.style.color = '#4ade80'; cp.style.textShadow = '0 0 8px rgba(74,222,128,0.3)';
       } else if (cp) {
-        var pv = (data.proto || (state.meshConnected ? 'EasyTier' : 'WSS'));
+        var pv = protoLabel(data.proto || (state.meshConnected ? 'EasyTier' : 'WSS'));
         cp.textContent = pv;
         cp.style.color = '#4ade80'; cp.style.textShadow = '0 0 8px rgba(74,222,128,0.3)';
       }
       // 中转服务器区域显示客户端实际走的主通道(EasyTier 组网优先,否则 WSS 公网)
       var rw2 = document.getElementById('relayProtoWSS');
       if (rw2) {
-        var p2 = (data.proto || (state.meshConnected ? 'EasyTier' : 'WSS'));
+        var p2 = protoLabel(data.proto || (state.meshConnected ? 'EasyTier' : 'WSS'));
         rw2.textContent = p2;
         rw2.style.color = '#4ade80'; rw2.style.textShadow = '0 0 8px rgba(74,222,128,0.3)';
       }
@@ -1525,7 +1534,7 @@ function handleBridge(action, data) {
       // 点亮客户端协议标签(动态显示实际通道: 组网/EasyTier 或 WSS 公网)
       var cp = document.getElementById('clientProto');
       if (cp) {
-        var proto = (data && data.proto) ? data.proto : (state.meshConnected ? 'EasyTier' : 'WSS');
+        var proto = protoLabel((data && data.proto) ? data.proto : (state.meshConnected ? 'EasyTier' : 'WSS'));
         cp.textContent = proto;
         cp.style.color = '#4ade80'; cp.style.textShadow = '0 0 8px rgba(74,222,128,0.3)';
       }
