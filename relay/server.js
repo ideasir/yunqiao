@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync, statSync, renameSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execSync, spawn } from 'node:child_process';
 import { dirname } from 'node:path';
 import net from 'node:net';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -22,7 +22,7 @@ const MESH_NETWORK_SECRET = '220beedd6c9f94ec07eed7e7';
 // ═══════════════════════════════════════════════
 // TCP 直连配置（通过 EasyTier 组网替代 WebSocket）
 // ═══════════════════════════════════════════════
-const TCP_AGENT_HOST = process.env.TCP_AGENT_HOST || '10.10.10.88';  // Windows EasyTier 虚拟 IP
+const TCP_AGENT_HOST = process.env.TCP_AGENT_HOST || '127.0.0.1';  // 本地 EasyTier 转发端口
 const TCP_AGENT_PORT = parseInt(process.env.TCP_AGENT_PORT || '19999');
 const TCP_AGENT_TIMEOUT = parseInt(process.env.TCP_AGENT_TIMEOUT || '30000');  // TCP 连接超时
 
@@ -357,7 +357,66 @@ function startReverseTCP() {
     console.error('[tcp] 反向 TCP 监听失败:', err.message);
   });
   
+  // 启动 EasyTier 组网客户端（通过 --forward 转发到 Windows）
+  startEasyTierClient();
+  
   return server;
+}
+
+function startEasyTierClient() {
+  // 查找 easytier-core 路径
+  const candidates = [
+    '/usr/bin/easytier-core',
+    '/usr/local/bin/easytier-core',
+    '/opt/cloud-mcp/easytier/easytier-core',
+    '/root/.easytier/easytier-core',
+  ];
+  let binaryPath = null;
+  for (const p of candidates) {
+    if (existsSync(p)) { binaryPath = p; break; }
+  }
+  if (!binaryPath) {
+    try {
+      binaryPath = execSync('which easytier-core 2>/dev/null || echo ""', { encoding: 'utf-8' }).trim();
+    } catch {}
+  }
+  if (!binaryPath) {
+    console.error('[eztr] 未找到 easytier-core，跳过组网客户端启动');
+    return;
+  }
+  
+  const args = [
+    '--network-name', 'yunqiao-hub',
+    '--network-secret', '220beedd6c9f94ec07eed7e7',
+    '-i', '10.144.144.2/24',               # 固定 IP，与 hub 同网段
+    '--config-dir', '/tmp/easytier-relay',  # 独立配置目录
+    '-p', 'tcp://127.0.0.1:11010',          # 连本机 hub
+    '--no-tun',                              # 仅转发，不需要 TUN
+    '--forward', 'tcp://127.0.0.1:19999=10.10.10.88:19999',
+  ];
+  
+  console.error(`[eztr] 启动组网客户端: ${binaryPath}`);
+  const child = spawn(binaryPath, args, {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: false,
+  });
+  
+  child.stdout.on('data', (d) => {
+    const line = d.toString().trim();
+    if (line) console.error('[eztr]', line);
+  });
+  child.stderr.on('data', (d) => {
+    const line = d.toString().trim();
+    if (line) console.error('[eztr]', line);
+  });
+  child.on('error', (err) => {
+    console.error('[eztr] 启动失败:', err.message);
+  });
+  child.on('exit', (code) => {
+    console.error(`[eztr] 进程退出: ${code}`);
+  });
+  
+  console.error('[eztr] 组网客户端已启动，转发 127.0.0.1:19999 → 10.10.10.88:19999');
 }
 
 async function getTCPConnection() {
@@ -1565,21 +1624,30 @@ const httpServer = createServer(async (req, res) => {
       }
 
       if (!authedDevice) {
-        const now = Date.now();
-        const target = userDevices.find(d => !d.authLockUntil || now >= d.authLockUntil);
-        if (target && code) {
-          // 仅当提供了配对码但验证失败时才计数（SSE 重连无码不算失败）
-          target.authFails = (target.authFails || 0) + 1;
-          if (target.authFails >= AUTH_MAX_FAILS) {
-            target.authLockUntil = now + AUTH_LOCK_MS;
-            console.error(`[auth] 设备 ${target.id} 配对码失败 ${target.authFails} 次，锁定 ${Math.round(AUTH_LOCK_MS / 60000)} 分钟`);
-            // 通知客户端设备被锁
-            broadcastToDevices({ type: 'device_locked', deviceId: target.id, until: target.authLockUntil }, userId);
+        // 先检查管理员密钥：管理员无需设备在线即可操作
+        const authKey = req.headers['x-key'] || (req.headers.authorization || '').replace(/^Bearer\s+/i, '') || '';
+        const authUser = authKey ? findByKey(authKey) : null;
+        if (authUser && authUser.userId === userId && authUser.role === 'admin') {
+          // 管理员绕过设备检查，使用虚拟设备 ID
+          authedDevice = { id: 'admin-virtual', authCode: '', userId };
+          isAdminAuth = true;
+        } else {
+          const now = Date.now();
+          const target = userDevices.find(d => !d.authLockUntil || now >= d.authLockUntil);
+          if (target && code) {
+            // 仅当提供了配对码但验证失败时才计数（SSE 重连无码不算失败）
+            target.authFails = (target.authFails || 0) + 1;
+            if (target.authFails >= AUTH_MAX_FAILS) {
+              target.authLockUntil = now + AUTH_LOCK_MS;
+              console.error(`[auth] 设备 ${target.id} 配对码失败 ${target.authFails} 次，锁定 ${Math.round(AUTH_LOCK_MS / 60000)} 分钟`);
+              // 通知客户端设备被锁
+              broadcastToDevices({ type: 'device_locked', deviceId: target.id, until: target.authLockUntil }, userId);
+            }
           }
+          res.writeHead(401, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ error: '无效的配对码' }));
+          return;
         }
-        res.writeHead(401, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ error: '无效的配对码' }));
-        return;
       }
       // 用户密钥认证：带对应用户的密钥可获得身份（含管理员）；AUTH_REQUIRED=1 时强制
       let isAdminAuth = false;

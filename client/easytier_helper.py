@@ -200,24 +200,25 @@ def build_node_command(mesh_config):
 
     冲突规避设计（主任要求）：
       - --config-dir: 用 ~/.yunqiao/easytier/ 独立目录，不碰用户默认 easytier 配置
-      - --no-listener: 客户端只连服务器 hub，不监听任何端口（不占 11010/11011，不冲突）
-      - 网络名 yunqiao-<user>：不与用户其他网络重名
+      - TUN 模式：创建虚拟网卡，组网双向通信
+      - 固定 IP 10.10.10.88/24
+      - 监听 11010 端口接受组网内连接
     """
     cmd = [
         str(_core_path()),
         "--network-name", mesh_config["networkName"],
         "--network-secret", mesh_config["networkSecret"],
-        "--dhcp", "true" if not mesh_config.get("ipv4") else "false",
-        "--config-dir", str(_cache_dir()),   # 独立配置目录，不污染用户其他 easytier
-        "--no-listener",                      # 不监听端口，只连 hub（零端口冲突）
+        "-i", "10.10.10.88/24",                # 固定 IP，不 DHCP
+        "--config-dir", str(_cache_dir()),       # 独立配置目录
+        "-l", "tcp://0.0.0.0:11010",           # 监听 TCP 端口
+        "-l", "udp://0.0.0.0:11010",           # 监听 UDP 端口
     ]
     if mesh_config.get("ipv4"):
         cmd += ["-i", mesh_config["ipv4"]]
     # 连接服务器 hub（TCP 11010）
     server_ip = mesh_config.get("serverIp", SERVER_MESH_IP)
     cmd += ["-p", f"tcp://{server_ip}:11010"]
-    # no-tun：不建虚拟网卡，只需逻辑组网身份
-    cmd += ["--no-tun"]
+    # 无 --no-tun：创建虚拟网卡，双向通信
     return cmd
 
 
