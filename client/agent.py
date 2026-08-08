@@ -139,11 +139,16 @@ class Agent:
     - 设置管理(由 desktop.py 的 config.json 负责)
     """
 
-    def __init__(self, relay_url, relay_key, device_name=None, auth_code=None):
+    def __init__(self, relay_url, relay_key, device_name=None, auth_code=None,
+                 direct_mode=False, clash_api=None):
         self.relay_url = relay_url
         self.relay_key = relay_key
         self.device_name = device_name or platform.node()
         self.auth_code = auth_code  # 配对码(desktop 用,CLI 不用)
+        # Clash 直连:为 True 时连接前给 Clash 加 DOMAIN-SUFFIX,yunqiao.very.im,DIRECT
+        # 规则,让云桥 WSS 绕开代理节点(切节点不业务断线)。默认 False 走系统代理。
+        self.direct_mode = direct_mode
+        self.clash_api = clash_api
         self.device_id = None
         # 持久化设备 ID:存本地文件,重连/重启复用,服务器据此识别"同一台设备"。
         # 服务器端(relay/server.js 3052e42)已支持 persistentId;旧客户端不传导致
@@ -462,6 +467,10 @@ class Agent:
         while self._running:
             try:
                 t0 = time.time()
+                # Clash 直连:确保 yunqiao.very.im 走 DIRECT,绕开代理节点切换。
+                # 每次重连前都调(幂等);Clash 切节点/重启后规则可能被清。
+                if getattr(self, "direct_mode", False):
+                    self._clash_set_direct(True)
                 try:
                     ws = await websockets.connect(
                         self.relay_url,
@@ -518,9 +527,15 @@ class Agent:
 
             except Exception as e:
                 self._mark_disconnected(f"第{retry + 1}次断开: {e}")
+                retry += 1
 
             if self._running:
-                await asyncio.sleep(2)  # 立即重连,短暂间隔
+                # 指数退避: 2,4,8,16,30,30,... 秒
+                backoff = min(2 ** retry, 30)
+                await asyncio.sleep(backoff)
+            elif getattr(self, "direct_mode", False):
+                # 彻底停止才移除直连规则;普通断线 keep 规则,减少抖动。
+                self._clash_set_direct(False)
 
     def _mark_disconnected(self, reason: str):
         """统一处理断开:清状态 + 通知 UI + 清空活动快照。

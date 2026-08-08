@@ -59,7 +59,8 @@ def get_agent():
     global agent
     if agent is None:
         from agent import Agent
-        agent = Agent(RELAY_URL, RELAY_KEY, DEVICE_NAME, pair_code)
+        agent = Agent(RELAY_URL, RELAY_KEY, DEVICE_NAME, pair_code,
+                      direct_mode=cfg.get("directMode", False))
         agent.on_log = lambda msg: notify_ui("log", {"text": msg})
         def on_status(s):
             if "agent" in s:
