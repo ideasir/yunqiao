@@ -1185,8 +1185,8 @@ fi` },
     const m = u.mesh;
     return { content: [{ type: 'text', text: JSON.stringify({
       secret: m.secret,
-      networkName: m.networkName,
-      networkSecret: m.networkSecret,
+      networkName: MESH_NETWORK_NAME,       // hub 主网络名（所有用户共用）
+      networkSecret: MESH_NETWORK_SECRET,   // hub 主网络密钥
       ipv4: m.ipv4 || '',
       serverIp: '45.152.65.49',      // 服务器公网 IP（客户端经此连 hub 入网）
       serverMeshIp: '10.144.144.1',   // 服务器组网 IP（入网后可达）
