@@ -26,6 +26,11 @@ const TCP_AGENT_HOST = process.env.TCP_AGENT_HOST || '10.10.10.88';  // Windows 
 const TCP_AGENT_PORT = parseInt(process.env.TCP_AGENT_PORT || '19999');
 const TCP_AGENT_TIMEOUT = parseInt(process.env.TCP_AGENT_TIMEOUT || '30000');  // TCP 连接超时
 
+// 反向 TCP 模式：中继服务器监听，Windows 客户端主动连接
+// 适用于中继服务器 EasyTier 无 TUN 接口的情况
+const TCP_REVERSE_PORT = parseInt(process.env.TCP_REVERSE_PORT || '19998');  // 中继监听端口
+const TCP_BIND_HOST = process.env.TCP_BIND_HOST || '0.0.0.0';  // 监听地址
+
 // 已配置 TCP 直连的设备 persistentId 列表（空 = 所有设备尝试 TCP）
 const TCP_AGENT_DEVICES = (process.env.TCP_AGENT_DEVICES || '').split(',').filter(Boolean);
 
@@ -322,7 +327,44 @@ let tcpConnection = null;
 let tcpConnecting = false;
 let tcpConnectPromise = null;
 
+// 反向 TCP 连接池（Windows 客户端主动连接中继服务器）
+let reverseTCPConn = null;
+let reverseTCPReady = false;
+
+// 启动反向 TCP 监听
+function startReverseTCP() {
+  const server = net.createServer((socket) => {
+    console.error('[tcp] Windows Agent 反向连接已建立');
+    reverseTCPConn = socket;
+    reverseTCPReady = true;
+    
+    socket.on('close', () => {
+      console.error('[tcp] 反向连接断开');
+      reverseTCPReady = false;
+      reverseTCPConn = null;
+    });
+    socket.on('error', (err) => {
+      console.error('[tcp] 反向连接错误:', err.message);
+      reverseTCPReady = false;
+      reverseTCPConn = null;
+    });
+  });
+  
+  server.listen(TCP_REVERSE_PORT, TCP_BIND_HOST, () => {
+    console.error(`[tcp] 反向 TCP 监听中: ${TCP_BIND_HOST}:${TCP_REVERSE_PORT}`);
+  });
+  server.on('error', (err) => {
+    console.error('[tcp] 反向 TCP 监听失败:', err.message);
+  });
+  
+  return server;
+}
+
 async function getTCPConnection() {
+  // 优先使用反向连接（Windows 主动连中继）
+  if (reverseTCPReady && reverseTCPConn) return reverseTCPConn;
+  
+  // 回退到正向连接（中继主动连 Windows）
   if (tcpConnection) return tcpConnection;
   if (tcpConnecting) return tcpConnectPromise;
   tcpConnecting = true;
@@ -346,7 +388,7 @@ async function getTCPConnection() {
     });
     sock.on('close', () => {
       tcpConnection = null;
-      console.error('[tcp] 连接关闭');
+      console.error('[tcp] 正向连接关闭');
     });
   });
   try {
@@ -1975,6 +2017,8 @@ wss.on('connection', (ws, req, user) => {
 httpServer.listen(PORT, () => {
   console.error(`[server] listening on http://0.0.0.0:${PORT}`);
   console.error(`[server] Users: ${Object.keys(users).length} (admin: ${users['admin']?.key?.slice(0,8)}...)`);
+  // 启动反向 TCP 监听（Windows 客户端通过 EasyTier 组网连入）
+  startReverseTCP();
   // 定期清理僵尸 SSE 连接，每 30 秒扫描一次
   setInterval(() => {
     const now = Date.now();

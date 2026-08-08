@@ -106,12 +106,20 @@ def start_tcp_agent():
     tcp_script = os.path.join(script_dir, 'tcp_agent.py')
     if os.path.exists(tcp_script):
         try:
+            # 正向模式：监听本地端口
             subprocess.Popen(
                 ['python', tcp_script, '--host', '10.10.10.88', '--port', '19999'],
                 cwd=script_dir,
                 creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
             )
-            print('[tcp-agent] 已启动 TCP Agent，监听 10.10.10.88:19999')
+            print('[tcp-agent] 已启动 TCP Agent（正向），监听 10.10.10.88:19999')
+            # 反向模式：主动连接中继服务器
+            subprocess.Popen(
+                ['python', tcp_script, '--reverse', '--relay-ip', '10.144.144.1', '--relay-port', '19998'],
+                cwd=script_dir,
+                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
+            )
+            print('[tcp-agent] 已启动 TCP Agent（反向），连接中继 10.144.144.1:19998')
         except Exception as e:
             print(f'[tcp-agent] 启动失败: {e}')
 

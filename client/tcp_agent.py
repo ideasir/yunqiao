@@ -364,8 +364,37 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="云桥 TCP Agent")
     parser.add_argument("--host", default="10.10.10.88", help="监听地址（EasyTier 虚拟 IP）")
     parser.add_argument("--port", type=int, default=19999, help="监听端口")
+    parser.add_argument("--reverse", action="store_true", help="反向连接模式：主动连接中继服务器的 TCP 端口")
+    parser.add_argument("--relay-ip", default="10.144.144.1", help="中继服务器 EasyTier IP")
+    parser.add_argument("--relay-port", type=int, default=19998, help="中继服务器反向 TCP 端口")
     args = parser.parse_args()
     
-    agent = TCPAgent(host=args.host, port=args.port)
-    agent.on_log = lambda msg: print(f"[tcp-agent] {msg}")
-    agent.start()
+    if args.reverse:
+        # 反向连接模式：Windows 主动连接中继服务器
+        import asyncio
+        async def connect_reverse():
+            reader, writer = await asyncio.open_connection(args.relay_ip, args.relay_port)
+            print(f'[tcp-agent] 已连接到中继服务器: {args.relay_ip}:{args.relay_port}')
+            # 创建 TCP Agent 实例处理命令
+            agent = TCPAgent(host=args.host, port=args.port)
+            # 用反向连接作为命令通道
+            while True:
+                try:
+                    data = await reader.read(4096)
+                    if not data:
+                        break
+                    # 处理命令
+                    msg = json.loads(data.decode('utf-8'))
+                    result = await agent._handle_command(msg)
+                    writer.write(json.dumps(result).encode('utf-8'))
+                    await writer.drain()
+                except Exception as e:
+                    print(f'[tcp-agent] 反向连接错误: {e}')
+                    break
+            writer.close()
+        
+        asyncio.run(connect_reverse())
+    else:
+        agent = TCPAgent(host=args.host, port=args.port)
+        agent.on_log = lambda msg: print(f"[tcp-agent] {msg}")
+        agent.start()
