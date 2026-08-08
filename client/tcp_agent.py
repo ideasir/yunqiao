@@ -365,7 +365,7 @@ if __name__ == "__main__":
     parser.add_argument("--host", default="10.10.10.88", help="监听地址（EasyTier 虚拟 IP）")
     parser.add_argument("--port", type=int, default=19999, help="监听端口")
     parser.add_argument("--reverse", action="store_true", help="反向连接模式：主动连接中继服务器的 TCP 端口")
-    parser.add_argument("--relay-ip", default="10.144.144.1", help="中继服务器 EasyTier IP")
+    parser.add_argument("--relay-ip", default="45.152.65.49", help="中继服务器 IP（公网或 EasyTier）")
     parser.add_argument("--relay-port", type=int, default=19998, help="中继服务器反向 TCP 端口")
     args = parser.parse_args()
     
