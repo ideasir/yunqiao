@@ -166,13 +166,40 @@ const AUDIT_LOG = process.env.AUDIT_LOG || '/opt/cloud-mcp/audit.log';
 const TOOLS_DIR = process.env.TOOLS_DIR || '/opt/cloud-mcp/tools';
 const AUDIT_MAX_BYTES = parseInt(process.env.AUDIT_MAX_BYTES || '20971520', 10); // 默认 20MB 后轮转
 
+// 审计日志：内存队列 + 批量异步落盘。
+// 原先每次工具调用都同步 appendFileSync/statSync/etc——长城任务高频调用时这些
+// 同步磁盘 I/O 会阻塞 Node 事件循环，pong 心跳延迟 → 客户端断线。
+// 改为先 push 进内存队列，定时批量写一次，事件循环不再被同步磁盘 I/O 卡住。
+const auditQueue = [];
+let auditFlushing = false;
+async function flushAuditQueue() {
+  if (auditQueue.length === 0) return;
+  const batch = auditQueue.splice(0, auditQueue.length);
+  try {
+    const { mkdir, appendFile, rename, stat } = await import('node:fs/promises');
+    await mkdir(dirname(AUDIT_LOG), { recursive: true });
+    try {
+      const st = await stat(AUDIT_LOG);
+      if (st.size > AUDIT_MAX_BYTES) await rename(AUDIT_LOG, AUDIT_LOG + '.old');
+    } catch {}
+    await appendFile(AUDIT_LOG, batch.map(e => JSON.stringify(e)).join('\n') + '\n', 'utf-8');
+  } catch {}
+}
+setInterval(() => { flushAuditQueue(); }, 1000).unref();
+
+/** 入队一条审计记录（纯内存操作，不阻塞事件循环）。 */
 function appendAudit(entry) {
+  auditQueue.push(entry);
+  // 队列过大时（极端高峰）立即触发一次异步冲刷，避免内存无限增长
+  if (auditQueue.length >= 500) flushAuditQueue();
+}
+// 进程退出前冲刷残留审计（尽力而为，不阻塞）
+function flushAuditSync() {
+  if (auditQueue.length === 0) return;
+  const batch = auditQueue.splice(0, auditQueue.length);
   try {
     mkdirSync(dirname(AUDIT_LOG), { recursive: true });
-    if (existsSync(AUDIT_LOG) && statSync(AUDIT_LOG).size > AUDIT_MAX_BYTES) {
-      renameSync(AUDIT_LOG, AUDIT_LOG + '.old');  // 简单轮转：保留一份 .old
-    }
-    appendFileSync(AUDIT_LOG, JSON.stringify(entry) + '\n', 'utf-8');
+    appendFileSync(AUDIT_LOG, batch.map(e => JSON.stringify(e)).join('\n') + '\n', 'utf-8');
   } catch {}
 }
 // 审计参数摘要：只取追责需要的字段，绝不记录配对码/文件内容
@@ -1717,6 +1744,7 @@ httpServer.listen(PORT, () => {
 });
 
 process.on('SIGINT', () => {
+  flushAuditSync();  // 退出前冲刷残留审计
   wss.close();
   httpServer.close();
   process.exit(0);
