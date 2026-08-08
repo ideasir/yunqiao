@@ -77,14 +77,36 @@ def install(progress_cb=None):
     if is_installed():
         return True
     url = _download_url()
-    if progress_cb:
-        progress_cb(f"下载 EasyTier {EASYTIER_VERSION}...")
+    # 多源尝试：云桥服务器(国内快)优先 → gh-proxy → 官方直连
+    base = "https://yunqiao.very.im/easytier/easytier-win.zip"
+    candidates = [
+        base,  # 云桥服务器(最快)
+        url,  # gh-proxy
+        url.replace("https://gh-proxy.com/https://github.com", "https://github.com"),  # 官方
+    ]
     tmp_zip = _cache_dir() / "easytier.zip"
-    try:
-        urllib.request.urlretrieve(url, tmp_zip)
-    except Exception as e:
+    last_err = None
+    for u in candidates:
+        try:
+            if progress_cb:
+                progress_cb(f"下载 EasyTier {EASYTIER_VERSION}...")
+            # 带超时 + 校验非空
+            import urllib.request
+            req = urllib.request.Request(u, headers={"User-Agent": "yunqiao-client"})
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                data = resp.read()
+            if len(data) < 1000000:
+                raise RuntimeError(f"下载不完整({len(data)}B)")
+            tmp_zip.write_bytes(data)
+            break
+        except Exception as e:
+            last_err = e
+            if progress_cb:
+                progress_cb(f"下载源不可用({u[:60]}...): {e}")
+            continue
+    else:
         if progress_cb:
-            progress_cb(f"下载失败: {e}")
+            progress_cb(f"EasyTier 下载失败: {last_err}")
         return False
     if progress_cb:
         progress_cb("解压中...")
