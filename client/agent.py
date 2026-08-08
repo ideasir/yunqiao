@@ -442,18 +442,32 @@ class Agent:
                             continue
                         
                         await self._handle_message(msg)
+
+                    # 走到这里说明 WebSocket 已正常关闭（收到 close frame），
+                    # 或连接被对端关闭——`async for` 正常退出不抛异常，不会进 except。
+                    # 不处理的话 UI 会永远显示“已连接”（假连接）。
+                    self._mark_disconnected("连接已关闭(服务器端)")
                     
             except Exception as e:
-                self.connected = False
-                self._ws = None
-                # 连接断开 → 并发活动必然归零，清空缓存快照，避免 UI 轮询拉到旧值导致灯不灭
-                self._activity = {}
-                retry += 1
-                self._emit(self.on_log, f"[重连] 第{retry}次断开: {e}")
-                self._emit(self.on_status, {"connected": False})
+                self._mark_disconnected(f"第{retry + 1}次断开: {e}")
             
             if self._running:
                 await asyncio.sleep(2)  # 立即重连，短暂间隔
+
+    def _mark_disconnected(self, reason: str):
+        """统一处理断开：清状态 + 通知 UI + 清空活动快照。
+
+        覆盖两种断开路径：
+        1. 异常断开（网络中断/超时）→ 走 except 调这里
+        2. 正常关闭（close frame，如服务器重启）→ async for 正常退出后调这里
+        之前只在 except 里处理，第二种情况会让 UI 永远显示“已连接”（假连接）。
+        """
+        self.connected = False
+        self._ws = None
+        # 连接断开 → 并发活动必然归零，清空缓存快照，避免 UI 轮询拉到旧值导致灯不灭
+        self._activity = {}
+        self._emit(self.on_log, f"⚠️ [重连] {reason}")
+        self._emit(self.on_status, {"connected": False})
     
     async def _handle_message(self, msg):
         """处理服务器下发的消息"""
