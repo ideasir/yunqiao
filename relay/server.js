@@ -39,8 +39,20 @@ function loadUsers() {
   }
   // 为没有 mcpTicket 的用户补齐（新机制：每用户一个当前有效的动态 MCP 地址）
   let changed = false;
-  for (const u of Object.values(users)) {
+  for (const [uid, u] of Object.entries(users)) {
     if (!u.mcpTicket) { u.mcpTicket = randomBytes(16).toString('hex'); changed = true; }
+    // 为没有 mesh(组网) 配置的用户补齐：密钥绑定整套组网配置，生成后固定不变。
+    // 密钥随机 → 绑定 networkName/networkSecret/ipv4，换密钥=整体作废。
+    if (!u.mesh) {
+      u.mesh = {
+        secret: randomBytes(8).toString('hex'),          // 用户组网密钥（可展示给用户）
+        networkName: 'yunqiao-' + uid,                    // 网络名绑定用户
+        networkSecret: randomBytes(16).toString('hex'),  // 组网密码（内部，不直接暴露）
+        ipv4: '',                                        // 空 = DHCP 自动分配
+        createdAt: new Date().toISOString(),
+      };
+      changed = true;
+    }
   }
   if (changed) saveUsers();
 }
@@ -676,6 +688,28 @@ function createMcpServer(userId, authInfo = {}) {
     return { content: [{ type: 'text', text: `用户 ${userId} 密钥已重置（旧密钥立即失效）\n新密钥: ${newKey}\n请转交用户，并提醒其用新密钥重新连接` }] };
   }, 'reset_user_key'));
 
+  server.registerTool('reset_mesh_secret', {
+    description: '重置用户的组网密钥（换密钥=重新分配整套组网配置：网络名/组网密码/IP 全部作废重生成）。需要管理员密钥认证',
+    inputSchema: z.object({
+      userId: z.string().describe('用户 ID'),
+    }),
+  }, wrapTool(userId, async ({ userId }) => {
+    const denied = requireAdmin(authInfo);
+    if (denied) return denied;
+    if (!users[userId]) return { content: [{ type: 'text', text: 'Error: 用户不存在' }], isError: true };
+    // 换密钥 = 整体重分配：全新 secret + networkName + networkSecret + ipv4
+    const newSecret = randomBytes(8).toString('hex');
+    users[userId].mesh = {
+      secret: newSecret,
+      networkName: 'yunqiao-' + userId,
+      networkSecret: randomBytes(16).toString('hex'),
+      ipv4: '',
+      createdAt: new Date().toISOString(),
+    };
+    saveUsers();
+    return { content: [{ type: 'text', text: `用户 ${userId} 组网密钥已重置（旧密钥及旧组网配置立即作废）\n新组网密钥: ${newSecret}\n已重新分配整套组网配置，请客户端用新密钥重新获取` }] };
+  }, 'reset_mesh_secret'));
+
   server.registerTool('set_user_limit', {
     description: '设置用户资源配额（放开=调大，收紧=调小；不带任何限制参数则恢复默认）。需要管理员密钥认证',
     inputSchema: z.object({
@@ -1127,6 +1161,35 @@ fi` },
     ).join('\n');
     return { content: [{ type: 'text', text }] };
   }, 'get_client_messages'));
+
+  server.registerTool('get_mesh_config', {
+    description: '获取组网配置（EasyTier）：客户端用它自动加入组网隧道。返回网络名/组网密码/IP。密钥与组网配置绑定，换密钥=整体重分配',
+    inputSchema: z.object({}),
+  }, wrapTool(userId, async () => {
+    const u = users[userId];
+    if (!u) return { content: [{ type: 'text', text: 'Error: 用户不存在' }], isError: true };
+    // 确保 mesh 配置已生成（与用户密钥绑定，生成后固定）
+    if (!u.mesh) {
+      u.mesh = {
+        secret: randomBytes(8).toString('hex'),
+        networkName: 'yunqiao-' + userId,
+        networkSecret: randomBytes(16).toString('hex'),
+        ipv4: '',
+        createdAt: new Date().toISOString(),
+      };
+      saveUsers();
+    }
+    const m = u.mesh;
+    return { content: [{ type: 'text', text: JSON.stringify({
+      secret: m.secret,
+      networkName: m.networkName,
+      networkSecret: m.networkSecret,
+      ipv4: m.ipv4 || '',
+      serverIp: '45.152.65.49',      // 服务器公网 IP（客户端经此连 hub 入网）
+      serverMeshIp: '10.144.144.1',   // 服务器组网 IP（入网后可达）
+      port: 11010,
+    }) }] };
+  }, 'get_mesh_config'));
 
   server.registerTool('get_device_info', {
     description: '获取远程电脑的系统信息',
