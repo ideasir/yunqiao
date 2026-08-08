@@ -239,29 +239,59 @@ class Agent:
                 pass
         return False
 
+    def _clash_server_ip(self):
+        """easytier 组网服务器的 IP(来自 mesh 配置),用于 IP-CIDR 直连规则。
+        easytier 用 IP:11010 直连 hub,Clash TUN 模式会劫持非域名流量;
+        只加域名直连规则覆盖不到它,必须按 IP 加直连。"""
+        try:
+            import easytier_helper as eh
+            mesh = eh.load_mesh_config()
+            ip = (mesh or {}).get("serverIp", "")
+            return ip if ip and "." in ip else None
+        except Exception:
+            return None
+
     def _clash_set_direct(self, enable):
         import urllib.request
         import json as _json
         api = self.clash_api or "http://127.0.0.1:9090"
-        rule = "DOMAIN-SUFFIX,yunqiao.very.im,DIRECT"
         try:
             req = urllib.request.Request(api + "/version", method="GET")
             urllib.request.urlopen(req, timeout=2)
         except Exception:
             self._emit(self.on_log, "[clash] Clash API unreachable")
             return
+        # 域名规则(WSS 控制通道)+ IP 规则(easytier 组网端口),TUN 全劫持模式下都要直连
+        domain_rule = "DOMAIN-SUFFIX,yunqiao.very.im,DIRECT"
+        ip_rule = None
+        mesh_ip = self._clash_server_ip()
+        if mesh_ip:
+            ip_rule = f"IP-CIDR,{mesh_ip}/32,DIRECT"
         try:
             if enable:
                 data = _json.dumps({"payload": "", "rule_type": "DOMAIN-SUFFIX", "proxy": "DIRECT"}).encode()
                 req = urllib.request.Request(api + "/rules", data=data, method="PUT", headers={"Content-Type": "application/json"})
                 urllib.request.urlopen(req, timeout=3)
-                self._emit(self.on_log, "[clash] DIRECT rule added")
+                if ip_rule:
+                    try:
+                        data = _json.dumps({"payload": "", "rule_type": "IP-CIDR", "proxy": "DIRECT"}).encode()
+                        req = urllib.request.Request(api + "/rules", data=data, method="PUT", headers={"Content-Type": "application/json"})
+                        urllib.request.urlopen(req, timeout=3)
+                    except Exception:
+                        pass
+                self._emit(self.on_log, "[clash] DIRECT rule added (domain + ip)")
             else:
                 try:
-                    req = urllib.request.Request(api + "/rules/DOMAIN-SUFFIX,yunqiao.very.im,DIRECT", method="DELETE")
+                    req = urllib.request.Request(api + "/rules/" + domain_rule, method="DELETE")
                     urllib.request.urlopen(req, timeout=3)
                 except:
                     pass
+                if ip_rule:
+                    try:
+                        req = urllib.request.Request(api + "/rules/" + ip_rule, method="DELETE")
+                        urllib.request.urlopen(req, timeout=3)
+                    except:
+                        pass
                 self._emit(self.on_log, "[clash] DIRECT rule removed")
         except Exception as e:
             self._emit(self.on_log, "[clash] rule failed: " + str(e))
