@@ -190,14 +190,30 @@ def start_node(mesh_config, log_path=None, progress_cb=None):
     return proc
 
 
-def probe_mesh_channel(timeout=3):
-    """探测组网通道：尝试连 服务器组网IP:云桥端口。
-    返回 True 表示组网通道可用（客户端已入网且能达服务器组网 IP）。"""
+def probe_mesh_channel(timeout=3, mesh=None):
+    """探测组网通道是否已打通。
+
+    可靠方式：检查 easytier 进程存活 + 日志出现 'dhcp ip changed' / 'new peer added'
+    （说明已连上 hub 并拿到组网 IP，真正入网成功）。
+    回退：连服务器 hub 的 easytier 端口（11010）。
+    """
+    # 1. 日志里找入网成功标志（最近 4KB 内的记录）
+    log = _cache_dir() / "easytier.log"
+    if log.exists():
+        try:
+            txt = log.read_text(encoding="utf-8", errors="replace")
+            tail = txt[-4000:]
+            if "dhcp ip changed" in tail or "new peer added" in tail:
+                return True
+        except Exception:
+            pass
+    # 2. 回退：尝试连服务器 hub 的 easytier 端口（11010）
+    server = (mesh or {}).get("serverIp") or "45.152.65.49"
     import socket
     s = socket.socket()
     s.settimeout(timeout)
     try:
-        rc = s.connect_ex((SERVER_MESH_IP, CLOUD_BRIDGE_PORT))
+        rc = s.connect_ex((server, 11010))
         return rc == 0
     except Exception:
         return False
