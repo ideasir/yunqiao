@@ -255,7 +255,7 @@ const agentMessages = [];
 // ═══════════════════════════════════════════════
 
 function sendJSON(ws, data) {
-  if (ws.readyState === WebSocket.OPEN) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify(data));
   }
 }
@@ -1410,7 +1410,9 @@ const agentKeepalive = setInterval(() => {
 const heartbeat = setInterval(() => {
   const now = Date.now();
   for (const [id, device] of devices) {
-    if (device.ws.readyState !== WebSocket.OPEN) continue;
+    // device.ws 在断开时可能被置 null（sendJSON 清理路径），
+    // 心跳必须判空，否则 TypeError 崩溃 → systemd 重启 → 内存清空 → 全员 401。
+    if (!device.ws || device.ws.readyState !== WebSocket.OPEN) continue;
     device._lastPingAt = now;
     device.ws.ping();
   }
@@ -1442,7 +1444,7 @@ httpServer.on('upgrade', (req, socket, head) => {
 });
 
 wss.on('connection', (ws, req, user) => {
-  const deviceId = randomUUID();
+  let deviceId = randomUUID();
   // 持久 pong 监听（避免每次 ping 注册 once 监听器导致泄漏），延迟负值归零
   ws.on('pong', () => {
     const d = devices.get(deviceId);
@@ -1484,6 +1486,7 @@ wss.on('connection', (ws, req, user) => {
           delete u._lastDisconnectAt;
         }
         console.error('[device] reconnected: ' + name + ' (' + existing.id + ')');
+        deviceId = existing.id;
         sendJSON(ws, { type: 'register_result', requestId, success: true, deviceId: existing.id });
         scheduleActivityPush(user.userId);
         return;
@@ -1499,16 +1502,12 @@ wss.on('connection', (ws, req, user) => {
       });
       persistentDevices.set(pId, devices.get(finalId));
       const u = users[user.userId];
-      const shortReconnect = u && u._lastDisconnectAt && (Date.now() - u._lastDisconnectAt < 600000);
-      if (shortReconnect) {
-        console.error(`[device] short reconnect（${Math.round((Date.now() - u._lastDisconnectAt) / 1000)}s），MCP 地址不变`);
-      } else if (u && u._lastDisconnectAt) {
-        u.mcpTicket = null;
-        saveUsers();
-        console.error(`[device] long disconnect（${Math.round((Date.now() - u._lastDisconnectAt) / 1000)}s），旧 ticket 作废`);
-      }
+      // 原则：MCP 地址/配对码以客户端为唯一真相源，服务器绝不主动作废。
+      // 旧逻辑曾在“设备断开 > 10 分钟”时把 mcpTicket 置 null（自作主张变地址），
+      // 违背“客户端没变服务器就不能变”，已移除。地址只在客户端主动 get_mcp_ticket 时才可能变。
       if (u) delete u._lastDisconnectAt;
       console.error(`[device] registered: ${name} (${finalId}) user:${user.userId} code:${authCode || 'none'}`);
+      deviceId = finalId;
       sendJSON(ws, { type: 'register_result', requestId, success: true, deviceId: finalId });
       scheduleActivityPush(user.userId);
       return;
