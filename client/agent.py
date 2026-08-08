@@ -417,10 +417,16 @@ class Agent:
                     return
                 self._emit(self.on_log, f"[组网] 启动节点 {mesh['networkName']}...")
                 self._mesh_proc = eh.start_node(mesh, progress_cb=lambda m: self._emit(self.on_log, f"[组网] {m}"))
+                if self._mesh_proc is None:
+                    self._emit(self.on_log, "[组网] 节点启动失败，继续使用公网连接")
+                    return
                 # 4. 等待入网并报告
                 import time as _t
                 for _ in range(15):
                     _t.sleep(1)
+                    if self._mesh_proc.poll() is not None:
+                        self._emit(self.on_log, "[组网] 节点进程已退出，继续使用公网连接")
+                        return
                     if eh.probe_mesh_channel(timeout=1):
                         self._emit(self.on_log, "[组网] ✅ 组网通道已打通")
                         self._emit(self.on_status, {"connected": True, "proto": "EasyTier"})

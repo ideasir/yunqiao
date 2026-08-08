@@ -54,15 +54,41 @@ def _cache_dir():
     return d
 
 
+def _find_installed_gui():
+    """多路径查找官网安装的 easytier-gui.exe（不同机器安装位置不同）。
+    返回 Path 或 None。"""
+    if platform.system() != "Windows":
+        return None
+    candidates = []
+    # 1. LOCALAPPDATA（默认安装位置）
+    la = os.environ.get("LOCALAPPDATA", "")
+    if la:
+        candidates.append(Path(la) / "easytier-gui" / "easytier-gui.exe")
+    # 2. USERPROFILE/.easytier / .easytier-gui
+    hp = os.environ.get("USERPROFILE", str(Path.home()))
+    for sub in ("easytier-gui", ".easytier-gui"):
+        candidates.append(Path(hp) / "AppData" / "Local" / sub / "easytier-gui.exe")
+        candidates.append(Path(hp) / sub / "easytier-gui.exe")
+    # 3. Program Files / Program Files (x86)
+    for pf in (os.environ.get("ProgramFiles", ""), os.environ.get("ProgramFiles(x86)", "")):
+        if pf:
+            candidates.append(Path(pf) / "easytier" / "easytier-gui.exe")
+            candidates.append(Path(pf) / "easytier-gui" / "easytier-gui.exe")
+    for c in candidates:
+        try:
+            if c.is_file():
+                return c
+        except Exception:
+            continue
+    return None
+
+
 def _core_path():
-    """优先借用官网安装的 easytier-gui.exe（它自带运行库能跑、还带 UI 显示节点），
-    否则用云桥仓库内置的 easytier-core.exe（随客户端更新）。"""
-    if platform.system() == "Windows":
-        # 官网 easytier-gui：完整 core + GUI 壳，能正常启动且显示节点
-        gui_home = os.environ.get("LOCALAPPDATA", "")
-        gui = Path(gui_home) / "easytier-gui" / "easytier-gui.exe"
-        if gui.exists():
-            return gui
+    """优先借用官网安装的 easytier-gui.exe（自带运行库能跑、还带 UI 显示节点），
+    否则用云桥仓库内置的 easytier-core.exe（随客户端更新，自带 DLL）。"""
+    gui = _find_installed_gui()
+    if gui:
+        return gui
     return _cache_dir() / ("easytier-core.exe" if platform.system() == "Windows" else "easytier-core")
 
 
@@ -172,22 +198,42 @@ def build_node_command(mesh_config):
 
 
 def start_node(mesh_config, log_path=None, progress_cb=None):
-    """启动 easytier 客户端节点（no-tun）。返回 subprocess.Popen 句柄。"""
-    cmd = build_node_command(mesh_config)
-    if progress_cb:
-        progress_cb("启动组网节点...")
-    logf = open(log_path or (_cache_dir() / "easytier.log"), "a", encoding="utf-8")
-    # Windows 隐藏窗口；POSIX 丢到后台
-    creationflags = 0
-    if platform.system() == "Windows":
-        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    proc = subprocess.Popen(
-        cmd,
-        stdout=logf,
-        stderr=subprocess.STDOUT,
-        creationflags=creationflags,
-    )
-    return proc
+    """启动 easytier 客户端节点（no-tun）。返回 subprocess.Popen 句柄；失败返回 None（不崩）。
+
+    兼容性：任何环境启动失败都不抛异常，由调用方静默回退公网。"""
+    try:
+        cmd = build_node_command(mesh_config)
+        if progress_cb:
+            progress_cb("启动组网节点...")
+        logf = None
+        try:
+            logf = open(log_path or (_cache_dir() / "easytier.log"), "a", encoding="utf-8")
+        except Exception:
+            logf = None
+        creationflags = 0
+        if platform.system() == "Windows":
+            creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        # GUI 程序(easytier-gui)用 CREATE_NO_WINDOW 可能无效，用 STARTUPINFO 隐藏更稳
+        si = None
+        if platform.system() == "Windows":
+            si = subprocess.STARTUPINFO()
+            try:
+                si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                si.wShowWindow = 0  # SW_HIDE
+            except Exception:
+                pass
+        proc = subprocess.Popen(
+            cmd,
+            stdout=logf or subprocess.DEVNULL,
+            stderr=logf or subprocess.DEVNULL,
+            creationflags=creationflags,
+            startupinfo=si,
+        )
+        return proc
+    except Exception as e:
+        if progress_cb:
+            progress_cb(f"启动组网节点失败: {e}")
+        return None
 
 
 def probe_mesh_channel(timeout=3, mesh=None):
