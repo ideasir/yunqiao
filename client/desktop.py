@@ -93,8 +93,28 @@ def start_agent():
         threading.Timer(0.5, lambda: sync_ui_state(a)).start()
         return
     a.start()
+    # 同步启动 TCP Agent（EasyTier 组网直连通道）
+    start_tcp_agent()
     # 同步会话和状态到 UI
     threading.Timer(1.0, lambda: sync_ui_state(a)).start()
+
+
+def start_tcp_agent():
+    """启动 TCP Agent（EasyTier 组网直连通道，替代 WebSocket）"""
+    import subprocess
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    tcp_script = os.path.join(script_dir, 'tcp_agent.py')
+    if os.path.exists(tcp_script):
+        try:
+            subprocess.Popen(
+                ['python', tcp_script, '--host', '10.10.10.88', '--port', '19999'],
+                cwd=script_dir,
+                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
+            )
+            print('[tcp-agent] 已启动 TCP Agent，监听 10.10.10.88:19999')
+        except Exception as e:
+            print(f'[tcp-agent] 启动失败: {e}')
+
 
 def sync_ui_state(a):
     sl = a.sessions.list_all()

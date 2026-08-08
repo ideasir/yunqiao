@@ -4,6 +4,7 @@ import { randomUUID, randomBytes } from 'node:crypto';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync, statSync, renameSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { dirname } from 'node:path';
+import net from 'node:net';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { z } from 'zod/v4';
@@ -17,6 +18,16 @@ const MCP_MESSAGE_PATH = '/mcp/message';
 // EasyTier 组网 hub 网络（所有用户共用一个主网络）
 const MESH_NETWORK_NAME = 'yunqiao-hub';
 const MESH_NETWORK_SECRET = '220beedd6c9f94ec07eed7e7';
+
+// ═══════════════════════════════════════════════
+// TCP 直连配置（通过 EasyTier 组网替代 WebSocket）
+// ═══════════════════════════════════════════════
+const TCP_AGENT_HOST = process.env.TCP_AGENT_HOST || '10.10.10.88';  // Windows EasyTier 虚拟 IP
+const TCP_AGENT_PORT = parseInt(process.env.TCP_AGENT_PORT || '19999');
+const TCP_AGENT_TIMEOUT = parseInt(process.env.TCP_AGENT_TIMEOUT || '30000');  // TCP 连接超时
+
+// 已配置 TCP 直连的设备 persistentId 列表（空 = 所有设备尝试 TCP）
+const TCP_AGENT_DEVICES = (process.env.TCP_AGENT_DEVICES || '').split(',').filter(Boolean);
 
 // ═══════════════════════════════════════════════
 // 多用户管理
@@ -302,6 +313,117 @@ function sendJSON(ws, data) {
   }
 }
 
+// ═══════════════════════════════════════════════
+// TCP 直连发送（通过 EasyTier 组网替代 WebSocket）
+// 延迟从 2000ms+ 降到 20ms
+// ═══════════════════════════════════════════════
+
+let tcpConnection = null;
+let tcpConnecting = false;
+let tcpConnectPromise = null;
+
+async function getTCPConnection() {
+  if (tcpConnection) return tcpConnection;
+  if (tcpConnecting) return tcpConnectPromise;
+  tcpConnecting = true;
+  tcpConnectPromise = new Promise((resolve, reject) => {
+    const sock = new net.Socket();
+    const timeout = setTimeout(() => {
+      sock.destroy();
+      reject(new Error(`TCP 连接超时 (${TCP_AGENT_HOST}:${TCP_AGENT_PORT})`));
+    }, 5000);
+    sock.connect(TCP_AGENT_PORT, TCP_AGENT_HOST, () => {
+      clearTimeout(timeout);
+      sock.setTimeout(0);
+      tcpConnection = sock;
+      console.error(`[tcp] 已连接到 Windows Agent: ${TCP_AGENT_HOST}:${TCP_AGENT_PORT}`);
+      resolve(sock);
+    });
+    sock.on('error', (err) => {
+      clearTimeout(timeout);
+      tcpConnection = null;
+      reject(err);
+    });
+    sock.on('close', () => {
+      tcpConnection = null;
+      console.error('[tcp] 连接关闭');
+    });
+  });
+  try {
+    const conn = await tcpConnectPromise;
+    return conn;
+  } finally {
+    tcpConnecting = false;
+    tcpConnectPromise = null;
+  }
+}
+
+async function sendViaTCP(type, payload, timeoutMs) {
+  const msg = { type, payload };
+  const data = Buffer.from(JSON.stringify(msg), 'utf-8');
+  const buf = Buffer.alloc(4 + data.length);
+  buf.writeUInt32BE(data.length, 0);
+  data.copy(buf, 4);
+
+  const limit = timeoutMs || TCP_AGENT_TIMEOUT;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`TCP 请求超时 ${limit}ms`));
+    }, limit);
+
+    getTCPConnection()
+      .then((sock) => {
+        sock.write(buf, (err) => {
+          if (err) {
+            clearTimeout(timer);
+            tcpConnection = null;
+            reject(err);
+            return;
+          }
+          const header = Buffer.alloc(4);
+          let headerBytes = 0;
+          const onReadable = () => {
+            while (headerBytes < 4) {
+              const b = sock.read(4 - headerBytes);
+              if (!b) return;
+              b.copy(header, headerBytes);
+              headerBytes += b.length;
+            }
+            const respLen = header.readUInt32BE(0);
+            if (respLen > 10 * 1024 * 1024) {
+              clearTimeout(timer);
+              reject(new Error('响应过长'));
+              return;
+            }
+            const body = sock.read(respLen);
+            if (!body) {
+              sock.once('readable', onReadable);
+              return;
+            }
+            clearTimeout(timer);
+            try {
+              const result = JSON.parse(body.toString('utf-8'));
+              resolve(result);
+            } catch (e) {
+              reject(new Error('TCP 响应解析失败: ' + e.message));
+            }
+          };
+          sock.once('readable', onReadable);
+        });
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
+function shouldUseTCP(device) {
+  if (!device) return false;
+  if (TCP_AGENT_DEVICES.length === 0) return true;
+  return TCP_AGENT_DEVICES.includes(device.persistentId);
+}
+
 function sendAndWait(type, payload, deviceId, timeoutMs) {
   return new Promise((resolve, reject) => {
     const device = devices.get(deviceId);
@@ -309,17 +431,39 @@ function sendAndWait(type, payload, deviceId, timeoutMs) {
       reject(new Error(`device '${deviceId}' not found`));
       return;
     }
-    const requestId = randomUUID();
-    const limit = timeoutMs || COMMAND_TIMEOUT;
-    const timer = setTimeout(() => {
-      pendingRequests.delete(requestId);
-      scheduleActivityPush(device.userId);  // 调用结束
-      reject(new Error(`request timed out after ${limit}ms`));
-    }, limit);
-    pendingRequests.set(requestId, { deviceId, resolve, reject, timer });
-    sendJSON(device.ws, { type, requestId, payload });
-    scheduleActivityPush(device.userId);  // 调用开始
+
+    // 优先走 TCP 直连（EasyTier 组网）
+    if (shouldUseTCP(device)) {
+      sendViaTCP(type, payload, timeoutMs)
+        .then((result) => {
+          if (result.error) {
+            reject(new Error(result.error));
+          } else {
+            resolve(result.result || result);
+          }
+        })
+        .catch((err) => {
+          console.error(`[tcp] 回退到 WebSocket: ${err.message}`);
+          sendViaWebSocket(resolve, reject, type, payload, device, timeoutMs);
+        });
+      return;
+    }
+
+    sendViaWebSocket(resolve, reject, type, payload, device, timeoutMs);
   });
+}
+
+function sendViaWebSocket(resolve, reject, type, payload, device, timeoutMs) {
+  const requestId = randomUUID();
+  const limit = timeoutMs || COMMAND_TIMEOUT;
+  const timer = setTimeout(() => {
+    pendingRequests.delete(requestId);
+    scheduleActivityPush(device.userId);
+    reject(new Error(`request timed out after ${limit}ms`));
+  }, limit);
+  pendingRequests.set(requestId, { deviceId: device.id, resolve, reject, timer });
+  sendJSON(device.ws, { type, requestId, payload });
+  scheduleActivityPush(device.userId);
 }
 
 function rejectDeviceRequests(deviceId, reason) {
