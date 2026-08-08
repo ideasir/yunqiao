@@ -169,6 +169,30 @@ def install(progress_cb=None):
         return False
 
 
+def cleanup_stale_nodes():
+    """清理旧的 easytier-core 进程（防客户端重启后节点越积越多）。
+    只杀 easytier-core（云桥管理的节点），不碰 easytier-gui（用户自己的）。"""
+    if platform.system() != "Windows":
+        return 0
+    import subprocess as sp
+    try:
+        r = sp.run(["tasklist", "/FI", "IMAGENAME eq easytier-core.exe", "/FO", "CSV"],
+                   capture_output=True, timeout=15)
+        killed = 0
+        for line in r.stdout.decode("utf-8", errors="replace").splitlines()[1:]:
+            parts = line.strip().strip('"').split('","')
+            if len(parts) >= 2 and parts[0].lower() == "easytier-core.exe":
+                pid = parts[1]
+                try:
+                    sp.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True, timeout=10)
+                    killed += 1
+                except Exception:
+                    pass
+        return killed
+    except Exception:
+        return 0
+
+
 def build_node_command(mesh_config):
     """根据组网配置构建客户端节点启动命令（no-tun，与用户其他 easytier 组网零冲突）。
 

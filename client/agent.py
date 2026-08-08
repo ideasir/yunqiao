@@ -412,9 +412,11 @@ class Agent:
                     if not eh.install(progress_cb=lambda m: self._emit(self.on_log, f"[组网] {m}")):
                         self._emit(self.on_log, "[组网] 下载失败，继续使用公网连接")
                         return
-                # 3. 启动 no-tun 节点（若已在跑则跳过）
+                # 3. 启动 no-tun 节点：先清理旧 easytier-core（避免重启客户端后节点越积越多）
                 if getattr(self, '_mesh_proc', None) and self._mesh_proc.poll() is None:
                     return
+                self._emit(self.on_log, "[组网] 清理旧节点...")
+                eh.cleanup_stale_nodes()
                 self._emit(self.on_log, f"[组网] 启动节点 {mesh['networkName']}...")
                 self._mesh_proc = eh.start_node(mesh, progress_cb=lambda m: self._emit(self.on_log, f"[组网] {m}"))
                 if self._mesh_proc is None:
