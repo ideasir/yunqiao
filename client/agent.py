@@ -394,42 +394,38 @@ class Agent:
             return False
 
     def _ensure_mesh_async(self):
-        """后台自动装配组网:拉取配置 + 确保 easytier 二进制 + 启动 no-tun 节点。
-        独立线程执行,绝不阻塞 asyncio 事件循环(否则心跳会断)。"""
+        """后台自动装配组网：等待服务器下发配置(注册后) + 确保 easytier + 启动节点。
+        独立线程执行，绝不阻塞 asyncio 事件循环（否则心跳会断）。"""
         if getattr(self, '_mesh_thread', None) and self._mesh_thread.is_alive():
             return
         def _worker():
             try:
                 import easytier_helper as eh
-                # 1. 确保 easytier-core 已安装(自动下载,无感)
-                if not eh.is_installed():
-                    self._emit(self.on_log, "[组网] 下载 EasyTier...")
-                    if not eh.install(progress_cb=lambda m: self._emit(self.on_log, f"[组网] {m}")):
-                        self._emit(self.on_log, "[组网] 下载失败,继续使用公网连接")
-                        return
-                # 2. 已有 mesh 配置则直接用;没有则通过 get_mesh_config 工具拉取
+                # 1. 等服务器下发 mesh_config（注册后几秒内到达；收到后 _handle_message 会再调本函数）
                 mesh = eh.load_mesh_config()
                 if not mesh:
-                    self._emit(self.on_log, "[组网] 获取组网配置...")
-                    mesh = self._fetch_mesh_config()
-                    if not mesh:
-                        self._emit(self.on_log, "[组网] 未获取到组网配置,继续使用公网连接")
+                    self._emit(self.on_log, "[组网] 等待组网配置下发...")
+                    return  # 等 mesh_config 消息触发下一次 _ensure_mesh_async
+                # 2. 确保 easytier-core 可用（仓库内置，随客户端更新）
+                if not eh.is_installed():
+                    self._emit(self.on_log, "[组网] 未找到 easytier，尝试下载...")
+                    if not eh.install(progress_cb=lambda m: self._emit(self.on_log, f"[组网] {m}")):
+                        self._emit(self.on_log, "[组网] 下载失败，继续使用公网连接")
                         return
-                    eh.save_mesh_config(mesh)
-                # 3. 启动 no-tun 节点(若已在跑则跳过)
+                # 3. 启动 no-tun 节点（若已在跑则跳过）
                 if getattr(self, '_mesh_proc', None) and self._mesh_proc.poll() is None:
                     return
                 self._emit(self.on_log, f"[组网] 启动节点 {mesh['networkName']}...")
                 self._mesh_proc = eh.start_node(mesh, progress_cb=lambda m: self._emit(self.on_log, f"[组网] {m}"))
                 # 4. 等待入网并报告
                 import time as _t
-                for _ in range(10):
+                for _ in range(15):
                     _t.sleep(1)
                     if eh.probe_mesh_channel(timeout=1):
                         self._emit(self.on_log, "[组网] ✅ 组网通道已打通")
                         self._emit(self.on_status, {"connected": True, "proto": "EasyTier"})
                         return
-                self._emit(self.on_log, "[组网] 入网等待超时,继续使用公网连接")
+                self._emit(self.on_log, "[组网] 入网等待超时，继续使用公网连接")
             except Exception as e:
                 self._emit(self.on_log, f"[组网] 自动装配异常: {e}")
         import threading
@@ -566,10 +562,10 @@ class Agent:
                 mesh = payload if isinstance(payload, dict) else {}
                 if mesh.get("networkName"):
                     eh.save_mesh_config(mesh)
-                    self._emit(self.on_log, "[组网] 收到组网配置，自动装配...")
+                    self._emit(self.on_log, "[组网] 收到组网配置,自动装配...")
                     self._ensure_mesh_async()
                 else:
-                    self._emit(self.on_log, "[组网] 组网配置不完整，跳过")
+                    self._emit(self.on_log, "[组网] 组网配置不完整,跳过")
             except Exception as e:
                 self._emit(self.on_log, f"[组网] 配置处理异常: {e}")
             return
