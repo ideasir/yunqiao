@@ -221,7 +221,7 @@ tailwind.config = {
       <div class="flex items-center gap-2 px-3 py-2.5 border-b border-[#1f1f1f]">
         <div class="w-1.5 h-1.5 rounded-full bg-[#666]" id="clientDot"></div>
         <span class="text-xs font-medium text-[#aaa]">客户端(本地电脑)</span>
-        <span class="ml-auto text-[10px] text-[#555] font-mono" id="clientProto">WSS</span>
+        <span class="ml-auto text-[10px] text-[#555] font-mono" id="clientProto">-</span>
       </div>
       <div class="px-3 py-2 space-y-1.5 text-xs">
         <div class="flex justify-between"><span class="text-[#888]">工作目录</span><span class="text-[#ddd] font-mono text-[11px] truncate max-w-[130px]" id="workDir">未设置</span></div>
@@ -1505,11 +1505,16 @@ function handleBridge(action, data) {
       // 连接时清除缓存的 MCP ticket(配对码可能变了,下次复制重新生成)
       state.mcpTicket = '';
       state.mcpUrl = '';
-      // 点亮 WSS 协议标签
+      // 点亮客户端协议标签(动态显示实际通道: 组网/EasyTier 或 WSS 公网)
+      var cp = document.getElementById('clientProto');
+      if (cp) {
+        var proto = (data && data.proto) ? data.proto : (state.meshConnected ? 'EasyTier' : 'WSS');
+        cp.textContent = proto;
+        cp.style.color = '#4ade80'; cp.style.textShadow = '0 0 8px rgba(74,222,128,0.3)';
+      }
+      // 点亮 WSS 协议标签(relay 侧保持显示 SSE+WSS)
       var rw = document.getElementById('relayProtoWSS');
       if (rw) { rw.style.color = '#4ade80'; rw.style.textShadow = '0 0 8px rgba(74,222,128,0.3)'; }
-      var cp = document.getElementById('clientProto');
-      if (cp) { cp.style.color = '#4ade80'; cp.style.textShadow = '0 0 8px rgba(74,222,128,0.3)'; }
       health.relay = 'on';
       health.relayLatency = data.latency || 0;
       // 重置呼吸灯为全灰(等待服务器推送真实状态)

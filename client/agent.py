@@ -383,6 +383,15 @@ class Agent:
         self.permission = mode
     
     # ── 内部实现 ──────────────────────────────
+
+    def _mesh_ready(self):
+        """组网通道是否可用（EasyTier 入网后能达服务器组网 IP）。
+        延迟导入避免首次启动无 easytier 时拖慢连接。"""
+        try:
+            from easytier_helper import probe_mesh_channel
+            return probe_mesh_channel(timeout=1)
+        except Exception:
+            return False
     
     def _run_loop(self):
         """后台线程：运行 asyncio 事件循环"""
@@ -421,7 +430,9 @@ class Agent:
                     retry = 0  # 重置重试计数
                     latency = int((time.time() - t0) * 1000)
                     self._emit(self.on_log, "已连接到中继服务器")
-                    self._emit(self.on_status, {"connected": True, "latency": latency})
+                    # proto: 实际传输通道(EasyTier 组网优先,否则 WSS 公网)
+                    proto = "EasyTier" if self._mesh_ready() else "WSS"
+                    self._emit(self.on_status, {"connected": True, "latency": latency, "proto": proto})
                     
                     # 注册设备
                     await ws.send(json.dumps({
