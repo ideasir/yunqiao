@@ -37,7 +37,8 @@ def save_config(relay_url, key, name, auto_connect=False, direct_mode=False):
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     CONFIG_FILE.write_text(json.dumps({
         "relayUrl": relay_url, "key": key, "deviceName": name,
-        "autoConnect": auto_connect, "directMode": direct_mode
+        "autoConnect": auto_connect, "directMode": direct_mode,
+        "pairCode": pair_code  # 配对码持久化：自动重连/重启沿用，仅手动刷新才变
     }, indent=2), "utf-8")
 
 cfg = load_config()
@@ -46,7 +47,11 @@ RELAY_KEY = cfg.get("key", "")
 
 # ─── 全局状态 ────────────────────────────────────
 UI = None
-pair_code = str(random.randint(100000, 999999))
+# 配对码：首次启动时随机生成并持久化；之后自动重连/重启沿用同一配对码，
+# 只有用户手动点“刷新”才生成新码。服务器端也只认客户端当前上报的码，
+# 因此 Agent 侧永远用这个值，绝不会在重连时偷偷换码。
+pair_code = cfg.get("pairCode") or str(random.randint(100000, 999999))
+save_config(RELAY_URL, RELAY_KEY, DEVICE_NAME, cfg.get("autoConnect", False), cfg.get("directMode", False))
 agent = None  # Agent 实例，首次连接时创建
 
 # ─── Agent 集成 ──────────────────────────────────
@@ -180,7 +185,9 @@ class Api:
 
     def refresh_pair_code(self):
         global pair_code
+        # 仅用户手动点“刷新”时生成新配对码；自动重连/重启一律沿用旧码。
         pair_code = str(random.randint(100000, 999999))
+        save_config(RELAY_URL, RELAY_KEY, DEVICE_NAME, cfg.get("autoConnect", False), cfg.get("directMode", False))
         if agent:
             agent.update_code(pair_code)
         return {"pairCode": pair_code}
