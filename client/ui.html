@@ -1500,6 +1500,16 @@ function handleBridge(action, data) {
       btn.style.color = '#fca5a5';
       var cd = document.getElementById('clientDot');
       if (cd) cd.className = 'w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse';
+      // 客户端协议标签: 动态显示实际通道(EasyTier 组网 / WSS 公网)
+      var cp = document.getElementById('clientProto');
+      if (cp && data.proto) {
+        cp.textContent = data.proto;
+        cp.style.color = '#4ade80'; cp.style.textShadow = '0 0 8px rgba(74,222,128,0.3)';
+      } else if (cp) {
+        var pv = (data.proto || (state.meshConnected ? 'EasyTier' : 'WSS'));
+        cp.textContent = pv;
+        cp.style.color = '#4ade80'; cp.style.textShadow = '0 0 8px rgba(74,222,128,0.3)';
+      }
       addLog('done', '中转服务器已连接');
       addLog('info', '配对码已推送: ' + state.pairCode + ',请复制发送给 Agent');
       // 连接时清除缓存的 MCP ticket(配对码可能变了,下次复制重新生成)
