@@ -147,15 +147,22 @@ class Api:
 
     def save_settings(self, key, relay_url, auto_connect=False, direct_mode=False):
         global RELAY_URL, RELAY_KEY, agent
+        # 只有 relay URL/key 真的变了才需要重建 agent;其他设置(直连开关等)
+        # 即时更新字段即可,不打断当前连接。
+        changed = (relay_url != RELAY_URL) or (key != RELAY_KEY)
         RELAY_URL = relay_url
         RELAY_KEY = key
         if agent:
             agent.direct_mode = direct_mode
         save_config(relay_url, key, DEVICE_NAME, auto_connect, direct_mode)
-        if agent:
+        if changed and agent:
+            was_connected = agent.connected
             agent.stop()
             # 必须置 None，否则下次 get_agent() 返回旧实例，仍用旧的 relay_url/key 重连
             agent = None
+            # 之前是连接的(或开了自动连接)就用新配置自动重连,不留下"保存即断开"。
+            if was_connected or auto_connect:
+                start_agent()
         return {"success": True}
 
     def get_settings(self):
