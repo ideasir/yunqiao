@@ -403,16 +403,16 @@ class Agent:
                     ws = await websockets.connect(
                         self.relay_url,
                         extra_headers={"X-Key": self.relay_key, "X-PSK": self.relay_key},
-                        ping_interval=15,
-                        ping_timeout=30,
+                        ping_interval=20,
+                        ping_timeout=90,
                         close_timeout=5
                     )
                 except TypeError:
                     ws = await websockets.connect(
                         self.relay_url,
                         additional_headers={"X-Key": self.relay_key, "X-PSK": self.relay_key},
-                        ping_interval=15,
-                        ping_timeout=30,
+                        ping_interval=20,
+                        ping_timeout=90,
                         close_timeout=5
                     )
                 async with ws:

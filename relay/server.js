@@ -352,15 +352,18 @@ function reorderMessages(orderedIds, userId) {
 
 function getDefaultDevice(userId) {
   if (devices.size === 0) return null;
+  // 只返回在线设备：离线设备（ws 为 null / offline 标记）不参与默认选择，
+  // 否则 Agent 调用工具会对着断线设备干等到超时（sendJSON 对 null ws 静默失败）。
+  const online = (d) => d.ws && !d.offline;
   for (const device of devices.values()) {
-    if (device.authCode && device.os !== 'web' && userId && device.userId === userId) return device;
+    if (online(device) && device.authCode && device.os !== 'web' && userId && device.userId === userId) return device;
   }
   for (const device of devices.values()) {
-    if (device.authCode && userId && device.userId === userId) return device;
+    if (online(device) && device.authCode && userId && device.userId === userId) return device;
   }
   // 兜底也只返回本用户的设备，匿名/跨用户一律拿不到任何设备
   for (const device of devices.values()) {
-    if (userId && device.userId === userId) return device;
+    if (online(device) && userId && device.userId === userId) return device;
   }
   return null;
 }
@@ -1121,6 +1124,10 @@ fi` },
   }, wrapTool(userId, async ({ text, code }) => {
     const { device, error } = getAuthedDevice(sessionState, userId, undefined, code);
     if (!device) return { content: [{ type: 'text', text: `Error: ${error}` }], isError: true };
+    // 设备离线时 sendJSON 会静默失败——显式检查 ws，避免“已发送”假象
+    if (!device.ws || device.ws.readyState !== WebSocket.OPEN) {
+      return { content: [{ type: 'text', text: 'Error: 设备已断开，通知未送达' }], isError: true };
+    }
     sendJSON(device.ws, { type: 'notify', text });
     return { content: [{ type: 'text', text: '已发送' }] };
   }, 'notify'));
@@ -1344,7 +1351,13 @@ const httpServer = createServer(async (req, res) => {
       // 3. 每 15 秒发送 SSE 心跳注释（标准 SSE 协议，客户端忽略）
       try { req.socket.setTimeout(0); req.socket.setKeepAlive(true, 5000); } catch {}
       const heartbeatTimer = setInterval(() => {
-        try { res.write(': heartbeat\n\n'); } catch { clearInterval(heartbeatTimer); }
+        try {
+          res.write(': heartbeat\n\n');
+          // 心跳也算活动：只有工具调用才刷 lastActive 的话，常驻 Agent
+          // 超过 SSE_IDLE_TIMEOUT（默认 3 分钟）无调用就会被判为僵尸连接清掉。
+          const e = transports.get(sid);
+          if (e) e.lastActive = Date.now();
+        } catch { clearInterval(heartbeatTimer); }
       }, 15000);
       
       // 双保险：res close 和 req close 都触发清理
@@ -1488,6 +1501,8 @@ wss.on('connection', (ws, req, user) => {
         console.error('[device] reconnected: ' + name + ' (' + existing.id + ')');
         deviceId = existing.id;
         sendJSON(ws, { type: 'register_result', requestId, success: true, deviceId: existing.id });
+        // 设备恢复在线 → 告知所有在线的 Agent（SSE 连接是保留的，需显式恢复状态）
+        broadcastToDevices({ type: 'agent_connected', latency: existing.latency, platform: 'sandbox', hostname: 'OpenClaw Agent', relayPlatform: 'Ubuntu Linux' }, user.userId);
         scheduleActivityPush(user.userId);
         return;
       }
@@ -1509,6 +1524,8 @@ wss.on('connection', (ws, req, user) => {
       console.error(`[device] registered: ${name} (${finalId}) user:${user.userId} code:${authCode || 'none'}`);
       deviceId = finalId;
       sendJSON(ws, { type: 'register_result', requestId, success: true, deviceId: finalId });
+      // 新设备上线 → 告知所有在线的 Agent
+      broadcastToDevices({ type: 'agent_connected', latency: 0, platform: 'sandbox', hostname: 'OpenClaw Agent', relayPlatform: 'Ubuntu Linux' }, user.userId);
       scheduleActivityPush(user.userId);
       return;
     }
@@ -1661,6 +1678,10 @@ wss.on('connection', (ws, req, user) => {
       // 记录断开时间，用于判断短断/长断
       const u = users[device.userId];
       if (u) u._lastDisconnectAt = Date.now();
+      // 设备离线 → 立即告知所有在线的 Agent（SSE 连接保留，避免 Agent 也跟着掉线重连；
+      // 之前只等 SSE 空闲超时才清，Agent 侧会持续误以为设备在线）。
+      broadcastToDevices({ type: 'agent_disconnected' }, device.userId);
+      scheduleActivityPush(device.userId);
     }
     // 该设备正在运行的任务标记失败（防悬空任务永久占并发名额）
     for (const [tid, t] of tasks) {
