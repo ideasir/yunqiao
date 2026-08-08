@@ -55,8 +55,15 @@ def _cache_dir():
 
 
 def _core_path():
-    exe = "easytier-core.exe" if platform.system() == "Windows" else "easytier-core"
-    return _cache_dir() / exe
+    """优先借用官网安装的 easytier-gui.exe（它自带运行库能跑、还带 UI 显示节点），
+    否则用云桥仓库内置的 easytier-core.exe（随客户端更新）。"""
+    if platform.system() == "Windows":
+        # 官网 easytier-gui：完整 core + GUI 壳，能正常启动且显示节点
+        gui_home = os.environ.get("LOCALAPPDATA", "")
+        gui = Path(gui_home) / "easytier-gui" / "easytier-gui.exe"
+        if gui.exists():
+            return gui
+    return _cache_dir() / ("easytier-core.exe" if platform.system() == "Windows" else "easytier-core")
 
 
 def _cli_path():
