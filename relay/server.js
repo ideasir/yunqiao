@@ -474,7 +474,7 @@ function sendAndWait(type, payload, deviceId, timeoutMs) {
       return;
     }
 
-    // 优先走 TCP 直连（EasyTier 组网）
+    // 仅走 TCP 直连（EasyTier 组网），长链接已关闭
     if (shouldUseTCP(device)) {
       sendViaTCP(type, payload, timeoutMs)
         .then((result) => {
@@ -485,27 +485,18 @@ function sendAndWait(type, payload, deviceId, timeoutMs) {
           }
         })
         .catch((err) => {
-          console.error(`[tcp] 回退到 WebSocket: ${err.message}`);
-          sendViaWebSocket(resolve, reject, type, payload, device, timeoutMs);
+          reject(new Error(`TCP 失败: ${err.message}`));
         });
       return;
     }
 
-    sendViaWebSocket(resolve, reject, type, payload, device, timeoutMs);
+    reject(new Error('长链接已关闭，请使用 EasyTier 组网直连'));
   });
 }
 
 function sendViaWebSocket(resolve, reject, type, payload, device, timeoutMs) {
-  const requestId = randomUUID();
-  const limit = timeoutMs || COMMAND_TIMEOUT;
-  const timer = setTimeout(() => {
-    pendingRequests.delete(requestId);
-    scheduleActivityPush(device.userId);
-    reject(new Error(`request timed out after ${limit}ms`));
-  }, limit);
-  pendingRequests.set(requestId, { deviceId: device.id, resolve, reject, timer });
-  sendJSON(device.ws, { type, requestId, payload });
-  scheduleActivityPush(device.userId);
+  // 长链接已关闭，不再使用
+  reject(new Error('长链接已关闭'));
 }
 
 function rejectDeviceRequests(deviceId, reason) {
