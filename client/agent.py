@@ -145,6 +145,10 @@ class Agent:
         self.device_name = device_name or platform.node()
         self.auth_code = auth_code  # 配对码（desktop 用，CLI 不用）
         self.device_id = None
+        # 持久化设备 ID：存本地文件，重连/重启复用，服务器据此识别“同一台设备”。
+        # 服务器端（relay/server.js 3052e42）已支持 persistentId；旧客户端不传导致
+        # 每次重连都生成新 deviceId，表现为连接不稳定（注册→断开→新ID→再注册）。
+        self.persistent_id = self._load_or_create_persistent_id()
         self.connected = False
         
         # 权限模式: workspace（仅工作区）/ super（全盘）
@@ -192,6 +196,26 @@ class Agent:
         self._auto_sync_interval = int(os.environ.get('CODEGRAPH_SYNC_INTERVAL', '60'))  # 秒
         self._auto_sync_start()
     
+    def _load_or_create_persistent_id(self):
+        """从 ~/.yunqiao/device-id 读取或生成持久设备 ID。"""
+        import uuid
+        cfg_dir = Path(os.environ.get("YUNQIAO_CONFIG", str(Path.home() / ".yunqiao")))
+        cfg_dir.mkdir(parents=True, exist_ok=True)
+        id_file = cfg_dir / "device-id"
+        try:
+            if id_file.exists():
+                val = id_file.read_text("utf-8").strip()
+                if val:
+                    return val
+        except Exception:
+            pass
+        val = str(uuid.uuid4())
+        try:
+            id_file.write_text(val, "utf-8")
+        except Exception:
+            pass
+        return val
+
     def _emit(self, callback, *args):
         """线程安全地调用回调"""
         try:
@@ -400,6 +424,7 @@ class Agent:
                         "arch": platform.machine(),
                         "hostname": platform.node(),
                         "authCode": self.auth_code,
+                        "persistentId": self.persistent_id,
                     }))
                     
                     # 处理消息
