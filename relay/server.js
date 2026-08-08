@@ -1614,6 +1614,24 @@ wss.on('connection', (ws, req, user) => {
       console.error(`[device] registered: ${name} (${finalId}) user:${user.userId} code:${authCode || 'none'}`);
       deviceId = finalId;
       sendJSON(ws, { type: 'register_result', requestId, success: true, deviceId: finalId });
+      // 下发组网配置(EasyTier)：客户端收到后自动装配组网隧道（无感）
+      const mu = users[user.userId];
+      if (mu && mu.mesh) {
+        sendJSON(ws, {
+          type: 'mesh_config',
+          requestId: randomUUID(),
+          payload: {
+            secret: mu.mesh.secret,
+            networkName: mu.mesh.networkName,
+            networkSecret: mu.mesh.networkSecret,
+            ipv4: mu.mesh.ipv4 || '',
+            serverIp: '45.152.65.49',
+            serverMeshIp: '10.144.144.1',
+            port: 11010,
+          },
+        });
+        console.error(`[mesh] 已下发组网配置到设备 ${name}`);
+      }
       // 新设备上线 → 告知所有在线的 Agent
       broadcastToDevices({ type: 'agent_connected', latency: 0, platform: 'sandbox', hostname: 'OpenClaw Agent', relayPlatform: 'Ubuntu Linux' }, user.userId);
       scheduleActivityPush(user.userId);
