@@ -43,7 +43,11 @@ def _platform_key():
 
 
 def _cache_dir():
-    """easytier 缓存目录：~/.yunqiao/easytier/"""
+    """easytier 缓存目录：先找仓库内置(随云桥客户端一起更新)，否则 ~/.yunqiao/easytier/。"""
+    # 仓库内置：随云桥客户端一起 pull 更新（无感，无需下载）
+    repo_dir = Path(__file__).parent / "easytier"
+    if repo_dir.exists():
+        return repo_dir
     base = Path(os.environ.get("YUNQIAO_CONFIG", str(Path.home() / ".yunqiao")))
     d = base / _MESH_DIR_NAME
     d.mkdir(parents=True, exist_ok=True)
