@@ -429,9 +429,24 @@ class Agent:
         rid = msg.get("requestId")
         payload = msg.get("payload", {})
         
-        if msg_type == "register_result" and msg.get("success"):
-            self.device_id = msg.get("deviceId", "")
-            self._emit(self.on_log, f"注册成功: {self.device_id[:8]}...")
+        if msg_type == "register_result":
+            if msg.get("success"):
+                self.device_id = msg.get("deviceId", "")
+                self._emit(self.on_log, f"注册成功: {self.device_id[:8]}...")
+            else:
+                # 注册失败（如配对码不符 / 服务器重启后设备表清空）→ 必须显式断开并提示，
+                # 否则 UI 仍显示“已连接”绿灯，实际是未完成设备身份注册的半连接。
+                reason = msg.get("error") or msg.get("message") or "未知原因"
+                self.connected = False
+                self._emit(self.on_log, f"⚠️ 设备注册失败: {reason}")
+                self._emit(self.on_status, {"connected": False})
+                # 关闭当前连接，让外层循环走重连（配对码可能已轮换）
+                try:
+                    ws = getattr(self, "_ws", None)
+                    if ws is not None:
+                        await ws.close()
+                except Exception:
+                    pass
             return
         
         if msg_type == "notify":
